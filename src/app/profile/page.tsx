@@ -5,12 +5,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone } from 'lucide-react'; // Added ArrowUpCircle
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import PaymentModal from '@/components/PaymentModal'; // Import PaymentModal
+import PaymentModal from '@/components/PaymentModal'; 
 
 const mockUser = {
   name: 'Player One',
@@ -21,7 +21,8 @@ const mockUser = {
 const USER_BALANCE_STORAGE_KEY = 'spinifyUserBalance';
 const TRANSACTION_STORAGE_KEY = 'spinifyTransactions';
 const MIN_WITHDRAWAL_AMOUNT = 500;
-const UPI_ID = "9828786246@jio"; // UPI ID for adding balance
+const MIN_ADD_BALANCE_AMOUNT = 100;
+const UPI_ID = "9828786246@jio"; 
 
 interface TransactionEvent {
   id: string;
@@ -34,6 +35,8 @@ interface TransactionEvent {
 
 type PaymentMethod = "upi" | "bank";
 
+const presetAddBalanceAmounts = [100, 200, 500, 1000];
+
 export default function ProfilePage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
@@ -41,7 +44,7 @@ export default function ProfilePage() {
   
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("upi");
-  const [upiId, setUpiId] = useState<string>('');
+  const [upiIdInput, setUpiIdInput] = useState<string>('');
   const [accountNumber, setAccountNumber] = useState<string>('');
   const [ifscCode, setIfscCode] = useState<string>('');
   const [accountHolderName, setAccountHolderName] = useState<string>('');
@@ -100,7 +103,6 @@ export default function ProfilePage() {
     updatedTransactions.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(updatedTransactions));
 
-    // Manually dispatch a storage event so other tabs (like transaction page) can update
     window.dispatchEvent(new StorageEvent('storage', {
       key: TRANSACTION_STORAGE_KEY,
       newValue: JSON.stringify(updatedTransactions),
@@ -114,7 +116,7 @@ export default function ProfilePage() {
       setIfscCode('');
       setAccountHolderName('');
     } else if (value === "bank") {
-      setUpiId('');
+      setUpiIdInput('');
     }
   };
 
@@ -137,7 +139,7 @@ export default function ProfilePage() {
       setIsWithdrawing(false);
       return;
     }
-    if (selectedPaymentMethod === "upi" && !upiId.trim()) {
+    if (selectedPaymentMethod === "upi" && !upiIdInput.trim()) {
       toast({ title: 'UPI ID Required', description: 'Please enter your UPI ID.', variant: 'destructive' });
       setIsWithdrawing(false);
       return;
@@ -148,13 +150,13 @@ export default function ProfilePage() {
       return;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000)); 
 
     const newBalance = balance - amount;
     setBalance(newBalance);
     localStorage.setItem(USER_BALANCE_STORAGE_KEY, newBalance.toString());
 
-    const paymentMethodDetails = selectedPaymentMethod === "upi" ? `to UPI: ${upiId}` : `to Bank A/C: ${accountNumber.slice(-4)}`;
+    const paymentMethodDetails = selectedPaymentMethod === "upi" ? `to UPI: ${upiIdInput}` : `to Bank A/C: ${accountNumber.slice(-4)}`;
     addTransaction({
       type: 'debit',
       amount: amount,
@@ -168,7 +170,7 @@ export default function ProfilePage() {
     });
 
     setWithdrawalAmount('');
-    if (selectedPaymentMethod === "upi") setUpiId('');
+    if (selectedPaymentMethod === "upi") setUpiIdInput('');
     if (selectedPaymentMethod === "bank") { setAccountNumber(''); setIfscCode(''); setAccountHolderName('');}
     setIsWithdrawing(false);
   };
@@ -178,25 +180,30 @@ export default function ProfilePage() {
     const amount = parseFloat(withdrawalAmount);
     if (isNaN(amount) || amount <= 0 || amount < MIN_WITHDRAWAL_AMOUNT) return true;
     if (balance !== null && amount > balance) return true;
-    if (selectedPaymentMethod === "upi" && !upiId.trim()) return true;
+    if (selectedPaymentMethod === "upi" && !upiIdInput.trim()) return true;
     if (selectedPaymentMethod === "bank" && (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim())) return true;
     return false;
   };
 
   const handleOpenAddBalanceModal = () => {
     const amount = parseFloat(addBalanceAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({ title: 'Invalid Amount', description: 'Please enter a valid positive amount to add.', variant: 'destructive' });
+    if (isNaN(amount) || amount < MIN_ADD_BALANCE_AMOUNT) {
+      toast({ title: 'Invalid Amount', description: `Please enter a valid amount. Minimum to add is ₹${MIN_ADD_BALANCE_AMOUNT.toFixed(2)}.`, variant: 'destructive' });
       return;
     }
     setShowAddBalanceModal(true);
   };
 
+  const handlePresetAddBalanceClick = (amount: number) => {
+    setAddBalanceAmount(amount.toString());
+    // Directly open modal as preset amounts are valid
+    setShowAddBalanceModal(true);
+  };
+
   const handleConfirmAddBalance = () => {
-    setIsAddingBalance(true); // Not strictly needed if modal closes, but good practice
+    setIsAddingBalance(true); 
     const amount = parseFloat(addBalanceAmount);
 
-    // Simulate payment confirmation
     const newBalance = (balance || 0) + amount;
     setBalance(newBalance);
     localStorage.setItem(USER_BALANCE_STORAGE_KEY, newBalance.toString());
@@ -272,23 +279,40 @@ export default function ProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                {presetAddBalanceAmounts.map((amount) => (
+                  <Button
+                    key={amount}
+                    variant="outline"
+                    onClick={() => handlePresetAddBalanceClick(amount)}
+                    disabled={isAddingBalance || showAddBalanceModal}
+                  >
+                    ₹{amount}
+                  </Button>
+                ))}
+              </div>
               <div>
                 <Label htmlFor="addBalanceAmount" className="text-sm font-medium text-muted-foreground">
-                  Amount to Add (₹)
+                  Or Enter Amount to Add (₹)
                 </Label>
                 <Input
                   id="addBalanceAmount"
                   type="number"
                   value={addBalanceAmount}
                   onChange={(e) => setAddBalanceAmount(e.target.value)}
-                  placeholder="e.g., 100.00"
+                  placeholder={`Min. ₹${MIN_ADD_BALANCE_AMOUNT.toFixed(2)}`}
                   className="mt-1"
                   disabled={isAddingBalance || showAddBalanceModal}
                 />
+                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < MIN_ADD_BALANCE_AMOUNT && (
+                    <p className="text-xs text-destructive text-center mt-1">
+                        Minimum amount to add is ₹{MIN_ADD_BALANCE_AMOUNT.toFixed(2)}.
+                    </p>
+                  )}
               </div>
               <Button
                 onClick={handleOpenAddBalanceModal}
-                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) <= 0}
+                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < MIN_ADD_BALANCE_AMOUNT}
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 Add Balance via UPI
@@ -353,12 +377,12 @@ export default function ProfilePage() {
 
                 {selectedPaymentMethod === "upi" && (
                   <div>
-                    <Label htmlFor="upiId" className="text-sm font-medium text-muted-foreground">UPI ID</Label>
+                    <Label htmlFor="upiIdInput" className="text-sm font-medium text-muted-foreground">UPI ID</Label>
                     <Input
-                      id="upiId"
+                      id="upiIdInput"
                       type="text"
-                      value={upiId}
-                      onChange={(e) => setUpiId(e.target.value)}
+                      value={upiIdInput}
+                      onChange={(e) => setUpiIdInput(e.target.value)}
                       placeholder="yourname@bank"
                       className="mt-1"
                       disabled={isWithdrawing}
@@ -430,17 +454,13 @@ export default function ProfilePage() {
         </CardFooter>
       </Card>
 
-      {/* Payment Modal for Adding Balance */}
       <PaymentModal
         isOpen={showAddBalanceModal}
         onClose={() => setShowAddBalanceModal(false)}
         onConfirm={handleConfirmAddBalance}
         upiId={UPI_ID}
         amount={parseFloat(addBalanceAmount) || 0}
-        // spinsToGet is optional, so not passing it or passing 0 will trigger generic text
       />
     </div>
   );
 }
-
-    
