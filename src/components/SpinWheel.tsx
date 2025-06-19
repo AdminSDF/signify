@@ -42,30 +42,50 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   spinDuration = 5,
   onClick,
 }) => {
-  const [currentRotation, setCurrentRotation] = useState(0);
+  const [currentRotation, setCurrentRotation] = useState(0); // Represents the resting angle
   const wheelRef = useRef<SVGSVGElement>(null);
 
   const numSegments = segments.length;
   const anglePerSegment = 360 / numSegments;
 
+  // Effect to update the --wheel-actual-rotation CSS variable whenever currentRotation (resting angle) changes.
+  // This is used by the .svg-wheel-graphics class to set the base rotation.
+  useEffect(() => {
+    if (wheelRef.current) {
+      wheelRef.current.style.setProperty('--wheel-actual-rotation', `${currentRotation}deg`);
+    }
+  }, [currentRotation]);
+
+  // Effect to handle the spinning animation
   useEffect(() => {
     if (isSpinning && targetSegmentIndex !== null) {
       const minRotations = 5;
       const maxRotations = 7;
       const randomExtraRotations = Math.floor(Math.random() * (maxRotations - minRotations + 1)) + minRotations;
       const baseDegrees = randomExtraRotations * 360;
-      const targetAngle = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2));
-      const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6);
-      const finalRotation = currentRotation + baseDegrees + targetAngle + randomOffset;
+      
+      // Target the middle of the segment
+      const targetAngleWithinWheel = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2));
+      
+      // Add a small random offset to make the landing slightly less predictable within the segment
+      const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6); 
+      
+      // finalRotation is relative to the current position (currentRotation from state)
+      // However, the animation calculates from its own start point using --animation-start-angle.
+      // The final visual angle for the animation's "to" state.
+      const animationEndAngle = currentRotation + baseDegrees + targetAngleWithinWheel + randomOffset;
+
 
       if (wheelRef.current) {
-        wheelRef.current.style.setProperty('--final-rotation', `${finalRotation}deg`);
-        wheelRef.current.style.setProperty('--initial-rotation', `${currentRotation}deg`);
+        // Set CSS variables for the animation keyframes
+        wheelRef.current.style.setProperty('--animation-start-angle', `${currentRotation}deg`);
+        wheelRef.current.style.setProperty('--animation-end-angle', `${animationEndAngle}deg`);
       }
       
       const timer = setTimeout(() => {
         onSpinComplete(segments[targetSegmentIndex]);
-        const finalAngleNormalized = finalRotation % 360;
+        // Normalize the animationEndAngle to be within 0-359 for the new resting state
+        const finalAngleNormalized = animationEndAngle % 360;
         setCurrentRotation(finalAngleNormalized < 0 ? finalAngleNormalized + 360 : finalAngleNormalized);
       }, spinDuration * 1000);
 
@@ -77,8 +97,10 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   const gradientDefs = useMemo(() => {
     const uniqueColors = new Map<string, string>();
     segments.forEach((segment, index) => {
+      // Create a unique ID for the gradient based on the first occurrence of the color
+      const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`;
       if (!uniqueColors.has(segment.color)) {
-        uniqueColors.set(segment.color, `grad-${index}`);
+        uniqueColors.set(segment.color, gradId);
       }
     });
 
@@ -96,7 +118,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   
   const colorToGradientIdMap = useMemo(() => {
     const map = new Map<string, string>();
-    segments.forEach((segment, index) => {
+    segments.forEach((segment) => {
        const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`; 
       if (!map.has(segment.color)) {
         map.set(segment.color, gradId);
@@ -149,12 +171,11 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         ref={wheelRef}
         viewBox="0 0 200 200"
         className={cn(
-          "w-full h-full rounded-full shadow-2xl svg-wheel-graphics", // svg-wheel-graphics sets initial rotation based on CSS var
+          "w-full h-full rounded-full shadow-2xl svg-wheel-graphics", 
           isSpinning && 'animate-wheel-spin'
         )}
         style={{
-          transform: `rotate(${currentRotation}deg)`, // This sets the resting position of the wheel
-          // CSS variables --initial-rotation and --final-rotation are set in useEffect for the animation
+          // Inline transform removed. Rotation is handled by .svg-wheel-graphics class via --wheel-actual-rotation CSS var.
           filter: 'url(#dropShadowWheel)'
         } as React.CSSProperties}
       >
@@ -220,3 +241,4 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
+

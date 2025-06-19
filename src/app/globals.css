@@ -121,14 +121,17 @@ body {
     0 0 35px hsl(var(--primary));
 }
 
-/* Added for consistent spin animation with CSS variables */
+/* Consistent spin animation with CSS variables */
 .svg-wheel-graphics {
-  transform: rotate(var(--initial-rotation, 0deg));
+  /* This variable will hold the wheel's current orientation, whether resting or animated by the class below */
+  transform: rotate(var(--wheel-actual-rotation, 0deg));
 }
 
 .animate-wheel-spin {
+  /* The animation itself defines the transform based on its own variables in tailwind.config.ts keyframes */
   animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
+
 
 /* Keyframes for Animations */
 @keyframes marquee {
@@ -147,7 +150,7 @@ body {
 }
 
 .marquee-content-wrapper {
-  animation: marquee 40s linear infinite;
+  animation: marquee 60s linear infinite; /* Increased duration for slower speed */
   white-space: nowrap;
   display: inline-block;
 }
