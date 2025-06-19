@@ -13,6 +13,7 @@ export const DEFAULT_TIER2_COST = 3;
 export const DEFAULT_TIER3_COST = 5;
 export const DEFAULT_MIN_WITHDRAWAL_AMOUNT = 500;
 export const DEFAULT_MIN_ADD_BALANCE_AMOUNT = 100;
+export const DEFAULT_NEWS_TICKER_SPEED = 60; // Default speed in seconds
 
 // Default News Items
 export const DEFAULT_NEWS_ITEMS: string[] = [
@@ -36,6 +37,7 @@ export interface AppSettings {
   tier3Cost: number;
   minWithdrawalAmount: number;
   minAddBalanceAmount: number;
+  newsTickerSpeed: number; // Added news ticker speed
 }
 
 export const initialSettings: AppSettings = {
@@ -50,6 +52,7 @@ export const initialSettings: AppSettings = {
   tier3Cost: DEFAULT_TIER3_COST,
   minWithdrawalAmount: DEFAULT_MIN_WITHDRAWAL_AMOUNT,
   minAddBalanceAmount: DEFAULT_MIN_ADD_BALANCE_AMOUNT,
+  newsTickerSpeed: DEFAULT_NEWS_TICKER_SPEED, // Added news ticker speed
 };
 
 const SETTINGS_STORAGE_KEY = 'spinifyAdminSettings';

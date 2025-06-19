@@ -8,13 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2 } from 'lucide-react';
+import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X } from 'lucide-react'; // Added X
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as defaultAppSettings, getAppSettings, saveAppSettings, getNewsItems, saveNewsItems, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 import { Textarea } from '@/components/ui/textarea';
 
-const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail'; // Key for localStorage if we want to make admin email configurable too
+const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail'; 
 const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
 
 export default function AdminPage() {
@@ -118,6 +118,25 @@ export default function AdminPage() {
     );
   }
 
+  const getLabelForKey = (key: string) => {
+    switch (key) {
+      case 'upiId': return 'UPI ID';
+      case 'spinRefillPrice': return 'Spin Refill Price (₹)';
+      case 'maxSpinsInBundle': return 'Max Spins in Bundle';
+      case 'initialBalanceForNewUsers': return 'Initial Balance for New Users (₹)';
+      case 'tier1Limit': return 'Tier 1 Spin Limit (Daily)';
+      case 'tier1Cost': return 'Tier 1 Spin Cost (₹)';
+      case 'tier2Limit': return 'Tier 2 Spin Limit (Daily)';
+      case 'tier2Cost': return 'Tier 2 Spin Cost (₹)';
+      case 'tier3Cost': return 'Tier 3 Spin Cost (₹)';
+      case 'minWithdrawalAmount': return 'Min Withdrawal Amount (₹)';
+      case 'minAddBalanceAmount': return 'Min Add Balance Amount (₹)';
+      case 'newsTickerSpeed': return 'News Ticker Speed (seconds)';
+      default: return key.replace(/([A-Z])/g, ' $1').trim();
+    }
+  };
+
+
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
       <Card className="w-full max-w-3xl shadow-xl bg-card text-card-foreground rounded-lg">
@@ -131,10 +150,12 @@ export default function AdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
-          <Link href="/" passHref className="block text-center mb-6">
-            <Button variant="default">
-              <Home className="mr-2 h-4 w-4" /> Back to Main App
-            </Button>
+          <Link href="/" passHref legacyBehavior>
+            <a className="block text-center mb-6">
+                <Button variant="default">
+                <Home className="mr-2 h-4 w-4" /> Back to Main App
+                </Button>
+            </a>
           </Link>
 
           {/* Game Settings Section */}
@@ -146,7 +167,7 @@ export default function AdminPage() {
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(Object.keys(appSettings) as Array<keyof AppSettings>).map((key) => (
                 <div key={key} className="space-y-1">
-                  <Label htmlFor={key} className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</Label>
+                  <Label htmlFor={key} className="capitalize">{getLabelForKey(key)}</Label>
                   <Input
                     type={typeof appSettings[key] === 'number' ? 'number' : 'text'}
                     id={key}
@@ -154,6 +175,7 @@ export default function AdminPage() {
                     value={appSettings[key]}
                     onChange={handleSettingsChange}
                     className="bg-background"
+                    step={key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('balance') ? "0.01" : "1"}
                   />
                 </div>
               ))}

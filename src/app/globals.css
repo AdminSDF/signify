@@ -150,7 +150,8 @@ body {
 }
 
 .marquee-content-wrapper {
-  animation: marquee 60s linear infinite; /* Increased duration for slower speed */
+  /* Default duration is 60s, can be overridden by --marquee-duration CSS variable */
+  animation: marquee var(--marquee-duration, 60s) linear infinite; 
   white-space: nowrap;
   display: inline-block;
 }
