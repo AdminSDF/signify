@@ -94,6 +94,19 @@ export default function ProfilePage() {
     localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(updatedTransactions));
   };
 
+  const handlePaymentMethodChange = (value: PaymentMethod) => {
+    setSelectedPaymentMethod(value);
+    if (value === "upi") {
+      // Clear bank details when switching to UPI
+      setAccountNumber('');
+      setIfscCode('');
+      setAccountHolderName('');
+    } else if (value === "bank") {
+      // Clear UPI ID when switching to Bank
+      setUpiId('');
+    }
+  };
+
   const handleWithdrawal = async () => {
     setIsWithdrawing(true);
     const amount = parseFloat(withdrawalAmount);
@@ -149,10 +162,13 @@ export default function ProfilePage() {
     });
 
     setWithdrawalAmount('');
-    setUpiId('');
-    setAccountNumber('');
-    setIfscCode('');
-    setAccountHolderName('');
+    // Fields are cleared on method change, but clear active ones too after successful withdrawal
+    if (selectedPaymentMethod === "upi") setUpiId('');
+    if (selectedPaymentMethod === "bank") {
+      setAccountNumber('');
+      setIfscCode('');
+      setAccountHolderName('');
+    }
     setIsWithdrawing(false);
   };
 
@@ -236,7 +252,7 @@ export default function ProfilePage() {
                   <Label htmlFor="paymentMethod" className="text-sm font-medium text-muted-foreground">Payment Method</Label>
                   <Select
                     value={selectedPaymentMethod}
-                    onValueChange={(value) => setSelectedPaymentMethod(value as PaymentMethod)}
+                    onValueChange={(value) => handlePaymentMethodChange(value as PaymentMethod)}
                     disabled={isWithdrawing}
                   >
                     <SelectTrigger id="paymentMethod" className="mt-1">
