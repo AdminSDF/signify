@@ -35,15 +35,19 @@ interface WheelSegmentWithProbability extends Segment {
   probability: number;
 }
 
-// Adjusted for ~70% admin earnings (EV ~ ₹0.28)
-// Cost per spin from bundle = ₹1. Target user win = 30% = ₹0.30.
+// Adjusted probabilities for new prize structure and attractiveness
+// EV ~ ₹0.84. (0.01*20 + 0.05*10 + 0.01*5 + 0.02*2 + 0.05*1) = 0.20 + 0.50 + 0.05 + 0.04 + 0.05 = 0.84
 const wheelSegments: WheelSegmentWithProbability[] = [
-  { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.80 }, // 80%
-  { id: 's1', text: '₹1', emoji: '🪙', amount: 1, color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.15 },   // 15% (EV: 0.15 * 1 = 0.15)
-  { id: 's2', text: '₹2', emoji: '🤑', amount: 2, color: '60 90% 55%', textColor: '0 0% 0%', probability: 0.04 },  // 4% (EV: 0.04 * 2 = 0.08)
-  { id: 's3', text: '₹5', emoji: '🎈', amount: 5, color: '0 80% 60%', textColor: '0 0% 100%', probability: 0.01 },   // 1% (EV: 0.01 * 5 = 0.05)
+  { id: 's100', text: '₹100', emoji: '💎', amount: 100, color: '300 80% 60%', textColor: '0 0% 100%', probability: 0.00 }, // 0% - Display Only
+  { id: 's50',  text: '₹50',  emoji: '💰', amount: 50,  color: '270 80% 65%', textColor: '0 0% 100%', probability: 0.00 }, // 0% - Display Only
+  { id: 's20',  text: '₹20',  emoji: '💸', amount: 20,  color: '0 80% 60%',   textColor: '0 0% 100%', probability: 0.01 }, // 1%
+  { id: 's10',  text: '₹10',  emoji: '💵', amount: 10,  color: '30 90% 55%',  textColor: '0 0% 0%',   probability: 0.05 }, // 5%
+  { id: 's5',   text: '₹5',   emoji: '🎈', amount: 5,   color: '60 90% 55%',  textColor: '0 0% 0%',   probability: 0.01 }, // 1%
+  { id: 's2',   text: '₹2',   emoji: '🤑', amount: 2,   color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.02 }, // 2%
+  { id: 's1',   text: '₹1',   emoji: '🪙', amount: 1,   color: '180 70% 50%', textColor: '0 0% 100%', probability: 0.05 }, // 5%
+  { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.86 }, // 86%
 ]; // Total Probability: 1.00 (100%)
-// Total EV = 0.15 + 0.08 + 0.05 = ₹0.28
+
 
 const MAX_SPINS = 10; 
 const SPIN_COST = 2; 
@@ -88,7 +92,6 @@ export default function HomePage() {
     if (mockUser.email === ADMIN_EMAIL) {
       setShowAdminChoiceView(true);
     }
-    // Load initial balance and spins from mockUser or potentially localStorage if persisted
     const storedBalance = localStorage.getItem('spinifyUserBalance');
     const storedSpins = localStorage.getItem('spinifySpinsAvailable');
 
@@ -138,6 +141,7 @@ export default function HomePage() {
     let random = Math.random() * totalProbability;
   
     for (let i = 0; i < segments.length; i++) {
+      // Skip segments with 0 probability unless it's the only option (which shouldn't happen with valid totalProbability)
       const segmentProbability = segments[i].probability || 0;
       if (segmentProbability === 0 && totalProbability > 0) continue; 
 
@@ -146,8 +150,10 @@ export default function HomePage() {
       }
       random -= segmentProbability;
     }
-    // Fallback, should ideally not be reached if probabilities sum to 1 (or totalProbability used in random generation)
-    return segments.findIndex(s => (s.probability || 0) > 0) ?? Math.floor(Math.random() * segments.length);
+    // Fallback for floating point inaccuracies or if somehow no segment is chosen
+    // This tries to find any segment with probability > 0, otherwise last segment
+    const fallbackIndex = segments.findIndex(s => (s.probability || 0) > 0);
+    return fallbackIndex !== -1 ? fallbackIndex : segments.length - 1;
   }, []);
 
 
@@ -203,7 +209,7 @@ export default function HomePage() {
         variant: "default" 
       });
       playSound('win');
-      if (winningSegment.amount >= 5) { // Adjusted confetti for smaller big wins
+      if (winningSegment.amount >= 20) { // Confetti for larger wins
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
@@ -241,6 +247,7 @@ export default function HomePage() {
 
   const handlePaymentConfirm = useCallback(() => {
     setShowPaymentModal(false);
+    // This transaction is for the "purchase", not a direct balance addition for play
     addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS} Spins Bundle` });
     setSpinsAvailable(MAX_SPINS); 
     toast({
@@ -321,7 +328,7 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
-          onClick={handleSpinClick}
+          onClick={handleSpinClick} // Allow spin by clicking the wheel
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
@@ -364,5 +371,7 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
 
     
