@@ -20,7 +20,7 @@ interface SpinWheelProps {
   targetSegmentIndex: number | null;
   isSpinning: boolean;
   spinDuration?: number; // in seconds
-  onClick?: () => void;
+  onClick?: () => void; // Make onClick optional as it's controlled by page logic
 }
 
 // Helper to modify HSL lightness
@@ -151,10 +151,10 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       )}
       onClick={handleWheelClick}
       style={{ perspective: '1000px' }}
-      role="button"
+      role={onClick && !isSpinning ? "button" : undefined}
       tabIndex={onClick && !isSpinning ? 0 : -1}
       aria-label="Spinning prize wheel"
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleWheelClick(); e.preventDefault();}}}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick && !isSpinning) { handleWheelClick(); e.preventDefault();}}}
     >
       <div
         className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10" 
@@ -240,3 +240,4 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
 export default SpinWheel;
 
+    

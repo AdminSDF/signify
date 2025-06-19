@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { Home, Shield, DollarSign, ShieldAlert } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
-import SpinButton from '@/components/SpinButton';
 import PrizeDisplay from '@/components/PrizeDisplay';
 import TipGeneratorButton from '@/components/TipGeneratorButton';
 import TipModal from '@/components/TipModal';
@@ -382,7 +381,7 @@ export default function HomePage() {
 
   const costOfNextPaidSpin = getCurrentPaidSpinCost(dailyPaidSpinsUsed);
   const canAffordNextPaidSpin = userBalance >= costOfNextPaidSpin;
-  const showBuyBundleButton = spinsAvailable <= 0 && !canAffordNextPaidSpin;
+  const showBuyBundleButton = spinsAvailable <= 0 && !canAffordNextPaidSpin; // Used to decide if wheel click shows payment modal
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
@@ -420,7 +419,7 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
-          onClick={handleSpinClick} 
+          onClick={user && !isSpinning ? handleSpinClick : undefined} // Pass handleSpinClick if user logged in & not spinning
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
@@ -432,13 +431,7 @@ export default function HomePage() {
                     : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span> (from balance). Paid today: {dailyPaidSpinsUsed}</>
                     }
                 </div>
-                <SpinButton 
-                    onClick={handleSpinClick} 
-                    disabled={isSpinning || !user || (spinsAvailable <=0 && !canAffordNextPaidSpin && !showBuyBundleButton)} 
-                    isLoading={isSpinning}
-                    spinsAvailable={spinsAvailable}
-                    forceShowBuyButton={showBuyBundleButton}
-                />
+                {/* SpinButton component is removed */}
             </>
         )}
           <PrizeDisplay prize={currentPrize} />
@@ -467,3 +460,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
