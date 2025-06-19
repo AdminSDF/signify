@@ -99,8 +99,10 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    background-image: linear-gradient(to bottom right, hsl(var(--primary) / 0.6), hsl(var(--accent) / 0.6), hsl(var(--background)));
+    @apply bg-background text-foreground; /* Apply base text color and fallback background */
+    background: linear-gradient(to bottom right, hsl(var(--primary)), hsl(var(--secondary)), hsl(var(--accent)), hsl(var(--background)));
+    background-size: 250% 250%; /* Make the background larger to allow movement */
+    animation: animateBackground 20s ease infinite; /* Apply the animation */
   }
 }
 
@@ -128,7 +130,7 @@ body {
   animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
 
-/* News Ticker Animation */
+/* Keyframes for Animations */
 @keyframes marquee {
   0% {
     transform: translateX(100%);
@@ -138,9 +140,14 @@ body {
   }
 }
 
-.marquee-content-wrapper {
-  animation: marquee 40s linear infinite; /* Increased from 25s to 40s */
-  white-space: nowrap; /* Keep all items on one line */
-  display: inline-block; /* Allows transform to work correctly */
+@keyframes animateBackground {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
+.marquee-content-wrapper {
+  animation: marquee 40s linear infinite;
+  white-space: nowrap;
+  display: inline-block;
+}
