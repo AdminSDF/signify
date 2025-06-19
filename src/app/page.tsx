@@ -29,6 +29,11 @@ interface TransactionEvent {
 }
 
 const TRANSACTION_STORAGE_KEY = 'spinifyTransactions';
+const USER_BALANCE_STORAGE_KEY = 'spinifyUserBalance';
+const SPINS_AVAILABLE_STORAGE_KEY = 'spinifySpinsAvailable';
+const DAILY_PAID_SPINS_USED_KEY = 'spinifyDailyPaidSpinsUsed';
+const LAST_PAID_SPIN_DATE_KEY = 'spinifyLastPaidSpinDate';
+
 
 // Define a type for segments that includes probability for internal use
 interface WheelSegmentWithProbability extends Segment {
@@ -37,29 +42,35 @@ interface WheelSegmentWithProbability extends Segment {
 
 // EV ~ ₹1.24. (0.01*20 + 0.05*10 + 0.06*5 + 0.07*2 + 0.10*1) = 0.20 + 0.50 + 0.30 + 0.14 + 0.10 = 1.24
 const wheelSegments: WheelSegmentWithProbability[] = [
-  { id: 's100', text: '₹100', emoji: '💎', amount: 100, color: '300 80% 60%', textColor: '0 0% 100%', probability: 0.00 }, // 0% - Display Only
-  { id: 's50',  text: '₹50',  emoji: '💰', amount: 50,  color: '270 80% 65%', textColor: '0 0% 100%', probability: 0.00 }, // 0% - Display Only
-  { id: 's20',  text: '₹20',  emoji: '💸', amount: 20,  color: '0 80% 60%',   textColor: '0 0% 100%', probability: 0.01 }, // 1%
-  { id: 's10',  text: '₹10',  emoji: '💵', amount: 10,  color: '30 90% 55%',  textColor: '0 0% 0%',   probability: 0.05 }, // 5%
-  { id: 's5',   text: '₹5',   emoji: '🎈', amount: 5,   color: '60 90% 55%',  textColor: '0 0% 0%',   probability: 0.06 }, // 6% (Increased from 1%)
-  { id: 's2',   text: '₹2',   emoji: '🤑', amount: 2,   color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.07 }, // 7% (Increased from 2%)
-  { id: 's1',   text: '₹1',   emoji: '🪙', amount: 1,   color: '180 70% 50%', textColor: '0 0% 100%', probability: 0.10 }, // 10% (Increased from 5%)
-  { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.71 }, // 71% (Decreased from 86%)
-]; // Total Probability: 1.00 (100%)
+  { id: 's100', text: '₹100', emoji: '💎', amount: 100, color: '300 80% 60%', textColor: '0 0% 100%', probability: 0.00 },
+  { id: 's50',  text: '₹50',  emoji: '💰', amount: 50,  color: '270 80% 65%', textColor: '0 0% 100%', probability: 0.00 },
+  { id: 's20',  text: '₹20',  emoji: '💸', amount: 20,  color: '0 80% 60%',   textColor: '0 0% 100%', probability: 0.01 },
+  { id: 's10',  text: '₹10',  emoji: '💵', amount: 10,  color: '30 90% 55%',  textColor: '0 0% 0%',   probability: 0.05 },
+  { id: 's5',   text: '₹5',   emoji: '🎈', amount: 5,   color: '60 90% 55%',  textColor: '0 0% 0%',   probability: 0.06 },
+  { id: 's2',   text: '₹2',   emoji: '🤑', amount: 2,   color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.07 },
+  { id: 's1',   text: '₹1',   emoji: '🪙', amount: 1,   color: '180 70% 50%', textColor: '0 0% 100%', probability: 0.10 },
+  { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.71 },
+];
 
 
-const MAX_SPINS = 10; 
-const SPIN_COST = 2; 
+const MAX_SPINS_IN_BUNDLE = 10; // Renamed from MAX_SPINS to avoid confusion
 const UPI_ID = "9828786246@jio";
-const SPIN_REFILL_PRICE = 10; // Cost for MAX_SPINS (i.e. ₹1 per spin if bought in bundle)
+const SPIN_REFILL_PRICE = 10; 
 
 const ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
 const mockUser = {
   name: 'Player One',
-  email: 'player.one@example.com', 
+  email: 'player.one@example.com',
   avatarUrl: 'https://placehold.co/100x100.png',
   initialBalance: 50.00,
 };
+
+// Tiered pricing constants
+const TIER1_LIMIT = 30;
+const TIER1_COST = 2;
+const TIER2_LIMIT = 60; // Spins 31 to 60 (i.e., < 60)
+const TIER2_COST = 3;
+const TIER3_COST = 5;
 
 
 export default function HomePage() {
@@ -74,11 +85,15 @@ export default function HomePage() {
   const [tipError, setTipError] = useState<string | null>(null);
 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS);
+  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS_IN_BUNDLE);
   const [userBalance, setUserBalance] = useState<number>(mockUser.initialBalance);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [transactions, setTransactions] = useState<TransactionEvent[]>([]);
+
+  // State for tiered pricing
+  const [dailyPaidSpinsUsed, setDailyPaidSpinsUsed] = useState<number>(0);
+  const [lastPaidSpinDate, setLastPaidSpinDate] = useState<string>(new Date().toLocaleDateString());
 
   const { playSound } = useSound();
   const { toast } = useToast();
@@ -91,12 +106,23 @@ export default function HomePage() {
     if (mockUser.email === ADMIN_EMAIL) {
       setShowAdminChoiceView(true);
     }
-    const storedBalance = localStorage.getItem('spinifyUserBalance');
-    const storedSpins = localStorage.getItem('spinifySpinsAvailable');
+    const storedBalance = localStorage.getItem(USER_BALANCE_STORAGE_KEY);
+    const storedSpins = localStorage.getItem(SPINS_AVAILABLE_STORAGE_KEY);
 
     setUserBalance(storedBalance ? parseFloat(storedBalance) : mockUser.initialBalance);
-    setSpinsAvailable(storedSpins ? parseInt(storedSpins, 10) : MAX_SPINS);
+    setSpinsAvailable(storedSpins ? parseInt(storedSpins, 10) : MAX_SPINS_IN_BUNDLE);
 
+    // Load daily paid spin count and date
+    const todayString = new Date().toLocaleDateString();
+    const storedLastDate = localStorage.getItem(LAST_PAID_SPIN_DATE_KEY);
+    const storedDailySpins = localStorage.getItem(DAILY_PAID_SPINS_USED_KEY);
+
+    if (storedLastDate === todayString) {
+      setDailyPaidSpinsUsed(storedDailySpins ? parseInt(storedDailySpins, 10) : 0);
+    } else {
+      setDailyPaidSpinsUsed(0); // Reset for new day
+    }
+    setLastPaidSpinDate(todayString); // Always set/update lastPaidSpinDate state
 
     if (typeof window !== 'undefined') {
       const storedTransactions = localStorage.getItem(TRANSACTION_STORAGE_KEY);
@@ -116,10 +142,12 @@ export default function HomePage() {
   useEffect(() => {
     if (typeof window !== 'undefined' && isClient) {
       localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(transactions));
-      localStorage.setItem('spinifyUserBalance', userBalance.toString());
-      localStorage.setItem('spinifySpinsAvailable', spinsAvailable.toString());
+      localStorage.setItem(USER_BALANCE_STORAGE_KEY, userBalance.toString());
+      localStorage.setItem(SPINS_AVAILABLE_STORAGE_KEY, spinsAvailable.toString());
+      localStorage.setItem(DAILY_PAID_SPINS_USED_KEY, dailyPaidSpinsUsed.toString());
+      localStorage.setItem(LAST_PAID_SPIN_DATE_KEY, lastPaidSpinDate);
     }
-  }, [transactions, userBalance, spinsAvailable, isClient]);
+  }, [transactions, userBalance, spinsAvailable, dailyPaidSpinsUsed, lastPaidSpinDate, isClient]);
 
   const addTransaction = useCallback((details: { type: 'credit' | 'debit'; amount: number; description: string }) => {
     const newTransactionEntry: TransactionEvent = {
@@ -140,7 +168,6 @@ export default function HomePage() {
     let random = Math.random() * totalProbability;
   
     for (let i = 0; i < segments.length; i++) {
-      // Skip segments with 0 probability unless it's the only option (which shouldn't happen with valid totalProbability)
       const segmentProbability = segments[i].probability || 0;
       if (segmentProbability === 0 && totalProbability > 0) continue; 
 
@@ -149,8 +176,6 @@ export default function HomePage() {
       }
       random -= segmentProbability;
     }
-    // Fallback for floating point inaccuracies or if somehow no segment is chosen
-    // This tries to find any segment with probability > 0, otherwise last segment
     const fallbackIndex = segments.findIndex(s => (s.probability || 0) > 0);
     return fallbackIndex !== -1 ? fallbackIndex : segments.length - 1;
   }, []);
@@ -166,24 +191,59 @@ export default function HomePage() {
     setTargetSegmentIndex(winningIndex);
   }, [playSound, selectWinningSegmentByProbability]);
 
+  const getCurrentPaidSpinCost = useCallback((spinsUsedToday: number): number => {
+    if (spinsUsedToday < TIER1_LIMIT) {
+      return TIER1_COST;
+    }
+    if (spinsUsedToday < TIER2_LIMIT) {
+      return TIER2_COST;
+    }
+    return TIER3_COST;
+  }, []);
+
+
   const handleSpinClick = useCallback(() => {
     if (!isClient || isSpinning) return;
 
+    let currentDailyPaidSpins = dailyPaidSpinsUsed;
+    const today = new Date().toLocaleDateString();
+
+    if (lastPaidSpinDate !== today) {
+      console.log("New day detected for paid spins, resetting count.");
+      currentDailyPaidSpins = 0;
+      setDailyPaidSpinsUsed(0);
+      setLastPaidSpinDate(today); 
+    }
+
     if (spinsAvailable > 0) {
+      // Use free/bundled spin
       startSpinProcess();
       setSpinsAvailable(prev => prev - 1);
-    } else if (userBalance >= SPIN_COST) {
-      setUserBalance(prev => prev - SPIN_COST);
-      addTransaction({ type: 'debit', amount: SPIN_COST, description: 'Spin Cost' });
-      startSpinProcess();
-      toast({
-        title: `Spin Cost: -₹${SPIN_COST.toFixed(2)}`,
-        description: `₹${SPIN_COST.toFixed(2)} deducted from your balance.`,
-      });
+      // dailyPaidSpinsUsed is NOT incremented for free/bundled spins
     } else {
-      setShowPaymentModal(true);
+      // Paying per spin from balance - apply tiered pricing
+      const costForThisSpin = getCurrentPaidSpinCost(currentDailyPaidSpins);
+
+      if (userBalance >= costForThisSpin) {
+        setUserBalance(prev => prev - costForThisSpin);
+        addTransaction({ type: 'debit', amount: costForThisSpin, description: `Spin Cost (Paid Tier ${
+            costForThisSpin === TIER1_COST ? 1 : costForThisSpin === TIER2_COST ? 2 : 3
+        })` });
+        startSpinProcess();
+        toast({
+          title: `Spin Cost: -₹${costForThisSpin.toFixed(2)}`,
+          description: `₹${costForThisSpin.toFixed(2)} deducted. Paid spins today: ${currentDailyPaidSpins + 1}.`,
+        });
+        setDailyPaidSpinsUsed(prev => prev + 1); // Increment AFTER successful paid spin
+      } else {
+        // Not enough balance for the current tier's spin cost
+        setShowPaymentModal(true); // Prompt to buy a bundle
+      }
     }
-  }, [isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction]);
+  }, [
+    isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction,
+    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost
+  ]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
     setIsSpinning(false);
@@ -208,7 +268,7 @@ export default function HomePage() {
         variant: "default" 
       });
       playSound('win');
-      if (winningSegment.amount >= 10) { // Confetti for larger wins (Adjusted from 20 to 10)
+      if (winningSegment.amount >= 10) { 
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
@@ -244,14 +304,13 @@ export default function HomePage() {
     setTipLoading(false);
   }, [spinHistory, toast]);
 
-  const handlePaymentConfirm = useCallback(() => {
+  const handlePaymentConfirm = useCallback(() => { // For buying a bundle
     setShowPaymentModal(false);
-    // This transaction is for the "purchase", not a direct balance addition for play
-    addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS} Spins Bundle` });
-    setSpinsAvailable(MAX_SPINS); 
+    addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS_IN_BUNDLE} Spins Bundle` });
+    setSpinsAvailable(MAX_SPINS_IN_BUNDLE); 
     toast({
       title: "Spins Purchased!",
-      description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
+      description: `You now have ${MAX_SPINS_IN_BUNDLE} spins. Happy spinning!`,
       variant: "default",
     });
   }, [toast, addTransaction]);
@@ -301,8 +360,9 @@ export default function HomePage() {
     );
   }
 
-  const canAffordSpin = userBalance >= SPIN_COST;
-  const showBuySpinsButton = spinsAvailable <= 0 && !canAffordSpin;
+  const costOfNextPaidSpin = getCurrentPaidSpinCost(dailyPaidSpinsUsed);
+  const canAffordNextPaidSpin = userBalance >= costOfNextPaidSpin;
+  const showBuyBundleButton = spinsAvailable <= 0 && !canAffordNextPaidSpin;
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
@@ -327,22 +387,22 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
-          onClick={handleSpinClick} // Allow spin by clicking the wheel
+          onClick={handleSpinClick} 
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
           <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
             {spinsAvailable > 0 
-              ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS} (Free/Bundled)</>
-              : <>Next Spin Cost: <span className="font-bold text-primary">₹{SPIN_COST.toFixed(2)}</span> (from balance)</>
+              ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS_IN_BUNDLE} (Free/Bundled)</>
+              : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span> (from balance). Paid today: {dailyPaidSpinsUsed}</>
             }
           </div>
           <SpinButton 
             onClick={handleSpinClick} 
-            disabled={isSpinning || (spinsAvailable <=0 && !canAffordSpin && !showBuySpinsButton)} 
+            disabled={isSpinning || (spinsAvailable <=0 && !canAffordNextPaidSpin && !showBuyBundleButton)} 
             isLoading={isSpinning}
             spinsAvailable={spinsAvailable}
-            forceShowBuyButton={showBuySpinsButton}
+            forceShowBuyButton={showBuyBundleButton}
           />
           <PrizeDisplay prize={currentPrize} />
         </div>
@@ -359,20 +419,15 @@ export default function HomePage() {
         onGenerateTip={handleGenerateTip}
       />
 
-      <PaymentModal
+      <PaymentModal // This modal is for buying a bundle of spins
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onConfirm={handlePaymentConfirm}
         upiId={UPI_ID}
         amount={SPIN_REFILL_PRICE}
-        spinsToGet={MAX_SPINS}
+        spinsToGet={MAX_SPINS_IN_BUNDLE}
       />
     </div>
   );
 }
-
-    
-
-    
-
     
