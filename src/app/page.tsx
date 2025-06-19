@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Header from '@/components/Header';
+import SpinifyGameHeader from '@/components/SpinifyGameHeader'; // Updated import
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
 import SpinButton from '@/components/SpinButton';
 import PrizeDisplay from '@/components/PrizeDisplay';
@@ -101,9 +101,9 @@ export default function HomePage() {
   }, [spinHistory, toast]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 relative overflow-hidden">
+    <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
-      <Header />
+      <SpinifyGameHeader /> {/* Updated component name */}
       
       <main className="flex flex-col items-center w-full max-w-2xl">
         <SpinWheel
@@ -130,9 +130,7 @@ export default function HomePage() {
         onGenerateTip={handleGenerateTip}
       />
       
-      <footer className="text-center text-sm text-muted-foreground mt-12 pb-4">
-        Powered by Firebase Studio & Genkit AI. Enjoy responsibly!
-      </footer>
+      {/* Footer is now in layout.tsx */}
     </div>
   );
 }
