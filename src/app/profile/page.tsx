@@ -5,12 +5,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, Library, Smartphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Mock user data - some parts might still be used for static info like name/email
 const mockUser = {
   name: 'Player One',
   email: 'player.one@example.com',
@@ -29,11 +29,20 @@ interface TransactionEvent {
   status: 'completed' | 'pending' | 'failed';
 }
 
+type PaymentMethod = "upi" | "bank";
+
 export default function ProfilePage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("upi");
+  const [upiId, setUpiId] = useState<string>('');
+  const [accountNumber, setAccountNumber] = useState<string>('');
+  const [ifscCode, setIfscCode] = useState<string>('');
+  const [accountHolderName, setAccountHolderName] = useState<string>('');
+
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const { toast } = useToast();
 
@@ -42,19 +51,15 @@ export default function ProfilePage() {
     if (storedBalance) {
       setBalance(parseFloat(storedBalance));
     } else {
-      // Fallback if no balance is in local storage, e.g. for a very new user or cleared storage
-      // This shouldn't ideally happen if page.tsx initializes it.
       setBalance(0); 
     }
   }, []);
 
   useEffect(() => {
-    // Simulate fetching user data and balance from localStorage
     setUserName(mockUser.name);
     setUserEmail(mockUser.email);
     fetchBalance();
 
-    // Listen for storage changes to update balance if modified elsewhere (e.g. game page)
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === USER_BALANCE_STORAGE_KEY) {
         fetchBalance();
@@ -113,28 +118,52 @@ export default function ProfilePage() {
       return;
     }
 
-    // Simulate API call delay
+    if (selectedPaymentMethod === "upi" && !upiId.trim()) {
+      toast({ title: 'UPI ID Required', description: 'Please enter your UPI ID.', variant: 'destructive' });
+      setIsWithdrawing(false);
+      return;
+    }
+    if (selectedPaymentMethod === "bank" && (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim())) {
+      toast({ title: 'Bank Details Required', description: 'Please fill in all bank account details.', variant: 'destructive' });
+      setIsWithdrawing(false);
+      return;
+    }
+
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const newBalance = balance - amount;
     setBalance(newBalance);
     localStorage.setItem(USER_BALANCE_STORAGE_KEY, newBalance.toString());
 
+    const paymentMethodDetails = selectedPaymentMethod === "upi" ? `to UPI: ${upiId}` : `to Bank A/C: ${accountNumber}`;
     addTransaction({
       type: 'debit',
       amount: amount,
-      description: 'Withdrawal Processed',
+      description: `Withdrawal Processed ${paymentMethodDetails}`,
     });
 
     toast({
       title: 'Withdrawal Successful',
-      description: `₹${amount.toFixed(2)} has been processed for withdrawal.`,
-      variant: 'default', // Success variant if you have one, default otherwise
+      description: `₹${amount.toFixed(2)} has been processed for withdrawal ${paymentMethodDetails}.`,
+      variant: 'default',
     });
 
     setWithdrawalAmount('');
+    setUpiId('');
+    setAccountNumber('');
+    setIfscCode('');
+    setAccountHolderName('');
     setIsWithdrawing(false);
   };
+
+  const isWithdrawalButtonDisabled = () => {
+    if (isWithdrawing || !withdrawalAmount || (balance !== null && parseFloat(withdrawalAmount) > balance) || parseFloat(withdrawalAmount) <= 0) {
+      return true;
+    }
+    if (selectedPaymentMethod === "upi" && !upiId.trim()) return true;
+    if (selectedPaymentMethod === "bank" && (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim())) return true;
+    return false;
+  }
 
   return (
     <div className="container mx-auto py-8">
@@ -180,7 +209,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Withdrawal Section */}
           <Card className="p-4 pt-2 bg-card shadow-md mt-6">
              <CardHeader className="p-2 pb-4">
                 <CardTitle className="text-xl flex items-center font-headline text-primary">
@@ -203,9 +231,91 @@ export default function ProfilePage() {
                     disabled={isWithdrawing}
                   />
                 </div>
+
+                <div>
+                  <Label htmlFor="paymentMethod" className="text-sm font-medium text-muted-foreground">Payment Method</Label>
+                  <Select
+                    value={selectedPaymentMethod}
+                    onValueChange={(value) => setSelectedPaymentMethod(value as PaymentMethod)}
+                    disabled={isWithdrawing}
+                  >
+                    <SelectTrigger id="paymentMethod" className="mt-1">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="upi">
+                        <div className="flex items-center">
+                          <Smartphone className="mr-2 h-4 w-4" /> UPI
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="bank">
+                        <div className="flex items-center">
+                          <Library className="mr-2 h-4 w-4" /> Bank Account
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedPaymentMethod === "upi" && (
+                  <div>
+                    <Label htmlFor="upiId" className="text-sm font-medium text-muted-foreground">UPI ID</Label>
+                    <Input
+                      id="upiId"
+                      type="text"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="yourname@bank"
+                      className="mt-1"
+                      disabled={isWithdrawing}
+                    />
+                  </div>
+                )}
+
+                {selectedPaymentMethod === "bank" && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="accountHolderName" className="text-sm font-medium text-muted-foreground">Account Holder Name</Label>
+                      <Input
+                        id="accountHolderName"
+                        type="text"
+                        value={accountHolderName}
+                        onChange={(e) => setAccountHolderName(e.target.value)}
+                        placeholder="e.g., John Doe"
+                        className="mt-1"
+                        disabled={isWithdrawing}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="accountNumber" className="text-sm font-medium text-muted-foreground">Account Number</Label>
+                      <Input
+                        id="accountNumber"
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        placeholder="e.g., 123456789012"
+                        className="mt-1"
+                        disabled={isWithdrawing}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ifscCode" className="text-sm font-medium text-muted-foreground">IFSC Code</Label>
+                      <Input
+                        id="ifscCode"
+                        type="text"
+                        value={ifscCode}
+                        onChange={(e) => setIfscCode(e.target.value)}
+                        placeholder="e.g., SBIN0001234"
+                        className="mt-1"
+                        disabled={isWithdrawing}
+                      />
+                    </div>
+                  </div>
+                )}
+                
                 <Button
                   onClick={handleWithdrawal}
-                  disabled={isWithdrawing || !withdrawalAmount || (balance !== null && parseFloat(withdrawalAmount) > balance) || parseFloat(withdrawalAmount) <= 0}
+                  disabled={isWithdrawalButtonDisabled()}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                 >
                   {isWithdrawing ? 'Processing...' : 'Withdraw Now'}
@@ -229,3 +339,4 @@ export default function ProfilePage() {
   );
 }
 
+    
