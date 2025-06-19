@@ -8,14 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X } from 'lucide-react'; // Added X
+import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as defaultAppSettings, getAppSettings, saveAppSettings, getNewsItems, saveNewsItems, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 import { Textarea } from '@/components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail'; 
 const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
+
+// Dummy data for withdrawal requests - replace with Firestore data later
+const dummyWithdrawalRequests = [
+  { id: 'WR001', userId: 'user123', userEmail: 'test@example.com', amount: 550, upiId: 'user@upi', date: new Date().toISOString(), status: 'Pending' },
+  { id: 'WR002', userId: 'user456', userEmail: 'another@example.com', amount: 1200, upiId: 'test@okaxis', date: new Date(Date.now() - 86400000).toISOString(), status: 'Pending' },
+];
 
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
@@ -139,7 +146,7 @@ export default function AdminPage() {
 
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
-      <Card className="w-full max-w-3xl shadow-xl bg-card text-card-foreground rounded-lg">
+      <Card className="w-full max-w-4xl shadow-xl bg-card text-card-foreground rounded-lg">
         <CardHeader className="items-center text-center border-b pb-6">
           <ShieldCheck className="h-16 w-16 text-primary mb-3" />
           <CardTitle className="text-4xl font-bold font-headline text-primary">
@@ -150,19 +157,17 @@ export default function AdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
-          <Link href="/" passHref legacyBehavior>
-            <a className="block text-center mb-6">
-                <Button variant="default">
-                <Home className="mr-2 h-4 w-4" /> Back to Main App
-                </Button>
-            </a>
+          <Link href="/" passHref>
+            <Button variant="default" className="block mx-auto mb-6">
+              <Home className="mr-2 h-4 w-4" /> Back to Main App
+            </Button>
           </Link>
 
           {/* Game Settings Section */}
           <Card className="bg-muted/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Settings /> Game Settings</CardTitle>
-              <CardDescription>Modify core game parameters. Changes are saved to local storage.</CardDescription>
+              <CardDescription>Modify core game parameters. Changes are saved to local storage and affect your browser instance.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(Object.keys(appSettings) as Array<keyof AppSettings>).map((key) => (
@@ -175,7 +180,7 @@ export default function AdminPage() {
                     value={appSettings[key]}
                     onChange={handleSettingsChange}
                     className="bg-background"
-                    step={key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('balance') ? "0.01" : "1"}
+                    step={key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('balance') || key.toLowerCase().includes('amount') ? "0.01" : "1"}
                   />
                 </div>
               ))}
@@ -233,27 +238,98 @@ export default function AdminPage() {
               <Button onClick={handleSaveNewsItems} className="w-full md:w-auto"><Save className="mr-2 h-4 w-4" /> Save News Items</Button>
             </CardFooter>
           </Card>
-          
-          {/* Placeholder Sections */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Button variant="outline" className="h-auto py-4 text-left justify-start disabled opacity-50 cursor-not-allowed">
-              <Users className="mr-3 h-5 w-5 text-primary" />
+
+          {/* Withdrawal Management Section - Placeholder */}
+          <Card className="bg-muted/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle>
+              <CardDescription>View and manage pending user withdrawal requests.</CardDescription>
+            </CardHeader>
+            <CardContent>
+               <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Req ID</TableHead>
+                    <TableHead>User Email</TableHead>
+                    <TableHead>Amount (₹)</TableHead>
+                    <TableHead>UPI/Details</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dummyWithdrawalRequests.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{req.id}</TableCell>
+                      <TableCell>{req.userEmail}</TableCell>
+                      <TableCell>{req.amount.toFixed(2)}</TableCell>
+                      <TableCell>{req.upiId}</TableCell>
+                      <TableCell>{new Date(req.date).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 text-xs rounded-full ${req.status === 'Pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
+                          {req.status}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" disabled>Approve</Button>
+                         <Button variant="destructive" size="sm" className="ml-2" disabled>Reject</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {dummyWithdrawalRequests.length === 0 && (
+                     <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell>
+                     </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+            <CardFooter className="text-sm text-muted-foreground">
+              Full withdrawal management requires Firestore integration.
+            </CardFooter>
+          </Card>
+
+          {/* User & Financial Overview Section - Placeholder */}
+          <Card className="bg-muted/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Users /> User & Financial Overview</CardTitle>
+              <CardDescription>View user statistics, activity, and global financial summaries.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
               <div>
-                <p className="font-semibold">User Management</p>
-                <p className="text-xs text-muted-foreground">View and manage players (Coming Soon)</p>
+                <h4 className="font-semibold mb-2 flex items-center gap-2"><DollarSign /> Global Financials</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Card className="p-4 bg-background">
+                    <p className="text-sm text-muted-foreground">Total Funds Added by All Users</p>
+                    <p className="text-2xl font-bold text-primary">₹ [Coming Soon]</p>
+                  </Card>
+                  <Card className="p-4 bg-background">
+                    <p className="text-sm text-muted-foreground">Total Funds Withdrawn by All Users</p>
+                    <p className="text-2xl font-bold text-accent">₹ [Coming Soon]</p>
+                  </Card>
+                </div>
               </div>
-            </Button>
-            <Button variant="outline" className="h-auto py-4 text-left justify-start disabled opacity-50 cursor-not-allowed">
-              <BarChart3 className="mr-3 h-5 w-5 text-primary" />
-               <div>
-                <p className="font-semibold">Game Analytics</p>
-                <p className="text-xs text-muted-foreground">Track spins, wins, revenue (Coming Soon)</p>
+              <div>
+                <h4 className="font-semibold mb-2 flex items-center gap-2"><Activity /> User Activity & Management</h4>
+                 <div className="flex items-center gap-2 mb-4">
+                    <Input type="search" placeholder="Search users by email or ID..." className="bg-background" disabled/>
+                    <Button variant="outline" disabled><Search className="mr-2 h-4 w-4" /> Search</Button>
+                 </div>
+                <p className="text-sm text-muted-foreground">Detailed user activity logs, individual transaction history, and user management tools will be available here.</p>
+                <Button variant="link" disabled className="p-0 h-auto">View All User Transactions (Coming Soon)</Button>
               </div>
-            </Button>
-          </div>
+            </CardContent>
+            <CardFooter className="text-sm text-muted-foreground">
+              Full user management and financial overviews require Firestore integration.
+            </CardFooter>
+          </Card>
 
         </CardContent>
       </Card>
     </div>
   );
 }
+
+
+    
