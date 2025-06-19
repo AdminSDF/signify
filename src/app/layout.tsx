@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> {/* Added suppressHydrationWarning for potential theme mismatches */}
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Google Fonts links are managed by next/font, so explicit links are not needed here if using next/font */}
         {/* Add other head elements if necessary */}
