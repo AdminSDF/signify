@@ -47,11 +47,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       router.push('/'); // Redirect to home after sign up
     } catch (error: any) {
       console.error("Error during email/password sign up:", error);
-      let description = "Could not create account. Please try again.";
+      let description;
       if (error.code === 'auth/email-already-in-use') {
         description = 'This email is already registered. Try logging in.';
       } else if (error.code === 'auth/weak-password') {
         description = 'Password is too weak. It should be at least 6 characters.';
+      } else if (error.code === 'auth/operation-not-allowed') {
+        description = 'Email/Password sign-up is not enabled in Firebase. Please check your Firebase project settings.';
+      }
+      else {
+        description = error.message || "An unknown error occurred during sign up. Please try again.";
       }
       toast({ variant: "destructive", title: "Sign Up Failed", description });
     } finally {
@@ -68,9 +73,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       router.push('/'); // Redirect to home after login
     } catch (error: any) {
       console.error("Error during email/password login:", error);
-      let description = "Could not log in. Please check your credentials.";
+      let description;
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         description = 'Invalid email or password. Please try again.';
+      } else if (error.code === 'auth/operation-not-allowed') {
+         description = 'Email/Password sign-in is not enabled in Firebase. Please check your Firebase project settings.';
+      }
+      else {
+        description = error.message || "An unknown error occurred during login. Please try again.";
       }
       toast({ variant: "destructive", title: "Login Failed", description });
     } finally {
