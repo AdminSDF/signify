@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        body: ['Poppins', 'sans-serif'],
+        headline: ['Poppins', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
@@ -88,10 +88,26 @@ export default {
             height: '0',
           },
         },
+        bounceOnce: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
+        glowPulse: {
+          '0%, 100%': { textShadow: '0 0 5px hsl(var(--primary)), 0 0 10px hsl(var(--primary)), 0 0 15px hsl(var(--primary))' },
+          '50%': { textShadow: '0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary)), 0 0 30px hsl(var(--primary) / 0.7)' },
+        },
+        wheelSpin: {
+          to: {
+            transform: 'rotate(var(--final-rotation, 3600deg))'
+          }
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'bounce-once': 'bounceOnce 0.5s ease-in-out',
+        'glow-pulse': 'glowPulse 2s infinite ease-in-out',
+        'wheel-spin': 'wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards',
       },
     },
   },
