@@ -16,7 +16,7 @@ const SiteHeader: React.FC = () => {
               <path d="M143.8,149.9a40.2,40.2,0,0,1-31.6,0L70.7,173.2a88,88,0,0,0,45.2,18.7,87,87,0,0,0,12.1-.8V132a40,40,0,0,1,0-8Z" fill="currentColor" opacity="0.2" strokeWidth="0"></path>
               <path d="M143.8,149.9a40.2,40.2,0,0,1-31.6,0L70.7,173.2a88,88,0,0,0,45.2,18.7,87,87,0,0,0,12.1-.8V132a40,40,0,0,1,0-8Z" fill="hsl(var(--primary))" strokeWidth="0"></path>
             </svg>
-            <span className="font-bold">Spinify App</span>
+            {/* <span className="font-bold">Spinify App</span> */}
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/" passHref>
