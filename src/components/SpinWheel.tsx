@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface Segment {
@@ -11,7 +11,7 @@ export interface Segment {
   amount?: number;
   color: string; // HSL string e.g., '0 100% 50%' for red
   textColor?: string; // HSL string for text, defaults to contrast
-  probability?: number; // Optional probability for weighted selection
+  probability?: number;
 }
 
 interface SpinWheelProps {
@@ -20,7 +20,18 @@ interface SpinWheelProps {
   targetSegmentIndex: number | null;
   isSpinning: boolean;
   spinDuration?: number; // in seconds
-  onClick?: () => void; // Added onClick prop
+  onClick?: () => void;
+}
+
+// Helper to modify HSL lightness
+function modifyHslColor(hslColor: string, lightnessOffset: number): string {
+  const parts = hslColor.match(/(\d+)\s+(\d+)%\s+(\d+)%/);
+  if (!parts) return hslColor; // Fallback
+  const h = parseInt(parts[1]);
+  const s = parseInt(parts[2]);
+  let l = parseInt(parts[3]);
+  l = Math.min(100, Math.max(0, l + lightnessOffset));
+  return `${h} ${s}% ${l}%`;
 }
 
 const SpinWheel: React.FC<SpinWheelProps> = ({
@@ -32,6 +43,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   onClick,
 }) => {
   const [currentRotation, setCurrentRotation] = useState(0);
+  const [targetVisualRotation, setTargetVisualRotation] = useState(0); // For animation
   const wheelRef = useRef<SVGSVGElement>(null);
 
   const numSegments = segments.length;
@@ -43,31 +55,69 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       const maxRotations = 7;
       const randomExtraRotations = Math.floor(Math.random() * (maxRotations - minRotations + 1)) + minRotations;
       const baseDegrees = randomExtraRotations * 360;
-      // Adjust target angle to point to the middle of the segment
-      const targetAngle = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2)); 
-      // Small random offset to make it land slightly differently within the segment each time
-      const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6); 
-      const finalRotation = baseDegrees + targetAngle + randomOffset;
-      
-      if (wheelRef.current) {
-        wheelRef.current.style.setProperty('--final-rotation', `${finalRotation}deg`);
-        wheelRef.current.style.setProperty('--spin-duration', `${spinDuration}s`);
-      }
-      setCurrentRotation(finalRotation);
+      const targetAngle = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2));
+      const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6);
+      const finalRotation = currentRotation + baseDegrees + targetAngle + randomOffset; // Animate relative to current
 
+      setTargetVisualRotation(finalRotation);
+
+      if (wheelRef.current) {
+        // Ensure the CSS variable for final rotation is set for the animation
+        wheelRef.current.style.setProperty('--final-rotation', `${finalRotation}deg`);
+        wheelRef.current.style.setProperty('--initial-rotation', `${currentRotation}deg`);
+      }
+      
       const timer = setTimeout(() => {
         onSpinComplete(segments[targetSegmentIndex]);
+        // Normalize rotation to keep it within 0-360 to prevent excessively large numbers over time
+        // The actual visual effect of large numbers is fine, but smaller numbers are cleaner for state.
+        const finalAngleNormalized = finalRotation % 360;
+        setCurrentRotation(finalAngleNormalized < 0 ? finalAngleNormalized + 360 : finalAngleNormalized);
+
       }, spinDuration * 1000);
 
       return () => clearTimeout(timer);
     }
-  }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration]);
+  }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration, currentRotation]);
 
-  const getTextColor = (backgroundColor: string): string => {
+
+  const gradientDefs = useMemo(() => {
+    const uniqueColors = new Map<string, string>();
+    segments.forEach((segment, index) => {
+      if (!uniqueColors.has(segment.color)) {
+        uniqueColors.set(segment.color, `grad-${index}`);
+      }
+    });
+
+    return Array.from(uniqueColors.entries()).map(([colorStr, id]) => {
+      const lighterColor = modifyHslColor(colorStr, 15); // Center of gradient
+      const darkerColor = modifyHslColor(colorStr, -10); // Edge of gradient
+      return (
+        <radialGradient key={id} id={id} cx="50%" cy="50%" r="65%" fx="50%" fy="50%">
+          <stop offset="0%" style={{ stopColor: `hsl(${lighterColor})`, stopOpacity: 1 }} />
+          <stop offset="100%" style={{ stopColor: `hsl(${darkerColor})`, stopOpacity: 1 }} />
+        </radialGradient>
+      );
+    });
+  }, [segments]);
+  
+  const colorToGradientIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    segments.forEach((segment, index) => {
+       const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`; // Ensure consistent ID for same colors
+      if (!map.has(segment.color)) {
+        map.set(segment.color, gradId);
+      }
+    });
+    return map;
+  }, [segments]);
+
+
+  const getTextColorFallback = (backgroundColor: string): string => {
     const parts = backgroundColor.split(' ');
     if (parts.length === 3) {
       const l = parseInt(parts[2].replace('%', ''), 10);
-      return l > 50 ? '0 0% 10%' : '0 0% 100%';
+      return l > 55 ? '0 0% 10%' : '0 0% 95%'; // Adjusted for better contrast on gradients
     }
     return '0 0% 0%';
   };
@@ -79,31 +129,56 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   };
 
   return (
-    <div className="relative flex justify-center items-center my-8 select-none w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[450px] md:h-[450px] mx-auto">
-      <div 
-        className="absolute top-[-20px] left-1/2 -translate-x-1/2 z-10"
-        style={{ filter: 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))' }}
+    <div
+      className={cn(
+        "relative flex justify-center items-center my-8 select-none w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[450px] md:h-[450px] mx-auto",
+        "transition-transform duration-150",
+        onClick && !isSpinning && "cursor-pointer hover:scale-105 active:scale-95 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
+      )}
+      onClick={handleWheelClick}
+      style={{ perspective: '1000px' }}
+      role="button"
+      tabIndex={onClick && !isSpinning ? 0 : -1}
+      aria-label="Spinning prize wheel"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleWheelClick(); e.preventDefault();}}}
+    >
+      <div
+        className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10" // Adjusted top for slightly larger pointer
         aria-hidden="true"
       >
-        <svg width="40" height="50" viewBox="0 0 40 50" fill="hsl(var(--primary))" xmlns="http://www.w3.org/2000/svg">
-          <path d="M20 0L0 25L20 50L40 25L20 0Z" />
+        <svg width="36" height="50" viewBox="0 0 36 50" fill="hsl(var(--primary))" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'url(#dropShadowPointer)'}}>
+          <path d="M18 0L0 22L18 50L36 22L18 0Z" />
+           <circle cx="18" cy="12" r="5" fill="hsl(var(--background))" />
         </svg>
       </div>
 
       <svg
         ref={wheelRef}
         viewBox="0 0 200 200"
-        onClick={handleWheelClick} 
         className={cn(
-          "w-full h-full rounded-full shadow-2xl transition-transform duration-[var(--spin-duration)] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-          { 'animate-wheel-spin': isSpinning },
-          { 'cursor-pointer hover:opacity-90 active:scale-95': onClick && !isSpinning } 
+          "w-full h-full rounded-full shadow-2xl",
+          isSpinning ? 'animate-wheel-spin' : '',
+          "svg-wheel-graphics" 
         )}
-        style={{ transform: `rotate(${isSpinning ? 0 : currentRotation}deg)` }}
-        aria-label="Spinning prize wheel"
-        role="button" 
-        tabIndex={onClick && !isSpinning ? 0 : -1} 
+        style={{
+          transform: `rotate(${isSpinning ? 0 : currentRotation}deg)`, // Animation class handles rotation when spinning
+          '--final-rotation': `${targetVisualRotation}deg`,
+          '--initial-rotation': `${currentRotation}deg`, // Used by animation
+           filter: 'url(#dropShadowWheel)'
+        } as React.CSSProperties}
       >
+        <defs>
+          <filter id="dropShadowPointer" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="2" stdDeviation="1.5" floodColor="rgba(0,0,0,0.3)" />
+          </filter>
+          <filter id="dropShadowWheel" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="5" stdDeviation="5" floodColor="rgba(0,0,0,0.2)" />
+          </filter>
+          <filter id="textShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0.5" dy="0.5" stdDeviation="0.5" floodColor="rgba(0,0,0,0.7)" />
+          </filter>
+          {gradientDefs}
+        </defs>
         
         <g>
           {segments.map((segment, i) => {
@@ -115,24 +190,34 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
             const x2 = 100 + 98 * Math.cos(Math.PI / 180 * (endAngle - 90));
             const y2 = 100 + 98 * Math.sin(Math.PI / 180 * (endAngle - 90));
             const pathData = `M100,100 L${x1},${y1} A98,98 0 0,1 ${x2},${y2} z`;
-            const textColor = segment.textColor || getTextColor(segment.color);
+            
+            const effectiveTextColor = segment.textColor || getTextColorFallback(segment.color);
+            const gradientId = colorToGradientIdMap.get(segment.color);
 
             return (
-              <g key={segment.id} role="listitem" aria-label={`Prize: ${segment.text} ${segment.amount || ''}`}>
-                <path d={pathData} fill={`hsl(${segment.color})`} stroke="hsl(var(--background))" strokeWidth="1"/>
+              <g key={segment.id} role="listitem" aria-label={`Prize: ${segment.text} ${segment.amount !== undefined ? `(value ${segment.amount})` : ''}`}>
+                <path 
+                  d={pathData} 
+                  fill={gradientId ? `url(#${gradientId})` : `hsl(${segment.color})`} 
+                  stroke="hsl(var(--card))" // Use card background for stroke, gives subtle separation
+                  strokeWidth="1.5"
+                />
                 <text
                   x={100 + 60 * Math.cos(midAngleRad)}
                   y={100 + 60 * Math.sin(midAngleRad)}
                   dy=".3em"
                   textAnchor="middle"
-                  fontSize="10"
+                  fontSize="9.5" // Slightly reduced for better fit with multi-line
                   fontWeight="bold"
-                  fill={`hsl(${textColor})`}
-                  className="font-body pointer-events-none" 
+                  fill={`hsl(${effectiveTextColor})`}
+                  className="font-body pointer-events-none"
+                  filter="url(#textShadow)"
                 >
-                  <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.5em">{segment.emoji}</tspan>
+                  <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.6em">{segment.emoji}</tspan>
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{segment.text}</tspan>
-                  {segment.amount !== undefined && segment.amount > 0 && <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">₹{segment.amount}</tspan>}
+                  {segment.amount !== undefined && segment.amount > 0 && (
+                    <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">₹{segment.amount}</tspan>
+                  )}
                 </text>
               </g>
             );
@@ -144,3 +229,4 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
+

@@ -1,3 +1,4 @@
+
 import type {Config} from 'tailwindcss';
 
 export default {
@@ -96,7 +97,10 @@ export default {
           '0%, 100%': { textShadow: '0 0 5px hsl(var(--primary)), 0 0 10px hsl(var(--primary)), 0 0 15px hsl(var(--primary))' },
           '50%': { textShadow: '0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary)), 0 0 30px hsl(var(--primary) / 0.7)' },
         },
-        wheelSpin: {
+        wheelSpin: { // Updated to use CSS variables for initial and final rotation
+          from: {
+            transform: 'rotate(var(--initial-rotation, 0deg))'
+          },
           to: {
             transform: 'rotate(var(--final-rotation, 3600deg))'
           }
@@ -107,9 +111,11 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
-        'wheel-spin': 'wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards',
+        // The animate-wheel-spin class will be applied directly in the component
+        // 'wheel-spin': 'wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards',
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
+

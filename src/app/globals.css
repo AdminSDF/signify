@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -117,3 +118,13 @@ body {
     0 0 30px hsl(var(--primary)),
     0 0 35px hsl(var(--primary));
 }
+
+/* Added for consistent spin animation with CSS variables */
+.svg-wheel-graphics {
+  transform: rotate(var(--initial-rotation, 0deg));
+}
+
+.animate-wheel-spin {
+  animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
