@@ -97,12 +97,12 @@ export default {
           '0%, 100%': { textShadow: '0 0 5px hsl(var(--primary)), 0 0 10px hsl(var(--primary)), 0 0 15px hsl(var(--primary))' },
           '50%': { textShadow: '0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary)), 0 0 30px hsl(var(--primary) / 0.7)' },
         },
-        wheelSpin: { 
+        wheelSpin: {
           from: {
-            transform: 'rotate(var(--animation-start-angle))' 
+            transform: 'rotate(var(--animation-start-angle, 0deg))'
           },
           to: {
-            transform: 'rotate(var(--animation-end-angle))'
+            transform: 'rotate(var(--animation-end-angle, 0deg))'
           }
         }
       },
@@ -111,9 +111,9 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
+        // Note: 'animate-wheel-spin' will be a class in globals.css that applies this
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
-

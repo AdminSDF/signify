@@ -58,7 +58,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
   // Effect to handle the spinning animation
   useEffect(() => {
-    if (isSpinning && targetSegmentIndex !== null) {
+    if (isSpinning && targetSegmentIndex !== null && wheelRef.current) {
       const minRotations = 5;
       const maxRotations = 7;
       const randomExtraRotations = Math.floor(Math.random() * (maxRotations - minRotations + 1)) + minRotations;
@@ -70,23 +70,22 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       // Add a small random offset to make the landing slightly less predictable within the segment
       const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6); 
       
-      // finalRotation is relative to the current position (currentRotation from state)
-      // However, the animation calculates from its own start point using --animation-start-angle.
-      // The final visual angle for the animation's "to" state.
+      // animationEndAngle is the final visual angle for the animation's "to" state.
       const animationEndAngle = currentRotation + baseDegrees + targetAngleWithinWheel + randomOffset;
 
-
-      if (wheelRef.current) {
-        // Set CSS variables for the animation keyframes
-        wheelRef.current.style.setProperty('--animation-start-angle', `${currentRotation}deg`);
-        wheelRef.current.style.setProperty('--animation-end-angle', `${animationEndAngle}deg`);
-      }
+      // Set CSS variables for the animation keyframes
+      wheelRef.current.style.setProperty('--animation-start-angle', `${currentRotation}deg`);
+      wheelRef.current.style.setProperty('--animation-end-angle', `${animationEndAngle}deg`);
+      wheelRef.current.style.setProperty('--spin-duration', `${spinDuration}s`);
       
       const timer = setTimeout(() => {
         onSpinComplete(segments[targetSegmentIndex]);
         // Normalize the animationEndAngle to be within 0-359 for the new resting state
-        const finalAngleNormalized = animationEndAngle % 360;
-        setCurrentRotation(finalAngleNormalized < 0 ? finalAngleNormalized + 360 : finalAngleNormalized);
+        let finalAngleNormalized = animationEndAngle % 360;
+        if (finalAngleNormalized < 0) {
+          finalAngleNormalized += 360;
+        }
+        setCurrentRotation(finalAngleNormalized);
       }, spinDuration * 1000);
 
       return () => clearTimeout(timer);
@@ -172,10 +171,9 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         viewBox="0 0 200 200"
         className={cn(
           "w-full h-full rounded-full shadow-2xl svg-wheel-graphics", 
-          isSpinning && 'animate-wheel-spin'
+          isSpinning && 'animate-wheel-spin' // Conditionally apply animation class
         )}
         style={{
-          // Inline transform removed. Rotation is handled by .svg-wheel-graphics class via --wheel-actual-rotation CSS var.
           filter: 'url(#dropShadowWheel)'
         } as React.CSSProperties}
       >
@@ -241,4 +239,3 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
-
