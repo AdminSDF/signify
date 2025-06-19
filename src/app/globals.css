@@ -129,7 +129,8 @@ body {
 
 .animate-wheel-spin {
   /* The animation itself defines the transform based on its own variables in tailwind.config.ts keyframes */
-  animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  /* Changed cubic-bezier for a more "tyre-like" ease-out effect (easeOutQuint) */
+  animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
 
@@ -154,3 +155,4 @@ body {
   white-space: nowrap;
   display: inline-block;
 }
+
