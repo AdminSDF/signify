@@ -13,12 +13,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PaymentModal from '@/components/PaymentModal'; 
+import { AppSettings, getAppSettings } from '@/lib/appConfig'; // Updated import
 
 const USER_BALANCE_STORAGE_KEY = 'spinifyUserBalance';
 const TRANSACTION_STORAGE_KEY = 'spinifyTransactions';
-const MIN_WITHDRAWAL_AMOUNT = 500;
-const MIN_ADD_BALANCE_AMOUNT = 100;
-const UPI_ID = "9828786246@jio"; 
 
 interface TransactionEvent {
   id: string;
@@ -31,13 +29,14 @@ interface TransactionEvent {
 
 type PaymentMethod = "upi" | "bank";
 
-const presetAddBalanceAmounts = [100, 200, 500, 1000];
+const presetAddBalanceAmounts = [100, 200, 500, 1000]; // These could also become configurable
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
+  const [appConfig, setAppConfig] = useState<AppSettings>(getAppSettings());
   const [balance, setBalance] = useState<number | null>(null);
   
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
@@ -51,36 +50,54 @@ export default function ProfilePage() {
   const [addBalanceAmount, setAddBalanceAmount] = useState<string>('');
   const [isAddingBalance, setIsAddingBalance] = useState(false);
   const [showAddBalanceModal, setShowAddBalanceModal] = useState(false);
+  
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    const loadConfig = () => {
+      setAppConfig(getAppSettings());
+    };
+    loadConfig();
+     window.addEventListener('app-settings-changed', loadConfig);
+    return () => {
+      window.removeEventListener('app-settings-changed', loadConfig);
+    };
+  }, []);
 
   const fetchBalance = useCallback(() => {
+    if (!isClient) return;
     const storedBalance = localStorage.getItem(USER_BALANCE_STORAGE_KEY);
     if (storedBalance) {
       setBalance(parseFloat(storedBalance));
     } else {
       setBalance(0); 
     }
-  }, []);
+  }, [isClient]);
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && isClient) {
       router.push('/login');
-    } else if (user) {
+    } else if (user && isClient) {
       fetchBalance();
     }
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === USER_BALANCE_STORAGE_KEY && user) {
+      if (event.key === USER_BALANCE_STORAGE_KEY && user && isClient) {
         fetchBalance();
       }
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    if (isClient) {
+      window.addEventListener('storage', handleStorageChange);
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+      };
+    }
 
-  }, [user, authLoading, router, fetchBalance]);
+  }, [user, authLoading, router, fetchBalance, isClient]);
 
   const addTransaction = (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
+    if (!isClient) return;
     const newTransactionEntry: TransactionEvent = {
       ...details,
       id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 11),
@@ -102,7 +119,7 @@ export default function ProfilePage() {
     localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(updatedTransactions));
 
     window.dispatchEvent(new StorageEvent('storage', {
-      key: TRANSACTION_STORAGE_KEY,
+      key: TRANSACTION_STORAGE_KEY, // Or a custom event name
       newValue: JSON.stringify(updatedTransactions),
     }));
   };
@@ -120,6 +137,7 @@ export default function ProfilePage() {
   };
 
   const handleWithdrawal = async () => {
+    if (!isClient) return;
     setIsWithdrawing(true);
     const amount = parseFloat(withdrawalAmount);
 
@@ -128,8 +146,8 @@ export default function ProfilePage() {
       setIsWithdrawing(false);
       return;
     }
-    if (amount < MIN_WITHDRAWAL_AMOUNT) {
-      toast({ title: 'Minimum Withdrawal', description: `The minimum withdrawal amount is ₹${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`, variant: 'destructive' });
+    if (amount < appConfig.minWithdrawalAmount) {
+      toast({ title: 'Minimum Withdrawal', description: `The minimum withdrawal amount is ₹${appConfig.minWithdrawalAmount.toFixed(2)}.`, variant: 'destructive' });
       setIsWithdrawing(false);
       return;
     }
@@ -160,7 +178,7 @@ export default function ProfilePage() {
       type: 'debit',
       amount: amount,
       description: `Withdrawal: ${paymentMethodDetails}`,
-      status: 'completed',
+      status: 'completed', 
     });
 
     toast({
@@ -176,9 +194,9 @@ export default function ProfilePage() {
   };
 
   const isWithdrawalButtonDisabled = () => {
-    if (isWithdrawing || !withdrawalAmount) return true;
+    if (!isClient || isWithdrawing || !withdrawalAmount) return true;
     const amount = parseFloat(withdrawalAmount);
-    if (isNaN(amount) || amount <= 0 || amount < MIN_WITHDRAWAL_AMOUNT) return true;
+    if (isNaN(amount) || amount <= 0 || amount < appConfig.minWithdrawalAmount) return true;
     if (balance !== null && amount > balance) return true;
     if (selectedPaymentMethod === "upi" && !upiIdInput.trim()) return true;
     if (selectedPaymentMethod === "bank" && (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim())) return true;
@@ -186,9 +204,10 @@ export default function ProfilePage() {
   };
 
   const handleOpenAddBalanceModal = () => {
+    if (!isClient) return;
     const amount = parseFloat(addBalanceAmount);
-    if (isNaN(amount) || amount < MIN_ADD_BALANCE_AMOUNT) {
-      toast({ title: 'Invalid Amount', description: `Please enter a valid amount. Minimum to add is ₹${MIN_ADD_BALANCE_AMOUNT.toFixed(2)}.`, variant: 'destructive' });
+    if (isNaN(amount) || amount < appConfig.minAddBalanceAmount) {
+      toast({ title: 'Invalid Amount', description: `Please enter a valid amount. Minimum to add is ₹${appConfig.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
       return;
     }
     setShowAddBalanceModal(true);
@@ -196,15 +215,15 @@ export default function ProfilePage() {
 
   const handlePresetAddBalanceClick = (amount: number) => {
     setAddBalanceAmount(amount.toString());
-    // Automatically open modal if preset is clicked and valid
-    if (amount >= MIN_ADD_BALANCE_AMOUNT) {
+    if (amount >= appConfig.minAddBalanceAmount && isClient) {
         setShowAddBalanceModal(true);
-    } else {
-        toast({ title: 'Invalid Amount', description: `Minimum to add is ₹${MIN_ADD_BALANCE_AMOUNT.toFixed(2)}.`, variant: 'destructive' });
+    } else if (isClient) {
+        toast({ title: 'Invalid Amount', description: `Minimum to add is ₹${appConfig.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
     }
   };
 
   const handleConfirmAddBalance = () => {
+    if (!isClient) return;
     setIsAddingBalance(true); 
     const amount = parseFloat(addBalanceAmount);
 
@@ -212,7 +231,7 @@ export default function ProfilePage() {
       type: 'credit',
       amount: amount,
       description: `Balance add request via UPI (₹${amount.toFixed(2)})`,
-      status: 'pending',
+      status: 'pending', 
     });
 
     toast({
@@ -226,10 +245,10 @@ export default function ProfilePage() {
     setIsAddingBalance(false);
   };
 
-  if (authLoading || !user) {
+  if (authLoading || !isClient || (!user && isClient)) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-        {authLoading ? (
+        {authLoading || !isClient ? (
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         ) : (
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
@@ -244,6 +263,11 @@ export default function ProfilePage() {
       </div>
     );
   }
+  
+  if (!user) { // Should be caught above, but as a fallback
+    return <div className="flex items-center justify-center min-h-screen">Redirecting...</div>;
+  }
+
 
   return (
     <div className="container mx-auto py-8">
@@ -303,7 +327,7 @@ export default function ProfilePage() {
                     key={amount}
                     variant="outline"
                     onClick={() => handlePresetAddBalanceClick(amount)}
-                    disabled={isAddingBalance || showAddBalanceModal}
+                    disabled={isAddingBalance || showAddBalanceModal || !isClient}
                   >
                     ₹{amount}
                   </Button>
@@ -318,19 +342,19 @@ export default function ProfilePage() {
                   type="number"
                   value={addBalanceAmount}
                   onChange={(e) => setAddBalanceAmount(e.target.value)}
-                  placeholder={`Min. ₹${MIN_ADD_BALANCE_AMOUNT.toFixed(2)}`}
+                  placeholder={`Min. ₹${appConfig.minAddBalanceAmount.toFixed(2)}`}
                   className="mt-1"
-                  disabled={isAddingBalance || showAddBalanceModal}
+                  disabled={isAddingBalance || showAddBalanceModal || !isClient}
                 />
-                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < MIN_ADD_BALANCE_AMOUNT && (
+                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < appConfig.minAddBalanceAmount && (
                     <p className="text-xs text-destructive text-center mt-1">
-                        Minimum amount to add is ₹{MIN_ADD_BALANCE_AMOUNT.toFixed(2)}.
+                        Minimum amount to add is ₹{appConfig.minAddBalanceAmount.toFixed(2)}.
                     </p>
                   )}
               </div>
               <Button
                 onClick={handleOpenAddBalanceModal}
-                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < MIN_ADD_BALANCE_AMOUNT}
+                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < appConfig.minAddBalanceAmount || !isClient}
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 Request Add Balance via UPI
@@ -355,13 +379,13 @@ export default function ProfilePage() {
                     type="number"
                     value={withdrawalAmount}
                     onChange={(e) => setWithdrawalAmount(e.target.value)}
-                    placeholder={`Min. ₹${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}`}
+                    placeholder={`Min. ₹${appConfig.minWithdrawalAmount.toFixed(2)}`}
                     className="mt-1"
-                    disabled={isWithdrawing}
+                    disabled={isWithdrawing || !isClient}
                   />
-                  {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < MIN_WITHDRAWAL_AMOUNT && (
+                  {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < appConfig.minWithdrawalAmount && (
                     <p className="text-xs text-destructive text-center mt-1">
-                        Minimum withdrawal is ₹{MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.
+                        Minimum withdrawal is ₹{appConfig.minWithdrawalAmount.toFixed(2)}.
                     </p>
                   )}
                 </div>
@@ -371,7 +395,7 @@ export default function ProfilePage() {
                   <Select
                     value={selectedPaymentMethod}
                     onValueChange={handlePaymentMethodChange}
-                    disabled={isWithdrawing}
+                    disabled={isWithdrawing || !isClient}
                   >
                     <SelectTrigger id="paymentMethod" className="mt-1">
                       <SelectValue placeholder="Select payment method" />
@@ -401,7 +425,7 @@ export default function ProfilePage() {
                       onChange={(e) => setUpiIdInput(e.target.value)}
                       placeholder="yourname@bank"
                       className="mt-1"
-                      disabled={isWithdrawing}
+                      disabled={isWithdrawing || !isClient}
                     />
                   </div>
                 )}
@@ -417,7 +441,7 @@ export default function ProfilePage() {
                         onChange={(e) => setAccountHolderName(e.target.value)}
                         placeholder="e.g., John Doe"
                         className="mt-1"
-                        disabled={isWithdrawing}
+                        disabled={isWithdrawing || !isClient}
                       />
                     </div>
                     <div>
@@ -429,7 +453,7 @@ export default function ProfilePage() {
                         onChange={(e) => setAccountNumber(e.target.value)}
                         placeholder="e.g., 123456789012"
                         className="mt-1"
-                        disabled={isWithdrawing}
+                        disabled={isWithdrawing || !isClient}
                       />
                     </div>
                     <div>
@@ -441,7 +465,7 @@ export default function ProfilePage() {
                         onChange={(e) => setIfscCode(e.target.value)}
                         placeholder="e.g., SBIN0001234"
                         className="mt-1"
-                        disabled={isWithdrawing}
+                        disabled={isWithdrawing || !isClient}
                       />
                     </div>
                   </div>
@@ -449,7 +473,7 @@ export default function ProfilePage() {
                 
                 <Button
                   onClick={handleWithdrawal}
-                  disabled={isWithdrawalButtonDisabled()}
+                  disabled={isWithdrawalButtonDisabled() || !isClient}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                 >
                   {isWithdrawing ? 'Processing...' : 'Withdraw Now'}
@@ -471,10 +495,10 @@ export default function ProfilePage() {
       </Card>
 
       <PaymentModal
-        isOpen={showAddBalanceModal}
+        isOpen={showAddBalanceModal && isClient}
         onClose={() => setShowAddBalanceModal(false)}
         onConfirm={handleConfirmAddBalance}
-        upiId={UPI_ID}
+        upiId={appConfig.upiId}
         amount={parseFloat(addBalanceAmount) || 0}
       />
     </div>

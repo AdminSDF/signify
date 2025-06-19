@@ -1,23 +1,39 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Megaphone } from 'lucide-react';
-
-const newsItems = [
-  "🎉 Welcome to Spinify! New players get 10 FREE spins!",
-  "🔥 Hot Prize Alert: Chance to win up to ₹20 on the wheel!",
-  "💸 Special Offer: Buy a spin bundle and get extra value!",
-  "🏆 Leaderboard coming soon - compete for glory!",
-  "💡 Tip: Check the AI Pro Tip feature for winning strategies!",
-  "✨ Spin more, win more! Good luck, Spinify players!",
-];
-
-// To ensure seamless looping, we duplicate the content.
-// The number of duplications might need adjustment based on content length and screen width.
-const displayItems = [...newsItems, ...newsItems, ...newsItems];
+import { getNewsItems, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 
 const NewsTicker: React.FC = () => {
+  const [currentNewsItems, setCurrentNewsItems] = useState<string[]>(DEFAULT_NEWS_ITEMS);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    const loadNews = () => {
+      setCurrentNewsItems(getNewsItems());
+    };
+    
+    if (typeof window !== 'undefined') {
+      loadNews(); // Load initial news
+      window.addEventListener('news-items-changed', loadNews); // Listen for changes
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('news-items-changed', loadNews);
+      }
+    };
+  }, []);
+
+  // To ensure seamless looping, we duplicate the content.
+  const displayItems = isClient && currentNewsItems.length > 0 ? [...currentNewsItems, ...currentNewsItems, ...currentNewsItems] : [...DEFAULT_NEWS_ITEMS, ...DEFAULT_NEWS_ITEMS, ...DEFAULT_NEWS_ITEMS];
+
+  if (!isClient && currentNewsItems.length === 0) { // Avoid rendering empty ticker SSR or if no items
+      return null;
+  }
+  
   return (
     <div className="bg-secondary text-secondary-foreground py-2 shadow-md overflow-hidden w-full">
       <div className="marquee-content-wrapper flex items-center">

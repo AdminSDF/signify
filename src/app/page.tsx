@@ -20,6 +20,7 @@ import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
+import { AppSettings, getAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig'; // Updated import
 
 interface TransactionEvent {
   id: string;
@@ -35,11 +36,15 @@ const USER_BALANCE_STORAGE_KEY = 'spinifyUserBalance';
 const SPINS_AVAILABLE_STORAGE_KEY = 'spinifySpinsAvailable';
 const DAILY_PAID_SPINS_USED_KEY = 'spinifyDailyPaidSpinsUsed';
 const LAST_PAID_SPIN_DATE_KEY = 'spinifyLastPaidSpinDate';
+const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail'; 
+const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
+
 
 interface WheelSegmentWithProbability extends Segment {
   probability: number;
 }
 
+// These wheel segments could also be made configurable via admin panel in future
 const wheelSegments: WheelSegmentWithProbability[] = [
   { id: 's100', text: '₹100', emoji: '💎', amount: 100, color: '300 80% 60%', textColor: '0 0% 100%', probability: 0.00 },
   { id: 's50',  text: '₹50',  emoji: '💰', amount: 50,  color: '270 80% 65%', textColor: '0 0% 100%', probability: 0.00 },
@@ -51,22 +56,13 @@ const wheelSegments: WheelSegmentWithProbability[] = [
   { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.71 },
 ];
 
-const MAX_SPINS_IN_BUNDLE = 10;
-const UPI_ID = "9828786246@jio";
-const SPIN_REFILL_PRICE = 10; 
-
-const ADMIN_EMAIL = "jameafaizanrasool@gmail.com"; // This should ideally come from .env
-const INITIAL_BALANCE_FOR_NEW_USERS = 50.00; // If user specific balance isn't found
-
-const TIER1_LIMIT = 30;
-const TIER1_COST = 2;
-const TIER2_LIMIT = 60;
-const TIER2_COST = 3;
-const TIER3_COST = 5;
 
 export default function HomePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  const [appConfig, setAppConfig] = useState<AppSettings>(getAppSettings());
+  const [adminEmail, setAdminEmail] = useState(DEFAULT_ADMIN_EMAIL);
 
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
@@ -79,8 +75,8 @@ export default function HomePage() {
   const [tipError, setTipError] = useState<string | null>(null);
 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS_IN_BUNDLE);
-  const [userBalance, setUserBalance] = useState<number>(INITIAL_BALANCE_FOR_NEW_USERS);
+  const [spinsAvailable, setSpinsAvailable] = useState<number>(appConfig.maxSpinsInBundle);
+  const [userBalance, setUserBalance] = useState<number>(appConfig.initialBalanceForNewUsers);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [transactions, setTransactions] = useState<TransactionEvent[]>([]);
@@ -94,37 +90,40 @@ export default function HomePage() {
   const [isClient, setIsClient] = useState(false);
   const [showAdminChoiceView, setShowAdminChoiceView] = useState(false);
   
-  // Effect for initial client-side setup and localStorage access
   useEffect(() => {
     setIsClient(true);
-    // We wait for auth to settle before deciding admin view or loading user data
+    const loadConfig = () => {
+      setAppConfig(getAppSettings());
+      const storedAdminEmail = localStorage.getItem(ADMIN_EMAIL_CONFIG_KEY) || DEFAULT_ADMIN_EMAIL;
+      setAdminEmail(storedAdminEmail);
+    };
+    loadConfig(); // Load initial config
+
+    // Listen for settings changes from admin panel
+    window.addEventListener('app-settings-changed', loadConfig);
+    return () => {
+      window.removeEventListener('app-settings-changed', loadConfig);
+    };
   }, []);
 
-  // Effect to handle user data loading and admin view logic once auth is ready
   useEffect(() => {
-    if (!isClient || authLoading) return; // Only run if client and auth is no longer loading
+    if (!isClient || authLoading) return; 
 
     if (!user) {
-      // If no user and not loading, user data can't be loaded (e.g. balance)
-      // But we don't redirect here, as unauth users can still see the game.
-      // Balance/Spins will use defaults or show as 0 if specific logic is added for unauth state.
-       setUserBalance(0); // Example: set balance to 0 for guests
-       setSpinsAvailable(0); // Example: set spins to 0 for guests
+       setUserBalance(0); 
+       setSpinsAvailable(0); 
       return;
     }
     
-    // User is logged in, determine admin status
-    if (user.email === ADMIN_EMAIL) {
-      setShowAdminChoiceView(true); // Show admin choice if they haven't made one
+    if (user.email === adminEmail) {
+      setShowAdminChoiceView(true); 
     }
 
-    // Load user-specific data from localStorage (or default if not found)
-    // Note: For a real app, balance would come from a backend tied to user ID
-    const storedBalance = localStorage.getItem(USER_BALANCE_STORAGE_KEY); // This is a shared key, ideally make it user-specific
+    const storedBalance = localStorage.getItem(USER_BALANCE_STORAGE_KEY); 
     const storedSpins = localStorage.getItem(SPINS_AVAILABLE_STORAGE_KEY);
 
-    setUserBalance(storedBalance ? parseFloat(storedBalance) : INITIAL_BALANCE_FOR_NEW_USERS);
-    setSpinsAvailable(storedSpins ? parseInt(storedSpins, 10) : MAX_SPINS_IN_BUNDLE);
+    setUserBalance(storedBalance ? parseFloat(storedBalance) : appConfig.initialBalanceForNewUsers);
+    setSpinsAvailable(storedSpins ? parseInt(storedSpins, 10) : appConfig.maxSpinsInBundle);
 
     const todayString = new Date().toLocaleDateString();
     const storedLastDate = localStorage.getItem(LAST_PAID_SPIN_DATE_KEY);
@@ -148,11 +147,11 @@ export default function HomePage() {
         setTransactions([]); 
       }
     }
-  }, [isClient, authLoading, user, ADMIN_EMAIL]);
+  }, [isClient, authLoading, user, adminEmail, appConfig.initialBalanceForNewUsers, appConfig.maxSpinsInBundle]);
 
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && isClient && user) { // Only save if user is logged in
+    if (typeof window !== 'undefined' && isClient && user) { 
       localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(transactions));
       localStorage.setItem(USER_BALANCE_STORAGE_KEY, userBalance.toString());
       localStorage.setItem(SPINS_AVAILABLE_STORAGE_KEY, spinsAvailable.toString());
@@ -204,14 +203,14 @@ export default function HomePage() {
   }, [playSound, selectWinningSegmentByProbability]);
 
   const getCurrentPaidSpinCost = useCallback((spinsUsedToday: number): number => {
-    if (spinsUsedToday < TIER1_LIMIT) {
-      return TIER1_COST;
+    if (spinsUsedToday < appConfig.tier1Limit) {
+      return appConfig.tier1Cost;
     }
-    if (spinsUsedToday < TIER2_LIMIT) {
-      return TIER2_COST;
+    if (spinsUsedToday < appConfig.tier2Limit) {
+      return appConfig.tier2Cost;
     }
-    return TIER3_COST;
-  }, []);
+    return appConfig.tier3Cost;
+  }, [appConfig]);
 
 
   const handleSpinClick = useCallback(() => {
@@ -245,7 +244,7 @@ export default function HomePage() {
       if (userBalance >= costForThisSpin) {
         setUserBalance(prev => prev - costForThisSpin);
         addTransaction({ type: 'debit', amount: costForThisSpin, description: `Spin Cost (Paid Tier ${
-            costForThisSpin === TIER1_COST ? 1 : costForThisSpin === TIER2_COST ? 2 : 3
+            costForThisSpin === appConfig.tier1Cost ? 1 : costForThisSpin === appConfig.tier2Cost ? 2 : 3
         })` });
         startSpinProcess();
         toast({
@@ -259,7 +258,7 @@ export default function HomePage() {
     }
   }, [
     isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction,
-    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router
+    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router, appConfig.tier1Cost, appConfig.tier2Cost
   ]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
@@ -326,16 +325,16 @@ export default function HomePage() {
   }, [spinHistory, toast, user]);
 
   const handlePaymentConfirm = useCallback(() => {
-    if (!user) return; // Should not happen if modal is shown only to logged in users
+    if (!user) return; 
     setShowPaymentModal(false);
-    addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS_IN_BUNDLE} Spins Bundle` });
-    setSpinsAvailable(MAX_SPINS_IN_BUNDLE); 
+    addTransaction({ type: 'debit', amount: appConfig.spinRefillPrice, description: `Purchased ${appConfig.maxSpinsInBundle} Spins Bundle` });
+    setSpinsAvailable(appConfig.maxSpinsInBundle); 
     toast({
       title: "Spins Purchased!",
-      description: `You now have ${MAX_SPINS_IN_BUNDLE} spins. Happy spinning!`,
+      description: `You now have ${appConfig.maxSpinsInBundle} spins. Happy spinning!`,
       variant: "default",
     });
-  }, [toast, addTransaction, user]);
+  }, [toast, addTransaction, user, appConfig.spinRefillPrice, appConfig.maxSpinsInBundle]);
 
   if (!isClient || authLoading) {
     return (
@@ -352,7 +351,7 @@ export default function HomePage() {
     );
   }
 
-  if (user && user.email === ADMIN_EMAIL && showAdminChoiceView) {
+  if (user && user.email === adminEmail && showAdminChoiceView) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
@@ -429,7 +428,7 @@ export default function HomePage() {
             <>
                 <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
                     {spinsAvailable > 0 
-                    ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS_IN_BUNDLE} (Free/Bundled)</>
+                    ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appConfig.maxSpinsInBundle} (Free/Bundled)</>
                     : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span> (from balance). Paid today: {dailyPaidSpinsUsed}</>
                     }
                 </div>
@@ -461,9 +460,9 @@ export default function HomePage() {
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onConfirm={handlePaymentConfirm}
-        upiId={UPI_ID}
-        amount={SPIN_REFILL_PRICE}
-        spinsToGet={MAX_SPINS_IN_BUNDLE}
+        upiId={appConfig.upiId}
+        amount={appConfig.spinRefillPrice}
+        spinsToGet={appConfig.maxSpinsInBundle}
       />
     </div>
   );

@@ -16,21 +16,22 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, CreditCard } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
+// No need to import getAppSettings here directly, upiId will be passed as prop
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  upiId: string;
+  upiId: string; // Now mandatory, passed from parent
   amount: number;
-  spinsToGet?: number; // Made optional
+  spinsToGet?: number; 
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
-  upiId,
+  upiId, // Use the passed prop
   amount,
   spinsToGet,
 }) => {
@@ -81,7 +82,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               <Input
                 id="upiIdDisplay"
                 type="text"
-                value={upiId}
+                value={upiId} // Use the upiId prop
                 readOnly
                 className="bg-muted/50 border-border focus-visible:ring-primary"
               />
@@ -109,4 +110,3 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 };
 
 export default PaymentModal;
-
