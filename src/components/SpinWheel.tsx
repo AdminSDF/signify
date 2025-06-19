@@ -100,18 +100,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         role="button" // Indicate it's clickable
         tabIndex={onClick && !isSpinning ? 0 : -1} // Make it focusable
       >
-        <defs>
-          {segments.map((segment, i) => (
-            <path
-              key={`segment-path-${i}`}
-              id={`segment-path-def-${i}`}
-              d={
-                `M100 100 L ${100 + 100 * Math.cos(Math.PI / 180 * (i * anglePerSegment - 90 - anglePerSegment / 2))} ${100 + 100 * Math.sin(Math.PI / 180 * (i * anglePerSegment - 90 - anglePerSegment / 2))} ` +
-                `A 100 100 0 0 1 ${100 + 100 * Math.cos(Math.PI / 180 * ((i + 1) * anglePerSegment - 90 - anglePerSegment / 2))} ${100 + 100 * Math.sin(Math.PI / 180 * ((i + 1) * anglePerSegment - 90 - anglePerSegment / 2))} Z`
-              }
-            />
-          ))}
-        </defs>
+        {/* Removed unused <defs> block that was causing hydration mismatch */}
         
         <g>
           {segments.map((segment, i) => {
