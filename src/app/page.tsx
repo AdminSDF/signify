@@ -35,21 +35,20 @@ interface WheelSegmentWithProbability extends Segment {
   probability: number;
 }
 
+// Adjusted for ~70% admin earnings (EV ~ ₹0.28)
+// Cost per spin from bundle = ₹1. Target user win = 30% = ₹0.30.
 const wheelSegments: WheelSegmentWithProbability[] = [
-  { id: 's7', text: '₹1', emoji: '🪙', amount: 1, color: '200 50% 70%', textColor: '0 0% 0%', probability: 0.10 },   // 10% (New)
-  { id: 's8', text: '₹2', emoji: '🤑', amount: 2, color: '40 60% 50%', textColor: '0 0% 100%', probability: 0.10 },  // 10% (New)
-  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%', probability: 0.20 },   // 20% (Was 40%)
-  { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%', textColor: '0 0% 100%', probability: 0.15 }, // 15%
-  { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.25 }, // 25%
-  { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%', textColor: '0 0% 0%', probability: 0.10 },  // 10%
-  { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.10 }, // 10%
-  { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%', textColor: '0 0% 100%', probability: 0.00 }, // 0%
-]; // Total: 1.00 (100%)
+  { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.80 }, // 80%
+  { id: 's1', text: '₹1', emoji: '🪙', amount: 1, color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.15 },   // 15% (EV: 0.15 * 1 = 0.15)
+  { id: 's2', text: '₹2', emoji: '🤑', amount: 2, color: '60 90% 55%', textColor: '0 0% 0%', probability: 0.04 },  // 4% (EV: 0.04 * 2 = 0.08)
+  { id: 's3', text: '₹5', emoji: '🎈', amount: 5, color: '0 80% 60%', textColor: '0 0% 100%', probability: 0.01 },   // 1% (EV: 0.01 * 5 = 0.05)
+]; // Total Probability: 1.00 (100%)
+// Total EV = 0.15 + 0.08 + 0.05 = ₹0.28
 
 const MAX_SPINS = 10; 
 const SPIN_COST = 2; 
 const UPI_ID = "9828786246@jio";
-const SPIN_REFILL_PRICE = 10;
+const SPIN_REFILL_PRICE = 10; // Cost for MAX_SPINS (i.e. ₹1 per spin if bought in bundle)
 
 const ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
 const mockUser = {
@@ -147,6 +146,7 @@ export default function HomePage() {
       }
       random -= segmentProbability;
     }
+    // Fallback, should ideally not be reached if probabilities sum to 1 (or totalProbability used in random generation)
     return segments.findIndex(s => (s.probability || 0) > 0) ?? Math.floor(Math.random() * segments.length);
   }, []);
 
@@ -203,7 +203,7 @@ export default function HomePage() {
         variant: "default" 
       });
       playSound('win');
-      if (winningSegment.amount >= 50) { 
+      if (winningSegment.amount >= 5) { // Adjusted confetti for smaller big wins
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
@@ -365,3 +365,4 @@ export default function HomePage() {
   );
 }
 
+    
