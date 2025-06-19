@@ -29,9 +29,10 @@ const wheelSegments: Segment[] = [
   { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%' },
 ];
 
-const MAX_SPINS = 10; 
+const MAX_SPINS = 10; // Initial free/bundled spins
+const SPIN_COST = 2; // Cost per spin after free/bundled spins are used
 const UPI_ID = "9828786246@jio";
-const SPIN_REFILL_PRICE = 10;
+const SPIN_REFILL_PRICE = 10; // Price to buy a bundle of MAX_SPINS
 
 const ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
 // To test admin view, set email to ADMIN_EMAIL. For normal view, use another email.
@@ -39,7 +40,7 @@ const mockUser = {
   name: 'Player One',
   email: 'player.one@example.com', // or ADMIN_EMAIL for testing
   avatarUrl: 'https://placehold.co/100x100.png',
-  initialBalance: 1250.75,
+  initialBalance: 50.00, // Starting balance for the player
 };
 
 
@@ -55,7 +56,8 @@ export default function HomePage() {
   const [tipError, setTipError] = useState<string | null>(null);
 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS);
+  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS); // Tracks free/bundled spins
+  const [userBalance, setUserBalance] = useState<number>(mockUser.initialBalance);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const { playSound } = useSound();
@@ -69,24 +71,37 @@ export default function HomePage() {
     if (mockUser.email === ADMIN_EMAIL) {
       setShowAdminChoiceView(true);
     }
+    setUserBalance(mockUser.initialBalance);
+    setSpinsAvailable(MAX_SPINS); // Initialize with free spins
   }, []);
+
+
+  const startSpinProcess = () => {
+    setIsSpinning(true);
+    setCurrentPrize(null);
+    setShowConfetti(false);
+    playSound('spin');
+    const winningIndex = Math.floor(Math.random() * wheelSegments.length);
+    setTargetSegmentIndex(winningIndex);
+  };
 
   const handleSpinClick = useCallback(() => {
     if (!isClient || isSpinning) return;
 
-    if (spinsAvailable > 0) {
-      setIsSpinning(true);
-      setCurrentPrize(null);
-      setShowConfetti(false);
-      playSound('spin');
-      
-      const winningIndex = Math.floor(Math.random() * wheelSegments.length);
-      setTargetSegmentIndex(winningIndex);
+    if (spinsAvailable > 0) { // Use a free/bundled spin
+      startSpinProcess();
       setSpinsAvailable(prev => prev - 1);
-    } else {
-      setShowPaymentModal(true);
+    } else if (userBalance >= SPIN_COST) { // Pay per spin from balance
+      setUserBalance(prev => prev - SPIN_COST);
+      startSpinProcess();
+      toast({
+        title: `Spin Cost: -₹${SPIN_COST.toFixed(2)}`,
+        description: `₹${SPIN_COST.toFixed(2)} deducted from your balance.`,
+      });
+    } else { // Not enough free/bundled spins, not enough balance for a single spin
+      setShowPaymentModal(true); // Prompt to buy a bundle of spins
     }
-  }, [isClient, isSpinning, playSound, spinsAvailable]);
+  }, [isClient, isSpinning, playSound, spinsAvailable, userBalance, toast]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
     setIsSpinning(false);
@@ -98,16 +113,25 @@ export default function HomePage() {
     };
     setSpinHistory(prev => [...prev, newSpinRecord]);
 
-    if (winningSegment.text === 'Try Again') {
-      playSound('tryAgain');
-    } else {
+    if (winningSegment.amount && winningSegment.amount > 0) {
+      setUserBalance(prev => prev + (winningSegment.amount || 0));
+      toast({
+        title: "You Won!",
+        description: `₹${winningSegment.amount.toFixed(2)} added to your balance.`,
+        variant: "default" 
+      });
       playSound('win');
-      if (winningSegment.amount && winningSegment.amount >= 50) {
+      if (winningSegment.amount >= 50) {
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
+    } else if (winningSegment.text === 'Try Again') {
+      playSound('tryAgain');
+    } else {
+      // Non-monetary prize, or 0 amount prize
+      playSound('win'); // Still play win sound for non-monetary wins if any
     }
-  }, [playSound, spinHistory.length]);
+  }, [playSound, spinHistory.length, toast]);
 
   const handleGenerateTip = useCallback(async () => {
     setTipLoading(true);
@@ -132,7 +156,7 @@ export default function HomePage() {
 
   const handlePaymentConfirm = useCallback(() => {
     setShowPaymentModal(false);
-    setSpinsAvailable(MAX_SPINS);
+    setSpinsAvailable(MAX_SPINS); // Refill with a bundle of spins
     toast({
       title: "Spins Purchased!",
       description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
@@ -169,6 +193,9 @@ export default function HomePage() {
     );
   }
 
+  const canAffordSpin = userBalance >= SPIN_COST;
+  const showBuySpinsButton = spinsAvailable <= 0 && !canAffordSpin;
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
@@ -178,7 +205,7 @@ export default function HomePage() {
           <Card className="py-3 px-6 inline-flex items-center gap-3 shadow-md bg-primary-foreground/20 rounded-lg backdrop-blur-sm">
             <DollarSign className="h-7 w-7 text-primary" />
             <span className="text-xl font-semibold text-foreground">
-              Balance: <span className="font-bold text-primary">₹{mockUser.initialBalance.toFixed(2)}</span>
+              Balance: <span className="font-bold text-primary">₹{userBalance.toFixed(2)}</span>
             </span>
           </Card>
         </div>
@@ -192,18 +219,22 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
-          onClick={handleSpinClick}
+          onClick={handleSpinClick} // Allow spinning by clicking the wheel
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
           <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
-            Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS}
+            {spinsAvailable > 0 
+              ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS} (Free/Bundled)</>
+              : <>Next Spin Cost: <span className="font-bold text-primary">₹{SPIN_COST.toFixed(2)}</span> (from balance)</>
+            }
           </div>
           <SpinButton 
             onClick={handleSpinClick} 
-            disabled={isSpinning || !isClient} 
+            disabled={isSpinning || !isClient || (spinsAvailable <=0 && !canAffordSpin && !showBuySpinsButton)} 
             isLoading={isSpinning}
-            spinsAvailable={spinsAvailable}
+            spinsAvailable={spinsAvailable} // This prop now determines if it shows "Spin Now" or "Buy Spins"
+            forceShowBuyButton={showBuySpinsButton} // New prop to force "Buy Spins" if out of spins and balance
           />
           <PrizeDisplay prize={currentPrize} />
         </div>
@@ -231,3 +262,4 @@ export default function HomePage() {
     </div>
   );
 }
+
