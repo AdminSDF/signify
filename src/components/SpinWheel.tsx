@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -18,6 +19,7 @@ interface SpinWheelProps {
   targetSegmentIndex: number | null;
   isSpinning: boolean;
   spinDuration?: number; // in seconds
+  onClick?: () => void; // Added onClick prop
 }
 
 const SpinWheel: React.FC<SpinWheelProps> = ({
@@ -26,6 +28,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   targetSegmentIndex,
   isSpinning,
   spinDuration = 5,
+  onClick,
 }) => {
   const [currentRotation, setCurrentRotation] = useState(0);
   const wheelRef = useRef<SVGSVGElement>(null);
@@ -35,32 +38,21 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
   useEffect(() => {
     if (isSpinning && targetSegmentIndex !== null) {
-      // Base rotations (e.g., 5 to 7 full spins)
       const minRotations = 5;
       const maxRotations = 7;
       const randomExtraRotations = Math.floor(Math.random() * (maxRotations - minRotations + 1)) + minRotations;
       const baseDegrees = randomExtraRotations * 360;
-
-      // Calculate the angle to stop at the middle of the target segment
-      // The pointer is at the top (0 degrees). We want the middle of the target segment to align with it.
-      // Angle of the middle of segment k: (k + 0.5) * anglePerSegment
-      // To align segment k at top, wheel must rotate by -( (k + 0.5) * anglePerSegment )
       const targetAngle = -((targetSegmentIndex + 0.5) * anglePerSegment);
-      
       const finalRotation = baseDegrees + targetAngle;
       
       if (wheelRef.current) {
         wheelRef.current.style.setProperty('--final-rotation', `${finalRotation}deg`);
         wheelRef.current.style.setProperty('--spin-duration', `${spinDuration}s`);
       }
-      setCurrentRotation(finalRotation); // For potential direct style manipulation if needed
+      setCurrentRotation(finalRotation);
 
       const timer = setTimeout(() => {
         onSpinComplete(segments[targetSegmentIndex]);
-        // Reset rotation to a normalized value to avoid large numbers if needed,
-        // though for CSS animation it might not matter for subsequent spins.
-        // For this example, we'll let CSS handle the 'forwards' state.
-        // To allow re-spinning, ensure the animation class is removed and re-added.
       }, spinDuration * 1000);
 
       return () => clearTimeout(timer);
@@ -68,19 +60,22 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration]);
 
   const getTextColor = (backgroundColor: string): string => {
-    // Simple contrast checker based on luminance (approximation)
-    // Expects HSL string like 'H S% L%'
     const parts = backgroundColor.split(' ');
     if (parts.length === 3) {
       const l = parseInt(parts[2].replace('%', ''), 10);
-      return l > 50 ? '0 0% 10%' : '0 0% 100%'; // Dark text on light, Light text on dark
+      return l > 50 ? '0 0% 10%' : '0 0% 100%';
     }
-    return '0 0% 0%'; // Default to black
+    return '0 0% 0%';
+  };
+
+  const handleWheelClick = () => {
+    if (onClick && !isSpinning) {
+      onClick();
+    }
   };
 
   return (
     <div className="relative flex justify-center items-center my-8 select-none w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[450px] md:h-[450px] mx-auto">
-      {/* Pointer */}
       <div 
         className="absolute top-[-20px] left-1/2 -translate-x-1/2 z-10"
         style={{ filter: 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))' }}
@@ -94,13 +89,16 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       <svg
         ref={wheelRef}
         viewBox="0 0 200 200"
+        onClick={handleWheelClick} // Attach click handler
         className={cn(
           "w-full h-full rounded-full shadow-2xl transition-transform duration-[var(--spin-duration)] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-          { 'animate-wheel-spin': isSpinning }
+          { 'animate-wheel-spin': isSpinning },
+          { 'cursor-pointer hover:opacity-90 active:scale-95': onClick && !isSpinning } // Add cursor style when clickable
         )}
-        style={{ transform: `rotate(${isSpinning ? 0 : currentRotation}deg)` }} // Initial rotation set here, animation overrides
+        style={{ transform: `rotate(${isSpinning ? 0 : currentRotation}deg)` }}
         aria-label="Spinning prize wheel"
-        role="img"
+        role="button" // Indicate it's clickable
+        tabIndex={onClick && !isSpinning ? 0 : -1} // Make it focusable
       >
         <defs>
           {segments.map((segment, i) => (
@@ -120,13 +118,10 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
             const startAngle = i * anglePerSegment;
             const endAngle = (i + 1) * anglePerSegment;
             const midAngleRad = Math.PI / 180 * (startAngle + anglePerSegment / 2 - 90);
-
-            // For arc path: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
             const x1 = 100 + 98 * Math.cos(Math.PI / 180 * (startAngle - 90));
             const y1 = 100 + 98 * Math.sin(Math.PI / 180 * (startAngle - 90));
             const x2 = 100 + 98 * Math.cos(Math.PI / 180 * (endAngle - 90));
             const y2 = 100 + 98 * Math.sin(Math.PI / 180 * (endAngle - 90));
-            
             const pathData = `M100,100 L${x1},${y1} A98,98 0 0,1 ${x2},${y2} z`;
             const textColor = segment.textColor || getTextColor(segment.color);
 
@@ -141,7 +136,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                   fontSize="10"
                   fontWeight="bold"
                   fill={`hsl(${textColor})`}
-                  className="font-body"
+                  className="font-body pointer-events-none" // Ensure text doesn't interfere with click
                 >
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.5em">{segment.emoji}</tspan>
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{segment.text}</tspan>
@@ -157,12 +152,3 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
-
-// Helper to remove animation class for re-triggering (if needed outside of key-based re-render)
-// export const resetWheelAnimation = (wheelElement: SVGSVGElement | null) => {
-//   if (wheelElement) {
-//     wheelElement.classList.remove('animate-wheel-spin');
-//     // Trigger reflow to ensure animation restarts
-//     void wheelElement.offsetWidth;
-//   }
-// };

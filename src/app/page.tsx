@@ -1,7 +1,8 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import SpinifyGameHeader from '@/components/SpinifyGameHeader'; // Updated import
+import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
 import SpinButton from '@/components/SpinButton';
 import PrizeDisplay from '@/components/PrizeDisplay';
@@ -11,17 +12,18 @@ import { useSound } from '@/hooks/useSound';
 import { useToast } from "@/hooks/use-toast";
 import type { SpinHistory } from '@/ai/flows/spinify-tip-generator';
 import { getAiTipAction, type TipGenerationResult } from './actions/generateTipAction';
-import { ConfettiRain } from '@/components/ConfettiRain'; // Placeholder for confetti
+import { ConfettiRain } from '@/components/ConfettiRain';
 
-// Define segments for the wheel
 const wheelSegments: Segment[] = [
-  { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%' /* Red */, textColor: '0 0% 100%' },
-  { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%' /* Green */, textColor: '0 0% 100%' },
-  { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%' /* Yellow */, textColor: '0 0% 0%' },
-  { id: 's4', text: 'Try Again', emoji: '🔁', color: '210 80% 60%' /* Blue */, textColor: '0 0% 100%' },
-  { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%' /* Purple */, textColor: '0 0% 100%' },
-  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%' /* Orange */, textColor: '0 0% 0%' },
+  { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%', textColor: '0 0% 100%' },
+  { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%', textColor: '0 0% 100%' },
+  { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%', textColor: '0 0% 0%' },
+  { id: 's4', text: 'Try Again', emoji: '🔁', color: '210 80% 60%', textColor: '0 0% 100%' },
+  { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%', textColor: '0 0% 100%' },
+  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%' },
 ];
+
+const MAX_SPINS = 10; // Maximum number of spins
 
 export default function HomePage() {
   const [isSpinning, setIsSpinning] = useState(false);
@@ -35,11 +37,11 @@ export default function HomePage() {
   const [tipError, setTipError] = useState<string | null>(null);
 
   const [showConfetti, setShowConfetti] = useState(false);
+  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS);
 
   const { playSound } = useSound();
   const { toast } = useToast();
 
-  // Initialize random number generator state on client
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
     setIsClient(true);
@@ -48,15 +50,25 @@ export default function HomePage() {
   const handleSpinClick = useCallback(() => {
     if (!isClient || isSpinning) return;
 
-    setIsSpinning(true);
-    setCurrentPrize(null); // Clear previous prize
-    setShowConfetti(false);
-    playSound('spin');
-    
-    // Determine winning segment client-side
-    const winningIndex = Math.floor(Math.random() * wheelSegments.length);
-    setTargetSegmentIndex(winningIndex);
-  }, [isClient, isSpinning, playSound]);
+    if (spinsAvailable > 0) {
+      setIsSpinning(true);
+      setCurrentPrize(null);
+      setShowConfetti(false);
+      playSound('spin');
+      
+      const winningIndex = Math.floor(Math.random() * wheelSegments.length);
+      setTargetSegmentIndex(winningIndex);
+      setSpinsAvailable(prev => prev - 1); // Decrement spins
+    } else {
+      // "Get More Spins" logic
+      setSpinsAvailable(MAX_SPINS);
+      toast({
+        title: "Spins Refilled!",
+        description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
+        variant: "default",
+      });
+    }
+  }, [isClient, isSpinning, playSound, spinsAvailable, toast]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
     setIsSpinning(false);
@@ -72,9 +84,9 @@ export default function HomePage() {
       playSound('tryAgain');
     } else {
       playSound('win');
-      if (winningSegment.amount && winningSegment.amount >= 50) { // Big win confetti
+      if (winningSegment.amount && winningSegment.amount >= 50) {
         setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 4000); // Confetti for 4 seconds
+        setTimeout(() => setShowConfetti(false), 4000);
       }
     }
   }, [playSound, spinHistory.length]);
@@ -82,7 +94,7 @@ export default function HomePage() {
   const handleGenerateTip = useCallback(async () => {
     setTipLoading(true);
     setTipError(null);
-    setShowTipModal(true); // Open modal immediately and show loading state
+    setShowTipModal(true);
 
     const result: TipGenerationResult = await getAiTipAction(spinHistory);
     
@@ -103,7 +115,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
-      <SpinifyGameHeader /> {/* Updated component name */}
+      <SpinifyGameHeader />
       
       <main className="flex flex-col items-center w-full max-w-2xl">
         <SpinWheel
@@ -111,14 +123,23 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
+          onClick={handleSpinClick} // Allow spinning by clicking wheel
         />
         
-        <div className="my-8 w-full flex flex-col items-center gap-6">
-          <SpinButton onClick={handleSpinClick} disabled={isSpinning || !isClient} isLoading={isSpinning} />
+        <div className="my-8 w-full flex flex-col items-center gap-4">
+          <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
+            Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS}
+          </div>
+          <SpinButton 
+            onClick={handleSpinClick} 
+            disabled={isSpinning || !isClient} 
+            isLoading={isSpinning}
+            spinsAvailable={spinsAvailable}
+          />
           <PrizeDisplay prize={currentPrize} />
         </div>
 
-        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning} />
+        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning || !isClient} />
       </main>
 
       <TipModal
@@ -129,8 +150,6 @@ export default function HomePage() {
         error={tipError}
         onGenerateTip={handleGenerateTip}
       />
-      
-      {/* Footer is now in layout.tsx */}
     </div>
   );
 }
