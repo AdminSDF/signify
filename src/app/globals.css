@@ -139,7 +139,8 @@ body {
 }
 
 .marquee-content-wrapper {
-  animation: marquee 25s linear infinite;
+  animation: marquee 40s linear infinite; /* Increased from 25s to 40s */
   white-space: nowrap; /* Keep all items on one line */
   display: inline-block; /* Allows transform to work correctly */
 }
+
