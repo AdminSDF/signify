@@ -128,3 +128,18 @@ body {
   animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
 
+/* News Ticker Animation */
+@keyframes marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%); /* Adjust if content wider than 2x container */
+  }
+}
+
+.marquee-content-wrapper {
+  animation: marquee 25s linear infinite;
+  white-space: nowrap; /* Keep all items on one line */
+  display: inline-block; /* Allows transform to work correctly */
+}

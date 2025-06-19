@@ -1,16 +1,16 @@
 
 import type {Metadata} from 'next';
-import { Poppins } from 'next/font/google'; // Using next/font for optimal loading
+import { Poppins } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
+import NewsTicker from '@/components/NewsTicker'; // Import NewsTicker
 
-// Configure Poppins font
 const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['400', '600', '700'], // Specify weights you need
-  variable: '--font-poppins', // Optional: if you want to use it as a CSS variable
+  weight: ['400', '600', '700'], 
+  variable: '--font-poppins', 
 });
 
 export const metadata: Metadata = {
@@ -25,12 +25,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Google Fonts links are managed by next/font, so explicit links are not needed here if using next/font */}
-        {/* Add other head elements if necessary */}
-      </head>
+      <head></head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
         <SiteHeader />
+        <NewsTicker /> {/* Add NewsTicker here */}
         <main className="flex-grow container mx-auto px-4 py-8">
           {children}
         </main>

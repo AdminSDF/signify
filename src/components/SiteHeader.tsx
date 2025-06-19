@@ -1,8 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { Home, ListChecks, UserCircle } from 'lucide-react'; // Added UserCircle for profile
+import { Home, ListChecks, UserCircle, Trophy } from 'lucide-react'; // Added Trophy
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 
 const SiteHeader: React.FC = () => {
   return (
@@ -33,6 +32,11 @@ const SiteHeader: React.FC = () => {
             <Link href="/profile" passHref>
               <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
                 <UserCircle className="mr-2 h-4 w-4" /> Profile
+              </Button>
+            </Link>
+            <Link href="/leaderboard" passHref>
+              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+                <Trophy className="mr-2 h-4 w-4" /> Leaderboard
               </Button>
             </Link>
           </nav>
