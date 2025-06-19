@@ -12,7 +12,7 @@ import {
   type FirebaseUser 
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
-import type { AuthCredentials } from '@/lib/validators/auth'; // We'll create this validator
+import type { AuthCredentials } from '@/lib/validators/auth';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -54,6 +54,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         description = 'Password is too weak. It should be at least 6 characters.';
       }
       toast({ variant: "destructive", title: "Sign Up Failed", description });
+    } finally {
       setLoading(false);
     }
   };
@@ -72,6 +73,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         description = 'Invalid email or password. Please try again.';
       }
       toast({ variant: "destructive", title: "Login Failed", description });
+    } finally {
       setLoading(false);
     }
   };
