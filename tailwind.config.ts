@@ -111,9 +111,9 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
-        // Note: 'animate-wheel-spin' will be a class in globals.css that applies this
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
+

@@ -123,13 +123,12 @@ body {
 
 /* Consistent spin animation with CSS variables */
 .svg-wheel-graphics {
-  /* This variable will hold the wheel's current orientation, whether resting or animated by the class below */
+  /* This variable will hold the wheel's current orientation. */
   transform: rotate(var(--wheel-actual-rotation, 0deg));
 }
 
 .animate-wheel-spin {
   /* The animation itself defines the transform based on its own variables in tailwind.config.ts keyframes */
-  /* Changed cubic-bezier for a more "tyre-like" ease-out effect (easeOutQuint) */
   animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
