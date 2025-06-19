@@ -1,6 +1,13 @@
 
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from "firebase/auth";
+import { 
+  getAuth, 
+  GoogleAuthProvider, // Kept for potential future re-integration, but not used by default now
+  signInWithPopup, // Kept for potential future re-integration
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut 
+} from "firebase/auth";
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -16,7 +23,15 @@ const firebaseConfig: FirebaseOptions = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
-const googleProvider = new GoogleAuthProvider();
+const googleProvider = new GoogleAuthProvider(); // Kept for potential future re-integration
 
-export { app, auth, googleProvider, signInWithPopup, firebaseSignOut };
+export { 
+  app, 
+  auth, 
+  googleProvider, 
+  signInWithPopup, 
+  firebaseSignOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+};
 export type { User as FirebaseUser } from "firebase/auth";
