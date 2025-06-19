@@ -19,28 +19,38 @@ import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
+// Define the transaction structure, similar to transactions/page.tsx
+interface TransactionEvent {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  description: string;
+  date: string;
+  status: 'completed' | 'pending' | 'failed';
+}
+
+const TRANSACTION_STORAGE_KEY = 'spinifyTransactions';
 
 const wheelSegments: Segment[] = [
   { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%', textColor: '0 0% 100%' },
   { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%', textColor: '0 0% 100%' },
   { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%', textColor: '0 0% 0%' },
-  { id: 's4', text: 'Try Again', emoji: '🔁', color: '210 80% 60%', textColor: '0 0% 100%' },
+  { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%' }, // Explicitly amount: 0
   { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%', textColor: '0 0% 100%' },
   { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%' },
 ];
 
-const MAX_SPINS = 10; // Initial free/bundled spins
-const SPIN_COST = 2; // Cost per spin after free/bundled spins are used
+const MAX_SPINS = 10; 
+const SPIN_COST = 2; 
 const UPI_ID = "9828786246@jio";
-const SPIN_REFILL_PRICE = 10; // Price to buy a bundle of MAX_SPINS
+const SPIN_REFILL_PRICE = 10;
 
 const ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
-// To test admin view, set email to ADMIN_EMAIL. For normal view, use another email.
 const mockUser = {
   name: 'Player One',
-  email: 'player.one@example.com', // or ADMIN_EMAIL for testing
+  email: 'player.one@example.com', 
   avatarUrl: 'https://placehold.co/100x100.png',
-  initialBalance: 50.00, // Starting balance for the player
+  initialBalance: 50.00,
 };
 
 
@@ -56,9 +66,11 @@ export default function HomePage() {
   const [tipError, setTipError] = useState<string | null>(null);
 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS); // Tracks free/bundled spins
+  const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS);
   const [userBalance, setUserBalance] = useState<number>(mockUser.initialBalance);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  
+  const [transactions, setTransactions] = useState<TransactionEvent[]>([]);
 
   const { playSound } = useSound();
   const { toast } = useToast();
@@ -72,7 +84,37 @@ export default function HomePage() {
       setShowAdminChoiceView(true);
     }
     setUserBalance(mockUser.initialBalance);
-    setSpinsAvailable(MAX_SPINS); // Initialize with free spins
+    setSpinsAvailable(MAX_SPINS);
+
+    // Load transactions from localStorage
+    if (typeof window !== 'undefined') {
+      const storedTransactions = localStorage.getItem(TRANSACTION_STORAGE_KEY);
+      if (storedTransactions) {
+        try {
+          setTransactions(JSON.parse(storedTransactions));
+        } catch (e) {
+          console.error("Error parsing transactions from localStorage", e);
+          setTransactions([]); 
+        }
+      }
+    }
+  }, []);
+
+  // Save transactions to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isClient) { // Ensure this runs only on client and after initial load
+      localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(transactions));
+    }
+  }, [transactions, isClient]);
+
+  const addTransaction = useCallback((details: { type: 'credit' | 'debit'; amount: number; description: string }) => {
+    const newTransactionEntry: TransactionEvent = {
+      ...details,
+      id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 11), // Unique ID
+      date: new Date().toISOString(),
+      status: 'completed',
+    };
+    setTransactions(prevTransactions => [newTransactionEntry, ...prevTransactions]);
   }, []);
 
 
@@ -88,33 +130,40 @@ export default function HomePage() {
   const handleSpinClick = useCallback(() => {
     if (!isClient || isSpinning) return;
 
-    if (spinsAvailable > 0) { // Use a free/bundled spin
+    if (spinsAvailable > 0) {
       startSpinProcess();
       setSpinsAvailable(prev => prev - 1);
-    } else if (userBalance >= SPIN_COST) { // Pay per spin from balance
+    } else if (userBalance >= SPIN_COST) {
       setUserBalance(prev => prev - SPIN_COST);
+      addTransaction({ type: 'debit', amount: SPIN_COST, description: 'Spin Cost' });
       startSpinProcess();
       toast({
         title: `Spin Cost: -₹${SPIN_COST.toFixed(2)}`,
         description: `₹${SPIN_COST.toFixed(2)} deducted from your balance.`,
       });
-    } else { // Not enough free/bundled spins, not enough balance for a single spin
-      setShowPaymentModal(true); // Prompt to buy a bundle of spins
+    } else {
+      setShowPaymentModal(true);
     }
-  }, [isClient, isSpinning, playSound, spinsAvailable, userBalance, toast]);
+  }, [isClient, isSpinning, playSound, spinsAvailable, userBalance, toast, addTransaction]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
     setIsSpinning(false);
     setCurrentPrize(winningSegment);
     
-    const newSpinRecord = {
+    const newSpinRecordForAI = { // For AI Tip generator
       spinNumber: spinHistory.length + 1,
       reward: winningSegment.amount ? `₹${winningSegment.amount}` : winningSegment.text,
     };
-    setSpinHistory(prev => [...prev, newSpinRecord]);
+    setSpinHistory(prev => [...prev, newSpinRecordForAI]);
 
+    // For financial transaction log
     if (winningSegment.amount && winningSegment.amount > 0) {
       setUserBalance(prev => prev + (winningSegment.amount || 0));
+      addTransaction({ 
+        type: 'credit', 
+        amount: winningSegment.amount, 
+        description: `Prize: ${winningSegment.text}` 
+      });
       toast({
         title: "You Won!",
         description: `₹${winningSegment.amount.toFixed(2)} added to your balance.`,
@@ -125,13 +174,16 @@ export default function HomePage() {
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
-    } else if (winningSegment.text === 'Try Again') {
-      playSound('tryAgain');
-    } else {
-      // Non-monetary prize, or 0 amount prize
-      playSound('win'); // Still play win sound for non-monetary wins if any
+    } else if (winningSegment.text === 'Try Again' || (winningSegment.amount !== undefined && winningSegment.amount === 0) ) {
+      addTransaction({
+        type: 'debit', // Using debit to signify a spin used with no monetary gain
+        amount: 0, 
+        description: `Spin Result: ${winningSegment.text}`
+      });
+      if (winningSegment.text === 'Try Again') playSound('tryAgain');
+      else playSound('win'); // For other non-monetary prizes
     }
-  }, [playSound, spinHistory.length, toast]);
+  }, [playSound, spinHistory.length, toast, addTransaction]);
 
   const handleGenerateTip = useCallback(async () => {
     setTipLoading(true);
@@ -156,13 +208,14 @@ export default function HomePage() {
 
   const handlePaymentConfirm = useCallback(() => {
     setShowPaymentModal(false);
-    setSpinsAvailable(MAX_SPINS); // Refill with a bundle of spins
+    addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS} Spins Bundle` });
+    setSpinsAvailable(MAX_SPINS); 
     toast({
       title: "Spins Purchased!",
       description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
       variant: "default",
     });
-  }, [toast]);
+  }, [toast, addTransaction]);
 
   if (isClient && mockUser.email === ADMIN_EMAIL && showAdminChoiceView) {
     return (
@@ -219,7 +272,7 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
-          onClick={handleSpinClick} // Allow spinning by clicking the wheel
+          onClick={handleSpinClick}
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
@@ -233,8 +286,8 @@ export default function HomePage() {
             onClick={handleSpinClick} 
             disabled={isSpinning || !isClient || (spinsAvailable <=0 && !canAffordSpin && !showBuySpinsButton)} 
             isLoading={isSpinning}
-            spinsAvailable={spinsAvailable} // This prop now determines if it shows "Spin Now" or "Buy Spins"
-            forceShowBuyButton={showBuySpinsButton} // New prop to force "Buy Spins" if out of spins and balance
+            spinsAvailable={spinsAvailable}
+            forceShowBuyButton={showBuySpinsButton}
           />
           <PrizeDisplay prize={currentPrize} />
         </div>
@@ -262,4 +315,3 @@ export default function HomePage() {
     </div>
   );
 }
-
