@@ -19,7 +19,6 @@ import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
-// Define the transaction structure, similar to transactions/page.tsx
 interface TransactionEvent {
   id: string;
   type: 'credit' | 'debit';
@@ -31,14 +30,19 @@ interface TransactionEvent {
 
 const TRANSACTION_STORAGE_KEY = 'spinifyTransactions';
 
-const wheelSegments: Segment[] = [
-  { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%', textColor: '0 0% 100%' },
-  { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%', textColor: '0 0% 100%' },
-  { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%', textColor: '0 0% 0%' },
-  { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%' }, // Explicitly amount: 0
-  { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%', textColor: '0 0% 100%' },
-  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%' },
-];
+// Define a type for segments that includes probability for internal use
+interface WheelSegmentWithProbability extends Segment {
+  probability: number;
+}
+
+const wheelSegments: WheelSegmentWithProbability[] = [
+  { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%', textColor: '0 0% 100%', probability: 0.15 }, // 15%
+  { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.25 }, // 25%
+  { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%', textColor: '0 0% 0%', probability: 0.10 },  // 10%
+  { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.10 }, // 10%
+  { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%', textColor: '0 0% 100%', probability: 0.00 }, // 0%
+  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%', probability: 0.40 },   // 40%
+]; // Total: 1.00 (100%)
 
 const MAX_SPINS = 10; 
 const SPIN_COST = 2; 
@@ -83,15 +87,21 @@ export default function HomePage() {
     if (mockUser.email === ADMIN_EMAIL) {
       setShowAdminChoiceView(true);
     }
-    setUserBalance(mockUser.initialBalance);
-    setSpinsAvailable(MAX_SPINS);
+    // Load initial balance and spins from mockUser or potentially localStorage if persisted
+    const storedBalance = localStorage.getItem('spinifyUserBalance');
+    const storedSpins = localStorage.getItem('spinifySpinsAvailable');
 
-    // Load transactions from localStorage
+    setUserBalance(storedBalance ? parseFloat(storedBalance) : mockUser.initialBalance);
+    setSpinsAvailable(storedSpins ? parseInt(storedSpins, 10) : MAX_SPINS);
+
+
     if (typeof window !== 'undefined') {
       const storedTransactions = localStorage.getItem(TRANSACTION_STORAGE_KEY);
       if (storedTransactions) {
         try {
-          setTransactions(JSON.parse(storedTransactions));
+          const parsedTransactions = JSON.parse(storedTransactions) as TransactionEvent[];
+          parsedTransactions.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setTransactions(parsedTransactions);
         } catch (e) {
           console.error("Error parsing transactions from localStorage", e);
           setTransactions([]); 
@@ -100,32 +110,56 @@ export default function HomePage() {
     }
   }, []);
 
-  // Save transactions to localStorage whenever they change
   useEffect(() => {
-    if (typeof window !== 'undefined' && isClient) { // Ensure this runs only on client and after initial load
+    if (typeof window !== 'undefined' && isClient) {
       localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(transactions));
+      localStorage.setItem('spinifyUserBalance', userBalance.toString());
+      localStorage.setItem('spinifySpinsAvailable', spinsAvailable.toString());
     }
-  }, [transactions, isClient]);
+  }, [transactions, userBalance, spinsAvailable, isClient]);
 
   const addTransaction = useCallback((details: { type: 'credit' | 'debit'; amount: number; description: string }) => {
     const newTransactionEntry: TransactionEvent = {
       ...details,
-      id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 11), // Unique ID
+      id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 11),
       date: new Date().toISOString(),
       status: 'completed',
     };
-    setTransactions(prevTransactions => [newTransactionEntry, ...prevTransactions]);
+    setTransactions(prevTransactions => {
+      const updated = [newTransactionEntry, ...prevTransactions];
+      updated.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      return updated;
+    });
+  }, []);
+
+  const selectWinningSegmentByProbability = useCallback((segments: WheelSegmentWithProbability[]): number => {
+    const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
+    let random = Math.random() * totalProbability;
+  
+    for (let i = 0; i < segments.length; i++) {
+      const segmentProbability = segments[i].probability || 0;
+      if (segmentProbability === 0 && totalProbability > 0) continue; // Skip segments with 0 probability unless it's the only option
+
+      if (random < segmentProbability) {
+        return i;
+      }
+      random -= segmentProbability;
+    }
+    // Fallback: should ideally not be reached if probabilities sum to totalProbability and are positive.
+    // To be safe, return a random segment or the last one.
+    return segments.findIndex(s => (s.probability || 0) > 0) ?? Math.floor(Math.random() * segments.length);
   }, []);
 
 
-  const startSpinProcess = () => {
+  const startSpinProcess = useCallback(() => {
     setIsSpinning(true);
     setCurrentPrize(null);
     setShowConfetti(false);
     playSound('spin');
-    const winningIndex = Math.floor(Math.random() * wheelSegments.length);
+    
+    const winningIndex = selectWinningSegmentByProbability(wheelSegments);
     setTargetSegmentIndex(winningIndex);
-  };
+  }, [playSound, selectWinningSegmentByProbability]);
 
   const handleSpinClick = useCallback(() => {
     if (!isClient || isSpinning) return;
@@ -144,19 +178,18 @@ export default function HomePage() {
     } else {
       setShowPaymentModal(true);
     }
-  }, [isClient, isSpinning, playSound, spinsAvailable, userBalance, toast, addTransaction]);
+  }, [isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
     setIsSpinning(false);
     setCurrentPrize(winningSegment);
     
-    const newSpinRecordForAI = { // For AI Tip generator
+    const newSpinRecordForAI = { 
       spinNumber: spinHistory.length + 1,
       reward: winningSegment.amount ? `₹${winningSegment.amount}` : winningSegment.text,
     };
     setSpinHistory(prev => [...prev, newSpinRecordForAI]);
 
-    // For financial transaction log
     if (winningSegment.amount && winningSegment.amount > 0) {
       setUserBalance(prev => prev + (winningSegment.amount || 0));
       addTransaction({ 
@@ -170,18 +203,18 @@ export default function HomePage() {
         variant: "default" 
       });
       playSound('win');
-      if (winningSegment.amount >= 50) {
+      if (winningSegment.amount >= 50) { // Confetti for big wins (₹50 or ₹100)
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
-    } else if (winningSegment.text === 'Try Again' || (winningSegment.amount !== undefined && winningSegment.amount === 0) ) {
+    } else { // Try Again or other non-monetary prizes
       addTransaction({
-        type: 'debit', // Using debit to signify a spin used with no monetary gain
+        type: 'debit', 
         amount: 0, 
         description: `Spin Result: ${winningSegment.text}`
       });
       if (winningSegment.text === 'Try Again') playSound('tryAgain');
-      else playSound('win'); // For other non-monetary prizes
+      else playSound('win'); // For other non-monetary prizes if any
     }
   }, [playSound, spinHistory.length, toast, addTransaction]);
 
@@ -208,8 +241,10 @@ export default function HomePage() {
 
   const handlePaymentConfirm = useCallback(() => {
     setShowPaymentModal(false);
+    // This transaction is for "buying spins", not directly adding to game balance
     addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS} Spins Bundle` });
     setSpinsAvailable(MAX_SPINS); 
+    // Note: This mock payment doesn't actually affect userBalance, as it's like a "real money" purchase
     toast({
       title: "Spins Purchased!",
       description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
@@ -217,7 +252,24 @@ export default function HomePage() {
     });
   }, [toast, addTransaction]);
 
-  if (isClient && mockUser.email === ADMIN_EMAIL && showAdminChoiceView) {
+  if (!isClient) {
+    // Basic loading state or skeleton
+    return (
+      <div className="flex flex-col items-center justify-center flex-grow p-4">
+        <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-bold text-primary">Loading Spinify...</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-4 mt-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+
+  if (mockUser.email === ADMIN_EMAIL && showAdminChoiceView) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
@@ -284,7 +336,7 @@ export default function HomePage() {
           </div>
           <SpinButton 
             onClick={handleSpinClick} 
-            disabled={isSpinning || !isClient || (spinsAvailable <=0 && !canAffordSpin && !showBuySpinsButton)} 
+            disabled={isSpinning || (spinsAvailable <=0 && !canAffordSpin && !showBuySpinsButton)} 
             isLoading={isSpinning}
             spinsAvailable={spinsAvailable}
             forceShowBuyButton={showBuySpinsButton}
@@ -292,7 +344,7 @@ export default function HomePage() {
           <PrizeDisplay prize={currentPrize} />
         </div>
 
-        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning || !isClient} />
+        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning} />
       </main>
 
       <TipModal
@@ -315,3 +367,4 @@ export default function HomePage() {
     </div>
   );
 }
+

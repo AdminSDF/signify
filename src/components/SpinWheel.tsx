@@ -11,6 +11,7 @@ export interface Segment {
   amount?: number;
   color: string; // HSL string e.g., '0 100% 50%' for red
   textColor?: string; // HSL string for text, defaults to contrast
+  probability?: number; // Optional probability for weighted selection
 }
 
 interface SpinWheelProps {
@@ -42,8 +43,11 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       const maxRotations = 7;
       const randomExtraRotations = Math.floor(Math.random() * (maxRotations - minRotations + 1)) + minRotations;
       const baseDegrees = randomExtraRotations * 360;
-      const targetAngle = -((targetSegmentIndex + 0.5) * anglePerSegment);
-      const finalRotation = baseDegrees + targetAngle;
+      // Adjust target angle to point to the middle of the segment
+      const targetAngle = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2)); 
+      // Small random offset to make it land slightly differently within the segment each time
+      const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6); 
+      const finalRotation = baseDegrees + targetAngle + randomOffset;
       
       if (wheelRef.current) {
         wheelRef.current.style.setProperty('--final-rotation', `${finalRotation}deg`);
@@ -89,18 +93,17 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       <svg
         ref={wheelRef}
         viewBox="0 0 200 200"
-        onClick={handleWheelClick} // Attach click handler
+        onClick={handleWheelClick} 
         className={cn(
           "w-full h-full rounded-full shadow-2xl transition-transform duration-[var(--spin-duration)] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
           { 'animate-wheel-spin': isSpinning },
-          { 'cursor-pointer hover:opacity-90 active:scale-95': onClick && !isSpinning } // Add cursor style when clickable
+          { 'cursor-pointer hover:opacity-90 active:scale-95': onClick && !isSpinning } 
         )}
         style={{ transform: `rotate(${isSpinning ? 0 : currentRotation}deg)` }}
         aria-label="Spinning prize wheel"
-        role="button" // Indicate it's clickable
-        tabIndex={onClick && !isSpinning ? 0 : -1} // Make it focusable
+        role="button" 
+        tabIndex={onClick && !isSpinning ? 0 : -1} 
       >
-        {/* Removed unused <defs> block that was causing hydration mismatch */}
         
         <g>
           {segments.map((segment, i) => {
@@ -125,11 +128,11 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                   fontSize="10"
                   fontWeight="bold"
                   fill={`hsl(${textColor})`}
-                  className="font-body pointer-events-none" // Ensure text doesn't interfere with click
+                  className="font-body pointer-events-none" 
                 >
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.5em">{segment.emoji}</tspan>
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{segment.text}</tspan>
-                  {segment.amount && <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">₹{segment.amount}</tspan>}
+                  {segment.amount !== undefined && segment.amount > 0 && <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">₹{segment.amount}</tspan>}
                 </text>
               </g>
             );
