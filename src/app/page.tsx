@@ -36,12 +36,14 @@ interface WheelSegmentWithProbability extends Segment {
 }
 
 const wheelSegments: WheelSegmentWithProbability[] = [
+  { id: 's7', text: '₹1', emoji: '🪙', amount: 1, color: '200 50% 70%', textColor: '0 0% 0%', probability: 0.10 },   // 10% (New)
+  { id: 's8', text: '₹2', emoji: '🤑', amount: 2, color: '40 60% 50%', textColor: '0 0% 100%', probability: 0.10 },  // 10% (New)
+  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%', probability: 0.20 },   // 20% (Was 40%)
   { id: 's1', text: '₹10', emoji: '💰', amount: 10, color: '0 80% 60%', textColor: '0 0% 100%', probability: 0.15 }, // 15%
   { id: 's2', text: '₹20', emoji: '🎁', amount: 20, color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.25 }, // 25%
   { id: 's3', text: '₹50', emoji: '🥇', amount: 50, color: '60 90% 55%', textColor: '0 0% 0%', probability: 0.10 },  // 10%
   { id: 's4', text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.10 }, // 10%
   { id: 's5', text: '₹100', emoji: '💸', amount: 100, color: '270 70% 60%', textColor: '0 0% 100%', probability: 0.00 }, // 0%
-  { id: 's6', text: '₹5', emoji: '🎈', amount: 5, color: '30 90% 60%', textColor: '0 0% 0%', probability: 0.40 },   // 40%
 ]; // Total: 1.00 (100%)
 
 const MAX_SPINS = 10; 
@@ -138,15 +140,13 @@ export default function HomePage() {
   
     for (let i = 0; i < segments.length; i++) {
       const segmentProbability = segments[i].probability || 0;
-      if (segmentProbability === 0 && totalProbability > 0) continue; // Skip segments with 0 probability unless it's the only option
+      if (segmentProbability === 0 && totalProbability > 0) continue; 
 
       if (random < segmentProbability) {
         return i;
       }
       random -= segmentProbability;
     }
-    // Fallback: should ideally not be reached if probabilities sum to totalProbability and are positive.
-    // To be safe, return a random segment or the last one.
     return segments.findIndex(s => (s.probability || 0) > 0) ?? Math.floor(Math.random() * segments.length);
   }, []);
 
@@ -203,18 +203,18 @@ export default function HomePage() {
         variant: "default" 
       });
       playSound('win');
-      if (winningSegment.amount >= 50) { // Confetti for big wins (₹50 or ₹100)
+      if (winningSegment.amount >= 50) { 
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
-    } else { // Try Again or other non-monetary prizes
+    } else { 
       addTransaction({
         type: 'debit', 
         amount: 0, 
         description: `Spin Result: ${winningSegment.text}`
       });
       if (winningSegment.text === 'Try Again') playSound('tryAgain');
-      else playSound('win'); // For other non-monetary prizes if any
+      else playSound('win'); 
     }
   }, [playSound, spinHistory.length, toast, addTransaction]);
 
@@ -241,10 +241,8 @@ export default function HomePage() {
 
   const handlePaymentConfirm = useCallback(() => {
     setShowPaymentModal(false);
-    // This transaction is for "buying spins", not directly adding to game balance
     addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS} Spins Bundle` });
     setSpinsAvailable(MAX_SPINS); 
-    // Note: This mock payment doesn't actually affect userBalance, as it's like a "real money" purchase
     toast({
       title: "Spins Purchased!",
       description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
@@ -253,7 +251,6 @@ export default function HomePage() {
   }, [toast, addTransaction]);
 
   if (!isClient) {
-    // Basic loading state or skeleton
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
