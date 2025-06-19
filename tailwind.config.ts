@@ -111,9 +111,10 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
+        // Ensure the wheelSpin animation is registered here if you want to use it like `animate-wheelSpin`
+        // However, we are applying it directly in `globals.css`'s `.animate-wheel-spin` class using the 'wheelSpin' keyframes
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
-
