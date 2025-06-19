@@ -35,17 +35,16 @@ interface WheelSegmentWithProbability extends Segment {
   probability: number;
 }
 
-// Adjusted probabilities for new prize structure and attractiveness
-// EV ~ ₹0.84. (0.01*20 + 0.05*10 + 0.01*5 + 0.02*2 + 0.05*1) = 0.20 + 0.50 + 0.05 + 0.04 + 0.05 = 0.84
+// EV ~ ₹1.24. (0.01*20 + 0.05*10 + 0.06*5 + 0.07*2 + 0.10*1) = 0.20 + 0.50 + 0.30 + 0.14 + 0.10 = 1.24
 const wheelSegments: WheelSegmentWithProbability[] = [
   { id: 's100', text: '₹100', emoji: '💎', amount: 100, color: '300 80% 60%', textColor: '0 0% 100%', probability: 0.00 }, // 0% - Display Only
   { id: 's50',  text: '₹50',  emoji: '💰', amount: 50,  color: '270 80% 65%', textColor: '0 0% 100%', probability: 0.00 }, // 0% - Display Only
   { id: 's20',  text: '₹20',  emoji: '💸', amount: 20,  color: '0 80% 60%',   textColor: '0 0% 100%', probability: 0.01 }, // 1%
   { id: 's10',  text: '₹10',  emoji: '💵', amount: 10,  color: '30 90% 55%',  textColor: '0 0% 0%',   probability: 0.05 }, // 5%
-  { id: 's5',   text: '₹5',   emoji: '🎈', amount: 5,   color: '60 90% 55%',  textColor: '0 0% 0%',   probability: 0.01 }, // 1%
-  { id: 's2',   text: '₹2',   emoji: '🤑', amount: 2,   color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.02 }, // 2%
-  { id: 's1',   text: '₹1',   emoji: '🪙', amount: 1,   color: '180 70% 50%', textColor: '0 0% 100%', probability: 0.05 }, // 5%
-  { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.86 }, // 86%
+  { id: 's5',   text: '₹5',   emoji: '🎈', amount: 5,   color: '60 90% 55%',  textColor: '0 0% 0%',   probability: 0.06 }, // 6% (Increased from 1%)
+  { id: 's2',   text: '₹2',   emoji: '🤑', amount: 2,   color: '120 70% 55%', textColor: '0 0% 100%', probability: 0.07 }, // 7% (Increased from 2%)
+  { id: 's1',   text: '₹1',   emoji: '🪙', amount: 1,   color: '180 70% 50%', textColor: '0 0% 100%', probability: 0.10 }, // 10% (Increased from 5%)
+  { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.71 }, // 71% (Decreased from 86%)
 ]; // Total Probability: 1.00 (100%)
 
 
@@ -209,7 +208,7 @@ export default function HomePage() {
         variant: "default" 
       });
       playSound('win');
-      if (winningSegment.amount >= 20) { // Confetti for larger wins
+      if (winningSegment.amount >= 10) { // Confetti for larger wins (Adjusted from 20 to 10)
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       }
@@ -371,6 +370,8 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
 
     
 
