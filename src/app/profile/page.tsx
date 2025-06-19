@@ -82,12 +82,12 @@ export default function ProfilePage() {
 
   }, [fetchBalance]);
 
-  const addTransaction = (details: { type: 'credit' | 'debit'; amount: number; description: string }) => {
+  const addTransaction = (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
     const newTransactionEntry: TransactionEvent = {
       ...details,
       id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 11),
       date: new Date().toISOString(),
-      status: 'completed',
+      status: details.status || 'completed', // Default to 'completed' if not provided
     };
     
     const existingTransactionsRaw = localStorage.getItem(TRANSACTION_STORAGE_KEY);
@@ -161,6 +161,7 @@ export default function ProfilePage() {
       type: 'debit',
       amount: amount,
       description: `Withdrawal: ${paymentMethodDetails}`,
+      status: 'completed',
     });
 
     toast({
@@ -196,7 +197,6 @@ export default function ProfilePage() {
 
   const handlePresetAddBalanceClick = (amount: number) => {
     setAddBalanceAmount(amount.toString());
-    // Directly open modal as preset amounts are valid
     setShowAddBalanceModal(true);
   };
 
@@ -204,20 +204,21 @@ export default function ProfilePage() {
     setIsAddingBalance(true); 
     const amount = parseFloat(addBalanceAmount);
 
-    const newBalance = (balance || 0) + amount;
-    setBalance(newBalance);
-    localStorage.setItem(USER_BALANCE_STORAGE_KEY, newBalance.toString());
+    // Do NOT update balance directly here.
+    // setBalance(newBalance);
+    // localStorage.setItem(USER_BALANCE_STORAGE_KEY, newBalance.toString());
 
     addTransaction({
       type: 'credit',
       amount: amount,
-      description: `Balance Added via UPI`,
+      description: `Balance add request via UPI (₹${amount.toFixed(2)})`,
+      status: 'pending', // Set status to pending
     });
 
     toast({
-      title: 'Balance Added!',
-      description: `₹${amount.toFixed(2)} has been successfully added to your balance.`,
-      variant: 'default',
+      title: 'Add Balance Request Submitted',
+      description: `Your request to add ₹${amount.toFixed(2)} is pending admin approval.`,
+      variant: 'default', 
     });
 
     setAddBalanceAmount('');
@@ -315,7 +316,7 @@ export default function ProfilePage() {
                 disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < MIN_ADD_BALANCE_AMOUNT}
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
-                Add Balance via UPI
+                Request Add Balance via UPI
               </Button>
             </CardContent>
           </Card>
@@ -464,3 +465,6 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+
+    
