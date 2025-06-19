@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, CreditCard } from 'lucide-react';
-import { copyToClipboard } from '@/lib/utils'; // We'll create this utility
+import { copyToClipboard } from '@/lib/utils';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -23,7 +23,7 @@ interface PaymentModalProps {
   onConfirm: () => void;
   upiId: string;
   amount: number;
-  spinsToGet: number;
+  spinsToGet?: number; // Made optional
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -52,17 +52,24 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
+  const descriptionText = spinsToGet && spinsToGet > 0 
+    ? <>Get <span className="font-bold text-primary">{spinsToGet} spins</span> for just <span className="font-bold text-primary">₹{amount.toFixed(2)}</span>!</>
+    : <>You are about to add <span className="font-bold text-primary">₹{amount.toFixed(2)}</span> to your balance.</>;
+  
+  const modalTitle = spinsToGet && spinsToGet > 0 ? "Purchase More Spins" : "Add Balance";
+
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md bg-card text-card-foreground">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl font-headline">
             <CreditCard className="w-7 h-7 text-primary" />
-            Purchase More Spins
+            {modalTitle}
           </DialogTitle>
         </DialogHeader>
         <DialogDescription className="mt-2 text-base text-center">
-          Get <span className="font-bold text-primary">{spinsToGet} spins</span> for just <span className="font-bold text-primary">₹{amount}</span>!
+          {descriptionText}
         </DialogDescription>
         
         <div className="my-6 space-y-4">
@@ -93,7 +100,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             Cancel
           </Button>
           <Button type="button" variant="default" onClick={onConfirm} className="bg-green-600 hover:bg-green-700 text-white">
-            I have made the payment (₹{amount})
+            I have made the payment (₹{amount.toFixed(2)})
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -102,3 +109,4 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 };
 
 export default PaymentModal;
+
