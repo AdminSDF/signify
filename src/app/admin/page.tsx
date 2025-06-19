@@ -1,13 +1,47 @@
 
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, Settings, Users, BarChart3 } from 'lucide-react';
+import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
+const ADMIN_EMAIL = "jameafaizanrasool@gmail.com"; // This should ideally come from .env
+
 export default function AdminPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user || user.email !== ADMIN_EMAIL) {
+        router.push('/'); // Redirect to home if not admin or not logged in
+      }
+    }
+  }, [user, authLoading, router]);
+
+  if (authLoading || !user || user.email !== ADMIN_EMAIL) {
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center p-4">
+        {authLoading ? (
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        ) : (
+          <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
+            <ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" />
+            <CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle>
+            <CardDescription className="text-muted-foreground mt-2">
+              You do not have permission to view this page.
+            </CardDescription>
+            <Button onClick={() => router.push('/')} className="mt-6">Go to Home</Button>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex-grow flex flex-col items-center justify-center p-4">
       <Card className="w-full max-w-2xl shadow-xl bg-card text-card-foreground rounded-lg">
@@ -68,6 +102,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-// Adding Home for the back button, if not already available globally for AdminPage
-import { Home } from 'lucide-react'; 

@@ -5,7 +5,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
-import NewsTicker from '@/components/NewsTicker'; // Import NewsTicker
+import NewsTicker from '@/components/NewsTicker';
+import { AuthProvider } from '@/context/AuthContext'; // Import AuthProvider
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -27,13 +28,15 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head></head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
-        <SiteHeader />
-        <NewsTicker /> {/* Add NewsTicker here */}
-        <main className="flex-grow container mx-auto px-4 py-8">
-          {children}
-        </main>
-        <SiteFooter />
-        <Toaster />
+        <AuthProvider> {/* Wrap with AuthProvider */}
+          <SiteHeader />
+          <NewsTicker />
+          <main className="flex-grow container mx-auto px-4 py-8">
+            {children}
+          </main>
+          <SiteFooter />
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

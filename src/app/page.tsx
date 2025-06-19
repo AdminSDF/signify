@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Home, Shield, DollarSign } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Home, Shield, DollarSign, ShieldAlert } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
 import SpinButton from '@/components/SpinButton';
@@ -18,6 +19,7 @@ import { getAiTipAction, type TipGenerationResult } from './actions/generateTipA
 import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/context/AuthContext';
 
 interface TransactionEvent {
   id: string;
@@ -34,13 +36,10 @@ const SPINS_AVAILABLE_STORAGE_KEY = 'spinifySpinsAvailable';
 const DAILY_PAID_SPINS_USED_KEY = 'spinifyDailyPaidSpinsUsed';
 const LAST_PAID_SPIN_DATE_KEY = 'spinifyLastPaidSpinDate';
 
-
-// Define a type for segments that includes probability for internal use
 interface WheelSegmentWithProbability extends Segment {
   probability: number;
 }
 
-// EV ~ ₹1.24. (0.01*20 + 0.05*10 + 0.06*5 + 0.07*2 + 0.10*1) = 0.20 + 0.50 + 0.30 + 0.14 + 0.10 = 1.24
 const wheelSegments: WheelSegmentWithProbability[] = [
   { id: 's100', text: '₹100', emoji: '💎', amount: 100, color: '300 80% 60%', textColor: '0 0% 100%', probability: 0.00 },
   { id: 's50',  text: '₹50',  emoji: '💰', amount: 50,  color: '270 80% 65%', textColor: '0 0% 100%', probability: 0.00 },
@@ -52,28 +51,23 @@ const wheelSegments: WheelSegmentWithProbability[] = [
   { id: 's0',   text: 'Try Again', emoji: '🔁', amount: 0, color: '210 80% 60%', textColor: '0 0% 100%', probability: 0.71 },
 ];
 
-
-const MAX_SPINS_IN_BUNDLE = 10; // Renamed from MAX_SPINS to avoid confusion
+const MAX_SPINS_IN_BUNDLE = 10;
 const UPI_ID = "9828786246@jio";
 const SPIN_REFILL_PRICE = 10; 
 
-const ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
-const mockUser = {
-  name: 'Player One',
-  email: 'player.one@example.com',
-  avatarUrl: 'https://placehold.co/100x100.png',
-  initialBalance: 50.00,
-};
+const ADMIN_EMAIL = "jameafaizanrasool@gmail.com"; // This should ideally come from .env
+const INITIAL_BALANCE_FOR_NEW_USERS = 50.00; // If user specific balance isn't found
 
-// Tiered pricing constants
 const TIER1_LIMIT = 30;
 const TIER1_COST = 2;
-const TIER2_LIMIT = 60; // Spins 31 to 60 (i.e., < 60)
+const TIER2_LIMIT = 60;
 const TIER2_COST = 3;
 const TIER3_COST = 5;
 
-
 export default function HomePage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
   const [currentPrize, setCurrentPrize] = useState<Segment | null>(null);
@@ -86,12 +80,11 @@ export default function HomePage() {
 
   const [showConfetti, setShowConfetti] = useState(false);
   const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS_IN_BUNDLE);
-  const [userBalance, setUserBalance] = useState<number>(mockUser.initialBalance);
+  const [userBalance, setUserBalance] = useState<number>(INITIAL_BALANCE_FOR_NEW_USERS);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [transactions, setTransactions] = useState<TransactionEvent[]>([]);
 
-  // State for tiered pricing
   const [dailyPaidSpinsUsed, setDailyPaidSpinsUsed] = useState<number>(0);
   const [lastPaidSpinDate, setLastPaidSpinDate] = useState<string>(new Date().toLocaleDateString());
 
@@ -100,19 +93,39 @@ export default function HomePage() {
 
   const [isClient, setIsClient] = useState(false);
   const [showAdminChoiceView, setShowAdminChoiceView] = useState(false);
-
+  
+  // Effect for initial client-side setup and localStorage access
   useEffect(() => {
     setIsClient(true);
-    if (mockUser.email === ADMIN_EMAIL) {
-      setShowAdminChoiceView(true);
+    // We wait for auth to settle before deciding admin view or loading user data
+  }, []);
+
+  // Effect to handle user data loading and admin view logic once auth is ready
+  useEffect(() => {
+    if (!isClient || authLoading) return; // Only run if client and auth is no longer loading
+
+    if (!user) {
+      // If no user and not loading, user data can't be loaded (e.g. balance)
+      // But we don't redirect here, as unauth users can still see the game.
+      // Balance/Spins will use defaults or show as 0 if specific logic is added for unauth state.
+       setUserBalance(0); // Example: set balance to 0 for guests
+       setSpinsAvailable(0); // Example: set spins to 0 for guests
+      return;
     }
-    const storedBalance = localStorage.getItem(USER_BALANCE_STORAGE_KEY);
+    
+    // User is logged in, determine admin status
+    if (user.email === ADMIN_EMAIL) {
+      setShowAdminChoiceView(true); // Show admin choice if they haven't made one
+    }
+
+    // Load user-specific data from localStorage (or default if not found)
+    // Note: For a real app, balance would come from a backend tied to user ID
+    const storedBalance = localStorage.getItem(USER_BALANCE_STORAGE_KEY); // This is a shared key, ideally make it user-specific
     const storedSpins = localStorage.getItem(SPINS_AVAILABLE_STORAGE_KEY);
 
-    setUserBalance(storedBalance ? parseFloat(storedBalance) : mockUser.initialBalance);
+    setUserBalance(storedBalance ? parseFloat(storedBalance) : INITIAL_BALANCE_FOR_NEW_USERS);
     setSpinsAvailable(storedSpins ? parseInt(storedSpins, 10) : MAX_SPINS_IN_BUNDLE);
 
-    // Load daily paid spin count and date
     const todayString = new Date().toLocaleDateString();
     const storedLastDate = localStorage.getItem(LAST_PAID_SPIN_DATE_KEY);
     const storedDailySpins = localStorage.getItem(DAILY_PAID_SPINS_USED_KEY);
@@ -120,34 +133,33 @@ export default function HomePage() {
     if (storedLastDate === todayString) {
       setDailyPaidSpinsUsed(storedDailySpins ? parseInt(storedDailySpins, 10) : 0);
     } else {
-      setDailyPaidSpinsUsed(0); // Reset for new day
+      setDailyPaidSpinsUsed(0);
     }
-    setLastPaidSpinDate(todayString); // Always set/update lastPaidSpinDate state
+    setLastPaidSpinDate(todayString);
 
-    if (typeof window !== 'undefined') {
-      const storedTransactions = localStorage.getItem(TRANSACTION_STORAGE_KEY);
-      if (storedTransactions) {
-        try {
-          const parsedTransactions = JSON.parse(storedTransactions) as TransactionEvent[];
-          parsedTransactions.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          setTransactions(parsedTransactions);
-        } catch (e) {
-          console.error("Error parsing transactions from localStorage", e);
-          setTransactions([]); 
-        }
+    const storedTransactions = localStorage.getItem(TRANSACTION_STORAGE_KEY);
+    if (storedTransactions) {
+      try {
+        const parsedTransactions = JSON.parse(storedTransactions) as TransactionEvent[];
+        parsedTransactions.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setTransactions(parsedTransactions);
+      } catch (e) {
+        console.error("Error parsing transactions from localStorage", e);
+        setTransactions([]); 
       }
     }
-  }, []);
+  }, [isClient, authLoading, user, ADMIN_EMAIL]);
+
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && isClient) {
+    if (typeof window !== 'undefined' && isClient && user) { // Only save if user is logged in
       localStorage.setItem(TRANSACTION_STORAGE_KEY, JSON.stringify(transactions));
       localStorage.setItem(USER_BALANCE_STORAGE_KEY, userBalance.toString());
       localStorage.setItem(SPINS_AVAILABLE_STORAGE_KEY, spinsAvailable.toString());
       localStorage.setItem(DAILY_PAID_SPINS_USED_KEY, dailyPaidSpinsUsed.toString());
       localStorage.setItem(LAST_PAID_SPIN_DATE_KEY, lastPaidSpinDate);
     }
-  }, [transactions, userBalance, spinsAvailable, dailyPaidSpinsUsed, lastPaidSpinDate, isClient]);
+  }, [transactions, userBalance, spinsAvailable, dailyPaidSpinsUsed, lastPaidSpinDate, isClient, user]);
 
   const addTransaction = useCallback((details: { type: 'credit' | 'debit'; amount: number; description: string }) => {
     const newTransactionEntry: TransactionEvent = {
@@ -205,23 +217,29 @@ export default function HomePage() {
   const handleSpinClick = useCallback(() => {
     if (!isClient || isSpinning) return;
 
+    if (!user) {
+        toast({
+            title: "Login Required",
+            description: "Please log in to spin the wheel.",
+            variant: "destructive",
+            action: <Button onClick={() => router.push('/login')}>Login</Button>
+        });
+        return;
+    }
+
     let currentDailyPaidSpins = dailyPaidSpinsUsed;
     const today = new Date().toLocaleDateString();
 
     if (lastPaidSpinDate !== today) {
-      console.log("New day detected for paid spins, resetting count.");
       currentDailyPaidSpins = 0;
       setDailyPaidSpinsUsed(0);
       setLastPaidSpinDate(today); 
     }
 
     if (spinsAvailable > 0) {
-      // Use free/bundled spin
       startSpinProcess();
       setSpinsAvailable(prev => prev - 1);
-      // dailyPaidSpinsUsed is NOT incremented for free/bundled spins
     } else {
-      // Paying per spin from balance - apply tiered pricing
       const costForThisSpin = getCurrentPaidSpinCost(currentDailyPaidSpins);
 
       if (userBalance >= costForThisSpin) {
@@ -234,15 +252,14 @@ export default function HomePage() {
           title: `Spin Cost: -₹${costForThisSpin.toFixed(2)}`,
           description: `₹${costForThisSpin.toFixed(2)} deducted. Paid spins today: ${currentDailyPaidSpins + 1}.`,
         });
-        setDailyPaidSpinsUsed(prev => prev + 1); // Increment AFTER successful paid spin
+        setDailyPaidSpinsUsed(prev => prev + 1);
       } else {
-        // Not enough balance for the current tier's spin cost
-        setShowPaymentModal(true); // Prompt to buy a bundle
+        setShowPaymentModal(true);
       }
     }
   }, [
     isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction,
-    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost
+    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router
   ]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
@@ -284,6 +301,10 @@ export default function HomePage() {
   }, [playSound, spinHistory.length, toast, addTransaction]);
 
   const handleGenerateTip = useCallback(async () => {
+     if (!user) {
+        toast({ title: "Login Required", description: "Please log in to get tips." });
+        return;
+    }
     setTipLoading(true);
     setTipError(null);
     setShowTipModal(true);
@@ -302,9 +323,10 @@ export default function HomePage() {
       });
     }
     setTipLoading(false);
-  }, [spinHistory, toast]);
+  }, [spinHistory, toast, user]);
 
-  const handlePaymentConfirm = useCallback(() => { // For buying a bundle
+  const handlePaymentConfirm = useCallback(() => {
+    if (!user) return; // Should not happen if modal is shown only to logged in users
     setShowPaymentModal(false);
     addTransaction({ type: 'debit', amount: SPIN_REFILL_PRICE, description: `Purchased ${MAX_SPINS_IN_BUNDLE} Spins Bundle` });
     setSpinsAvailable(MAX_SPINS_IN_BUNDLE); 
@@ -313,9 +335,9 @@ export default function HomePage() {
       description: `You now have ${MAX_SPINS_IN_BUNDLE} spins. Happy spinning!`,
       variant: "default",
     });
-  }, [toast, addTransaction]);
+  }, [toast, addTransaction, user]);
 
-  if (!isClient) {
+  if (!isClient || authLoading) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
@@ -330,15 +352,14 @@ export default function HomePage() {
     );
   }
 
-
-  if (mockUser.email === ADMIN_EMAIL && showAdminChoiceView) {
+  if (user && user.email === ADMIN_EMAIL && showAdminChoiceView) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold text-primary">Admin Portal Access</CardTitle>
             <CardDescription className="text-muted-foreground mt-1">
-              Welcome, {mockUser.name}. Select your destination.
+              Welcome, {user.displayName || user.email}. Select your destination.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-4 mt-4">
@@ -368,7 +389,7 @@ export default function HomePage() {
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
 
-      {isClient && (
+      {isClient && user && (
         <div className="w-full max-w-2xl flex justify-center my-4">
           <Card className="py-3 px-6 inline-flex items-center gap-3 shadow-md bg-primary-foreground/20 rounded-lg backdrop-blur-sm">
             <DollarSign className="h-7 w-7 text-primary" />
@@ -377,6 +398,19 @@ export default function HomePage() {
             </span>
           </Card>
         </div>
+      )}
+      
+      {!user && isClient && (
+         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center my-8">
+            <ShieldAlert className="h-12 w-12 text-primary mx-auto mb-3" />
+            <CardTitle className="text-2xl font-bold">Welcome Guest!</CardTitle>
+            <CardDescription className="text-muted-foreground mt-2">
+              Please log in to play Spinify, track your balance, and win prizes!
+            </CardDescription>
+            <Button onClick={() => router.push('/login')} className="mt-6">
+              Login to Play
+            </Button>
+          </Card>
       )}
       
       <SpinifyGameHeader />
@@ -391,23 +425,27 @@ export default function HomePage() {
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
-          <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
-            {spinsAvailable > 0 
-              ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS_IN_BUNDLE} (Free/Bundled)</>
-              : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span> (from balance). Paid today: {dailyPaidSpinsUsed}</>
-            }
-          </div>
-          <SpinButton 
-            onClick={handleSpinClick} 
-            disabled={isSpinning || (spinsAvailable <=0 && !canAffordNextPaidSpin && !showBuyBundleButton)} 
-            isLoading={isSpinning}
-            spinsAvailable={spinsAvailable}
-            forceShowBuyButton={showBuyBundleButton}
-          />
+        {user && (
+            <>
+                <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
+                    {spinsAvailable > 0 
+                    ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {MAX_SPINS_IN_BUNDLE} (Free/Bundled)</>
+                    : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span> (from balance). Paid today: {dailyPaidSpinsUsed}</>
+                    }
+                </div>
+                <SpinButton 
+                    onClick={handleSpinClick} 
+                    disabled={isSpinning || !user || (spinsAvailable <=0 && !canAffordNextPaidSpin && !showBuyBundleButton)} 
+                    isLoading={isSpinning}
+                    spinsAvailable={spinsAvailable}
+                    forceShowBuyButton={showBuyBundleButton}
+                />
+            </>
+        )}
           <PrizeDisplay prize={currentPrize} />
         </div>
 
-        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning} />
+        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning || !user} />
       </main>
 
       <TipModal
@@ -419,7 +457,7 @@ export default function HomePage() {
         onGenerateTip={handleGenerateTip}
       />
 
-      <PaymentModal // This modal is for buying a bundle of spins
+      <PaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onConfirm={handlePaymentConfirm}
@@ -430,4 +468,3 @@ export default function HomePage() {
     </div>
   );
 }
-    
