@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search } from 'lucide-react';
+import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search, Banknote, History, PackageCheck, PackageX } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as defaultAppSettings, getAppSettings, saveAppSettings, getNewsItems, saveNewsItems, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
@@ -18,11 +18,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail'; 
 const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
 
-// Dummy data for withdrawal requests - replace with Firestore data later
+// Dummy data - replace with Firestore data later
 const dummyWithdrawalRequests = [
   { id: 'WR001', userId: 'user123', userEmail: 'test@example.com', amount: 550, upiId: 'user@upi', date: new Date().toISOString(), status: 'Pending' },
   { id: 'WR002', userId: 'user456', userEmail: 'another@example.com', amount: 1200, upiId: 'test@okaxis', date: new Date(Date.now() - 86400000).toISOString(), status: 'Pending' },
 ];
+
+const dummyAddFundRequests = [
+  { id: 'AF001', userId: 'user789', userEmail: 'fund@example.com', amount: 200, paymentMethod: 'UPI Screenshot', date: new Date().toISOString(), status: 'Pending' },
+  { id: 'AF002', userId: 'userABC', userEmail: 'add@example.com', amount: 500, paymentMethod: 'UPI ID Ref', date: new Date(Date.now() - 172800000).toISOString(), status: 'Pending' },
+];
+
 
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
@@ -239,7 +245,58 @@ export default function AdminPage() {
             </CardFooter>
           </Card>
 
-          {/* Withdrawal Management Section - Placeholder */}
+          {/* Add Fund Requests Section */}
+          <Card className="bg-muted/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Banknote /> Add Fund Requests</CardTitle>
+              <CardDescription>View and manage pending user requests to add funds.</CardDescription>
+            </CardHeader>
+            <CardContent>
+               <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Req ID</TableHead>
+                    <TableHead>User Email</TableHead>
+                    <TableHead>Amount (₹)</TableHead>
+                    <TableHead>Payment Ref/Details</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dummyAddFundRequests.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-medium">{req.id}</TableCell>
+                      <TableCell>{req.userEmail}</TableCell>
+                      <TableCell>{req.amount.toFixed(2)}</TableCell>
+                      <TableCell>{req.paymentMethod}</TableCell>
+                      <TableCell>{new Date(req.date).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 text-xs rounded-full ${req.status === 'Pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
+                          {req.status}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" disabled><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
+                        <Button variant="destructive" size="sm" disabled><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {dummyAddFundRequests.length === 0 && (
+                     <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell>
+                     </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+            <CardFooter className="text-sm text-muted-foreground">
+              Full add fund request management requires Firestore integration.
+            </CardFooter>
+          </Card>
+
+          {/* Withdrawal Management Section */}
           <Card className="bg-muted/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle>
@@ -272,8 +329,8 @@ export default function AdminPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" disabled>Approve</Button>
-                         <Button variant="destructive" size="sm" className="ml-2" disabled>Reject</Button>
+                        <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" disabled><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
+                         <Button variant="destructive" size="sm" disabled><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -290,7 +347,7 @@ export default function AdminPage() {
             </CardFooter>
           </Card>
 
-          {/* User & Financial Overview Section - Placeholder */}
+          {/* User & Financial Overview Section */}
           <Card className="bg-muted/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Users /> User & Financial Overview</CardTitle>
@@ -316,12 +373,16 @@ export default function AdminPage() {
                     <Input type="search" placeholder="Search users by email or ID..." className="bg-background" disabled/>
                     <Button variant="outline" disabled><Search className="mr-2 h-4 w-4" /> Search</Button>
                  </div>
-                <p className="text-sm text-muted-foreground">Detailed user activity logs, individual transaction history, and user management tools will be available here.</p>
-                <Button variant="link" disabled className="p-0 h-auto">View All User Transactions (Coming Soon)</Button>
+                <p className="text-sm text-muted-foreground">Detailed user activity logs and management tools will be available here.</p>
+              </div>
+               <div>
+                <h4 className="font-semibold mb-2 flex items-center gap-2"><History /> Global Transaction Log</h4>
+                <p className="text-sm text-muted-foreground">A comprehensive log of all transactions across the platform.</p>
+                <Button variant="link" disabled className="p-0 h-auto text-base">View Full Transaction Log (Coming Soon)</Button>
               </div>
             </CardContent>
             <CardFooter className="text-sm text-muted-foreground">
-              Full user management and financial overviews require Firestore integration.
+              Full user management, financial overviews, and transaction logs require Firestore integration.
             </CardFooter>
           </Card>
 
@@ -330,6 +391,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-
-    
