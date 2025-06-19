@@ -43,7 +43,6 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   onClick,
 }) => {
   const [currentRotation, setCurrentRotation] = useState(0);
-  const [targetVisualRotation, setTargetVisualRotation] = useState(0); // For animation
   const wheelRef = useRef<SVGSVGElement>(null);
 
   const numSegments = segments.length;
@@ -57,23 +56,17 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       const baseDegrees = randomExtraRotations * 360;
       const targetAngle = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2));
       const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6);
-      const finalRotation = currentRotation + baseDegrees + targetAngle + randomOffset; // Animate relative to current
-
-      setTargetVisualRotation(finalRotation);
+      const finalRotation = currentRotation + baseDegrees + targetAngle + randomOffset;
 
       if (wheelRef.current) {
-        // Ensure the CSS variable for final rotation is set for the animation
         wheelRef.current.style.setProperty('--final-rotation', `${finalRotation}deg`);
         wheelRef.current.style.setProperty('--initial-rotation', `${currentRotation}deg`);
       }
       
       const timer = setTimeout(() => {
         onSpinComplete(segments[targetSegmentIndex]);
-        // Normalize rotation to keep it within 0-360 to prevent excessively large numbers over time
-        // The actual visual effect of large numbers is fine, but smaller numbers are cleaner for state.
         const finalAngleNormalized = finalRotation % 360;
         setCurrentRotation(finalAngleNormalized < 0 ? finalAngleNormalized + 360 : finalAngleNormalized);
-
       }, spinDuration * 1000);
 
       return () => clearTimeout(timer);
@@ -90,8 +83,8 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
     });
 
     return Array.from(uniqueColors.entries()).map(([colorStr, id]) => {
-      const lighterColor = modifyHslColor(colorStr, 15); // Center of gradient
-      const darkerColor = modifyHslColor(colorStr, -10); // Edge of gradient
+      const lighterColor = modifyHslColor(colorStr, 15); 
+      const darkerColor = modifyHslColor(colorStr, -10); 
       return (
         <radialGradient key={id} id={id} cx="50%" cy="50%" r="65%" fx="50%" fy="50%">
           <stop offset="0%" style={{ stopColor: `hsl(${lighterColor})`, stopOpacity: 1 }} />
@@ -104,7 +97,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   const colorToGradientIdMap = useMemo(() => {
     const map = new Map<string, string>();
     segments.forEach((segment, index) => {
-       const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`; // Ensure consistent ID for same colors
+       const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`; 
       if (!map.has(segment.color)) {
         map.set(segment.color, gradId);
       }
@@ -117,7 +110,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
     const parts = backgroundColor.split(' ');
     if (parts.length === 3) {
       const l = parseInt(parts[2].replace('%', ''), 10);
-      return l > 55 ? '0 0% 10%' : '0 0% 95%'; // Adjusted for better contrast on gradients
+      return l > 55 ? '0 0% 10%' : '0 0% 95%'; 
     }
     return '0 0% 0%';
   };
@@ -143,7 +136,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleWheelClick(); e.preventDefault();}}}
     >
       <div
-        className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10" // Adjusted top for slightly larger pointer
+        className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10" 
         aria-hidden="true"
       >
         <svg width="36" height="50" viewBox="0 0 36 50" fill="hsl(var(--primary))" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'url(#dropShadowPointer)'}}>
@@ -156,15 +149,13 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         ref={wheelRef}
         viewBox="0 0 200 200"
         className={cn(
-          "w-full h-full rounded-full shadow-2xl",
-          isSpinning ? 'animate-wheel-spin' : '',
-          "svg-wheel-graphics" 
+          "w-full h-full rounded-full shadow-2xl svg-wheel-graphics", // svg-wheel-graphics sets initial rotation based on CSS var
+          isSpinning && 'animate-wheel-spin'
         )}
         style={{
-          transform: `rotate(${isSpinning ? 0 : currentRotation}deg)`, // Animation class handles rotation when spinning
-          '--final-rotation': `${targetVisualRotation}deg`,
-          '--initial-rotation': `${currentRotation}deg`, // Used by animation
-           filter: 'url(#dropShadowWheel)'
+          transform: `rotate(${currentRotation}deg)`, // This sets the resting position of the wheel
+          // CSS variables --initial-rotation and --final-rotation are set in useEffect for the animation
+          filter: 'url(#dropShadowWheel)'
         } as React.CSSProperties}
       >
         <defs>
@@ -199,7 +190,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                 <path 
                   d={pathData} 
                   fill={gradientId ? `url(#${gradientId})` : `hsl(${segment.color})`} 
-                  stroke="hsl(var(--card))" // Use card background for stroke, gives subtle separation
+                  stroke="hsl(var(--card))" 
                   strokeWidth="1.5"
                 />
                 <text
@@ -207,7 +198,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                   y={100 + 60 * Math.sin(midAngleRad)}
                   dy=".3em"
                   textAnchor="middle"
-                  fontSize="9.5" // Slightly reduced for better fit with multi-line
+                  fontSize="9.5"
                   fontWeight="bold"
                   fill={`hsl(${effectiveTextColor})`}
                   className="font-body pointer-events-none"
@@ -229,4 +220,3 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
-
