@@ -8,6 +8,7 @@ import SpinButton from '@/components/SpinButton';
 import PrizeDisplay from '@/components/PrizeDisplay';
 import TipGeneratorButton from '@/components/TipGeneratorButton';
 import TipModal from '@/components/TipModal';
+import PaymentModal from '@/components/PaymentModal'; // Import PaymentModal
 import { useSound } from '@/hooks/useSound';
 import { useToast } from "@/hooks/use-toast";
 import type { SpinHistory } from '@/ai/flows/spinify-tip-generator';
@@ -24,6 +25,8 @@ const wheelSegments: Segment[] = [
 ];
 
 const MAX_SPINS = 10; // Maximum number of spins
+const UPI_ID = "9828786246@jio";
+const SPIN_REFILL_PRICE = 10; // Mock price for refilling spins
 
 export default function HomePage() {
   const [isSpinning, setIsSpinning] = useState(false);
@@ -38,6 +41,7 @@ export default function HomePage() {
 
   const [showConfetti, setShowConfetti] = useState(false);
   const [spinsAvailable, setSpinsAvailable] = useState<number>(MAX_SPINS);
+  const [showPaymentModal, setShowPaymentModal] = useState(false); // State for payment modal
 
   const { playSound } = useSound();
   const { toast } = useToast();
@@ -58,17 +62,12 @@ export default function HomePage() {
       
       const winningIndex = Math.floor(Math.random() * wheelSegments.length);
       setTargetSegmentIndex(winningIndex);
-      setSpinsAvailable(prev => prev - 1); // Decrement spins
+      setSpinsAvailable(prev => prev - 1);
     } else {
-      // "Get More Spins" logic
-      setSpinsAvailable(MAX_SPINS);
-      toast({
-        title: "Spins Refilled!",
-        description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
-        variant: "default",
-      });
+      // Show payment modal instead of refilling directly
+      setShowPaymentModal(true);
     }
-  }, [isClient, isSpinning, playSound, spinsAvailable, toast]);
+  }, [isClient, isSpinning, playSound, spinsAvailable]);
 
   const handleSpinComplete = useCallback((winningSegment: Segment) => {
     setIsSpinning(false);
@@ -112,6 +111,16 @@ export default function HomePage() {
     setTipLoading(false);
   }, [spinHistory, toast]);
 
+  const handlePaymentConfirm = useCallback(() => {
+    setShowPaymentModal(false);
+    setSpinsAvailable(MAX_SPINS);
+    toast({
+      title: "Spins Purchased!",
+      description: `You now have ${MAX_SPINS} spins. Happy spinning!`,
+      variant: "default",
+    });
+  }, [toast]);
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
@@ -123,7 +132,7 @@ export default function HomePage() {
           onSpinComplete={handleSpinComplete}
           targetSegmentIndex={targetSegmentIndex}
           isSpinning={isSpinning}
-          onClick={handleSpinClick} // Allow spinning by clicking wheel
+          onClick={handleSpinClick}
         />
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
@@ -150,6 +159,16 @@ export default function HomePage() {
         error={tipError}
         onGenerateTip={handleGenerateTip}
       />
+
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onConfirm={handlePaymentConfirm}
+        upiId={UPI_ID}
+        amount={SPIN_REFILL_PRICE}
+        spinsToGet={MAX_SPINS}
+      />
     </div>
   );
 }
+
