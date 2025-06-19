@@ -368,7 +368,7 @@ export default function HomePage() {
             >
               <Home className="mr-2 h-5 w-5" /> Go to Main App
             </Button>
-            <Link href="/admin" passHref legacyBehavior>
+            <Link href="/admin">
               <Button variant="outline" size="lg" className="w-full">
                 <Shield className="mr-2 h-5 w-5" /> Go to Admin Panel
               </Button>
@@ -460,5 +460,7 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
 
     
