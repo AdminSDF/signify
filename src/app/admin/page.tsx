@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search, Banknote, History, PackageCheck, PackageX, Newspaper } from 'lucide-react';
+import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, CalendarPlus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as defaultAppSettings, getAppSettings, saveAppSettings, getNewsItems, saveNewsItems, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 
@@ -162,11 +162,12 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="game-settings" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-6 h-auto flex-wrap">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="game-settings" className="py-2 px-3 text-sm"><Settings className="mr-2 h-4 w-4"/>Game Settings</TabsTrigger>
               <TabsTrigger value="news-ticker" className="py-2 px-3 text-sm"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
               <TabsTrigger value="add-fund" className="py-2 px-3 text-sm"><Banknote className="mr-2 h-4 w-4"/>Add Fund Req.</TabsTrigger>
               <TabsTrigger value="withdrawal-req" className="py-2 px-3 text-sm"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal Req.</TabsTrigger>
+              <TabsTrigger value="leaderboard" className="py-2 px-3 text-sm"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
               <TabsTrigger value="overview" className="py-2 px-3 text-sm"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
             </TabsList>
 
@@ -352,6 +353,37 @@ export default function AdminPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="leaderboard">
+              <Card className="bg-muted/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard Management</CardTitle>
+                  <CardDescription>Oversee leaderboards, tournaments, and player rankings.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2"><BarChart3 /> Current Standings</h4>
+                    <p className="text-sm text-muted-foreground">Leaderboard data will be displayed here once backend is integrated.</p>
+                    {/* Placeholder for table or list of top players */}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2"><RefreshCcw /> Manage Leaderboards</h4>
+                    <Button variant="outline" disabled className="mr-2">Reset Weekly Leaderboard</Button>
+                    <Button variant="outline" disabled>Reset Monthly Leaderboard</Button>
+                    <p className="text-xs text-muted-foreground mt-1">Requires Firestore integration.</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2"><CalendarPlus /> Tournament Management</h4>
+                    <Button variant="outline" disabled>Create New Tournament</Button>
+                     <p className="text-sm text-muted-foreground mt-2">Tournament creation and management tools will appear here.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Requires Firestore integration.</p>
+                  </div>
+                </CardContent>
+                <CardFooter className="text-sm text-muted-foreground">
+                  Full leaderboard and tournament management requires Firestore integration.
+                </CardFooter>
+              </Card>
+            </TabsContent>
+            
             <TabsContent value="overview">
               <Card className="bg-muted/20">
                 <CardHeader>
@@ -398,3 +430,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
