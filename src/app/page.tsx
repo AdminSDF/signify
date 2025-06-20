@@ -17,11 +17,11 @@ import { getAiTipAction, type TipGenerationResult } from './actions/generateTipA
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { auth } from '@/lib/firebase'; // Import auth for currentUser metadata
 import {
   getUserData,
   updateUserData,
   addTransactionToFirestore,
+  createUserData,
   Timestamp
 } from '@/lib/firebase';
 
@@ -82,14 +82,17 @@ export default function HomePage() {
     setIsClient(true);
   }, []);
 
+  // NEW: Refactored useEffect to be self-healing
   useEffect(() => {
     if (!isClient) return;
 
+    // Show loader while auth or app config is resolving
     if (authLoading || isAppConfigLoading) {
-      if (!userDataLoading) setUserDataLoading(true); 
+      if (!userDataLoading) setUserDataLoading(true);
       return;
     }
 
+    // If no user, reset to default guest state
     if (!user) {
       setUserDataLoading(false);
       setUserBalance(0);
@@ -99,56 +102,71 @@ export default function HomePage() {
       return;
     }
 
-    if (!userDataLoading) setUserDataLoading(true); 
+    // This function will now handle fetching and self-healing
+    const loadAndSyncUserData = async () => {
+      if (!userDataLoading) setUserDataLoading(true);
+      
+      try {
+        let data = await getUserData(user.uid);
+        
+        // SELF-HEALING: If user document doesn't exist, create it
+        if (!data) {
+          console.warn(`User document for ${user.uid} not found. Attempting to create it.`);
+          toast({ title: "Syncing Profile...", description: "Setting up your game profile for the first time." });
+          
+          await createUserData(
+            user.uid,
+            user.email,
+            user.displayName,
+            user.photoURL,
+            appSettings
+          );
+          
+          // Re-fetch the data after creation to ensure we have the correct initial state
+          data = await getUserData(user.uid);
 
-    getUserData(user.uid)
-      .then(data => {
-        if (data) {
-          setUserBalance(data.balance);
-          setSpinsAvailable(data.spinsAvailable);
-          const todayStr = new Date().toLocaleDateString('en-CA');
-          if (data.lastPaidSpinDate === todayStr) {
-            setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
-          } else {
-            setDailyPaidSpinsUsed(0);
-            updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
-              .catch(err => console.warn("Failed to reset daily spins on date change:", err));
+          if (!data) {
+            // If it's still null, something is fundamentally wrong (e.g., Firestore permissions)
+            throw new Error("Failed to create and then retrieve user document.");
           }
-          setLastPaidSpinDate(data.lastPaidSpinDate || todayStr);
-          if (data.isAdmin && user.email === ADMIN_EMAIL) {
-            setShowAdminChoiceView(true);
-          } else {
-            setShowAdminChoiceView(false);
-          }
-        } else {
-          const firebaseCurrentUser = auth.currentUser; 
-          const creationTime = firebaseCurrentUser?.metadata?.creationTime ? new Date(firebaseCurrentUser.metadata.creationTime).getTime() : 0;
-          const lastSignInTime = firebaseCurrentUser?.metadata?.lastSignInTime ? new Date(firebaseCurrentUser.metadata.lastSignInTime).getTime() : 0;
-          const isNewlyCreatedUserSession = creationTime === lastSignInTime && (Date.now() - creationTime < 15000); 
-
-          if (isNewlyCreatedUserSession) {
-            console.warn("User document not found for newly created user UID:", user.uid, "Using defaults. Document might be created shortly.");
-          } else {
-            console.error("User document not found in Firestore for UID:", user.uid, "This can happen if document creation failed or was deleted.");
-            toast({ title: "Data Sync Issue", description: "Could not fully load game data. Defaults applied. Re-login if issues persist.", variant: "destructive" });
-          }
-          setUserBalance(appSettings.initialBalanceForNewUsers);
-          setSpinsAvailable(appSettings.maxSpinsInBundle);
-          setDailyPaidSpinsUsed(0);
-          setShowAdminChoiceView(false); 
+          toast({ title: "Profile Synced!", description: "Your game profile is ready. Welcome!" });
         }
-      })
-      .catch(error => {
-        console.error("Error fetching user data:", error);
-        toast({ title: "Error Loading User Data", description: "Could not load your game progress. Try refreshing.", variant: "destructive" });
-        setUserBalance(0); 
-        setSpinsAvailable(0);
+
+        // At this point, `data` is guaranteed to be valid user data.
+        setUserBalance(data.balance);
+        setSpinsAvailable(data.spinsAvailable);
+
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        if (data.lastPaidSpinDate === todayStr) {
+          setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
+        } else {
+          // Reset daily spin count if it's a new day
+          setDailyPaidSpinsUsed(0);
+          updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
+            .catch(err => console.warn("Failed to reset daily spins on date change:", err));
+        }
+        setLastPaidSpinDate(data.lastPaidSpinDate || todayStr);
+
+        if (data.isAdmin && user.email === ADMIN_EMAIL) {
+          setShowAdminChoiceView(true);
+        } else {
+          setShowAdminChoiceView(false);
+        }
+
+      } catch (error) {
+        console.error("Error during user data loading/syncing:", error);
+        toast({ title: "Data Sync Issue", description: "Could not load or sync game data. Defaults applied. Please re-login if issues persist.", variant: "destructive" });
+        // Fallback to defaults on any error during the process
+        setUserBalance(appSettings.initialBalanceForNewUsers);
+        setSpinsAvailable(appSettings.maxSpinsInBundle);
         setShowAdminChoiceView(false);
-      })
-      .finally(() => {
+      } finally {
         setUserDataLoading(false);
-      });
-  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]); 
+      }
+    };
+
+    loadAndSyncUserData();
+  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]);
 
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
@@ -293,7 +311,7 @@ export default function HomePage() {
         toast({variant: "destructive", title: "Sync Error", description: "Could not save spin summary to server."});
     }
 
-  }, [playSound, spinHistory.length, toast, addTransaction, user, userBalance]); // Added userBalance to dep array
+  }, [playSound, spinHistory.length, toast, addTransaction, user, userBalance]);
 
   const handleGenerateTip = useCallback(async () => {
     if (!user) { toast({ title: "Login Required", description: "Please log in." }); return; }
@@ -446,5 +464,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-    
