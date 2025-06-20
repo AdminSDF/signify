@@ -140,6 +140,17 @@ export const uploadProfilePhoto = async (userId: string, file: File): Promise<st
   return downloadURL;
 };
 
+// Admin function to get all users
+export const getAllUsers = async (count: number = 100): Promise<(UserDocument & {id: string})[]> => {
+  const q = query(
+    collection(db, USERS_COLLECTION),
+    orderBy("createdAt", "desc"),
+    limit(count)
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (UserDocument & {id: string})));
+};
+
 // --- Transaction Functions ---
 export interface TransactionData {
   userId: string;
@@ -153,33 +164,30 @@ export interface TransactionData {
 }
 
 export const addTransactionToFirestore = async (transactionDetails: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
-  const dataToSave: Partial<TransactionData> & { userId: string, date: Timestamp, type: any, amount: number, description: string, status: any } = {
-    userId: userId,
-    type: transactionDetails.type,
-    amount: transactionDetails.amount,
-    description: transactionDetails.description,
-    status: transactionDetails.status || 'completed', // Default to completed if not provided
-    date: Timestamp.now(),
-  };
+    const dataToSave: Partial<TransactionData> & { userId: string, date: Timestamp, type: any, amount: number, description: string, status: any } = {
+        userId: userId,
+        type: transactionDetails.type,
+        amount: transactionDetails.amount,
+        description: transactionDetails.description,
+        status: transactionDetails.status || 'completed',
+        date: Timestamp.now(),
+    };
 
-  // Only include optional fields if they are provided and are numbers
-  if (typeof transactionDetails.balanceBefore === 'number' && !isNaN(transactionDetails.balanceBefore)) {
-    dataToSave.balanceBefore = transactionDetails.balanceBefore;
-  }
-  if (typeof transactionDetails.balanceAfter === 'number' && !isNaN(transactionDetails.balanceAfter)) {
-    dataToSave.balanceAfter = transactionDetails.balanceAfter;
-  }
+    if (typeof transactionDetails.balanceBefore === 'number' && !isNaN(transactionDetails.balanceBefore)) {
+        dataToSave.balanceBefore = transactionDetails.balanceBefore;
+    }
+    if (typeof transactionDetails.balanceAfter === 'number' && !isNaN(transactionDetails.balanceAfter)) {
+        dataToSave.balanceAfter = transactionDetails.balanceAfter;
+    }
 
-  // Log the exact data being sent for debugging
-  console.log("Attempting to save transaction:", JSON.stringify(dataToSave, null, 2));
-
-  try {
-    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave);
-    return docRef.id;
-  } catch (error) {
-    console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction to Firestore. Data attempted:", JSON.stringify(dataToSave, null, 2), "Error:", error);
-    throw error;
-  }
+    console.log("Attempting to save transaction:", JSON.stringify(dataToSave, null, 2));
+    try {
+        const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave as TransactionData);
+        return docRef.id;
+    } catch (error) {
+        console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction. Data:", JSON.stringify(dataToSave, null, 2), "Error:", error);
+        throw error;
+    }
 };
 
 export const getTransactionsFromFirestore = async (userId: string, count: number = 50): Promise<(TransactionData & {id: string})[]> => {
@@ -404,5 +412,3 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
   Timestamp, FirebaseUser
 };
-
-    

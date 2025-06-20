@@ -15,8 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, CalendarPlus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems } from '@/lib/appConfig';
-import { 
-  saveAppSettingsToFirestore, 
+import {
+  saveAppSettingsToFirestore,
   saveNewsItemsToFirestore,
   getWithdrawalRequests,
   WithdrawalRequestData,
@@ -26,6 +26,8 @@ import {
   updateAddFundRequestStatus,
   approveAddFundAndUpdateBalance,
   approveWithdrawalAndUpdateBalance,
+  getAllUsers,
+  UserDocument,
   Timestamp
 } from '@/lib/firebase';
 
@@ -45,7 +47,8 @@ export default function AdminPage() {
   
   const [withdrawalRequests, setWithdrawalRequests] = useState<(WithdrawalRequestData & {id: string})[]>([]);
   const [addFundRequests, setAddFundRequests] = useState<(AddFundRequestData & {id:string})[]>([]);
-  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [allUsers, setAllUsers] = useState<(UserDocument & {id: string})[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [isClient, setIsClient] = useState(false);
 
@@ -60,34 +63,36 @@ export default function AdminPage() {
     }
   }, [isClient, contextAppSettings, contextNewsItems, isAppConfigLoading]);
 
-  const fetchRequests = useCallback(async () => {
+  const fetchAdminData = useCallback(async () => {
     if (!isClient) return;
-    setIsLoadingRequests(true);
+    setIsLoadingData(true);
     try {
-      const [withdrawals, adds] = await Promise.all([
+      const [withdrawals, adds, users] = await Promise.all([
         getWithdrawalRequests(),
-        getAddFundRequests()
+        getAddFundRequests(),
+        getAllUsers()
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
+      setAllUsers(users);
     } catch (error) {
-      console.error("Error fetching requests:", error);
-      toast({ title: "Error Fetching Requests", description: "Could not load fund/withdrawal requests.", variant: "destructive" });
+      console.error("Error fetching admin data:", error);
+      toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
     } finally {
-      setIsLoadingRequests(false);
+      setIsLoadingData(false);
     }
   }, [isClient, toast]);
 
   useEffect(() => {
     if (user && user.email === ADMIN_EMAIL_CHECK && isClient) {
-      fetchRequests();
+      fetchAdminData();
     }
-  }, [user, isClient, fetchRequests]);
+  }, [user, isClient, fetchAdminData]);
 
 
   useEffect(() => {
     if (!authLoading && isClient) {
-      if (!user || user.email !== ADMIN_EMAIL_CHECK) { // Use a consistent admin check
+      if (!user || user.email !== ADMIN_EMAIL_CHECK) {
         router.push('/'); 
       }
     }
@@ -104,7 +109,7 @@ export default function AdminPage() {
   const handleSaveAppSettings = async () => {
     try {
       await saveAppSettingsToFirestore(currentAppSettings);
-      await refreshAppConfig(); // Refresh context after saving
+      await refreshAppConfig();
       toast({ title: "Game Settings Saved", description: "Changes saved to Firestore." });
     } catch (error) {
       console.error("Error saving app settings:", error);
@@ -139,7 +144,7 @@ export default function AdminPage() {
   const handleSaveNewsItems = async () => {
     try {
       await saveNewsItemsToFirestore(currentNewsItems);
-      await refreshAppConfig(); // Refresh context after saving
+      await refreshAppConfig();
       toast({ title: "News Items Saved", description: "News ticker items saved to Firestore." });
     } catch (error) {
       console.error("Error saving news items:", error);
@@ -151,7 +156,7 @@ export default function AdminPage() {
     try {
       await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount);
       toast({ title: "Fund Request Approved", description: `₹${request.amount} added to user ${request.userEmail}.`});
-      fetchRequests(); // Refresh list
+      fetchAdminData(); // Refresh list
     } catch (error: any) {
       console.error("Error approving add fund request:", error);
       toast({ title: "Approval Failed", description: error.message || "Could not approve request.", variant: "destructive" });
@@ -162,7 +167,7 @@ export default function AdminPage() {
      try {
       await updateAddFundRequestStatus(requestId, "rejected", "Rejected by admin.");
       toast({ title: "Fund Request Rejected" });
-      fetchRequests();
+      fetchAdminData();
     } catch (error) {
       console.error("Error rejecting add fund request:", error);
       toast({ title: "Rejection Failed", variant: "destructive" });
@@ -174,7 +179,7 @@ export default function AdminPage() {
     try {
       await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, paymentMethodDetails);
       toast({ title: "Withdrawal Approved & Processed", description: `₹${request.amount} processed for ${request.userEmail}.`});
-      fetchRequests(); // Refresh list
+      fetchAdminData(); // Refresh list
     } catch (error: any) {
       console.error("Error approving withdrawal request:", error);
       toast({ title: "Approval Failed", description: error.message || "Could not approve withdrawal.", variant: "destructive" });
@@ -185,13 +190,12 @@ export default function AdminPage() {
     try {
       await updateWithdrawalRequestStatus(requestId, "rejected", "Rejected by admin.");
       toast({ title: "Withdrawal Request Rejected" });
-      fetchRequests();
+      fetchAdminData();
     } catch (error) {
       console.error("Error rejecting withdrawal request:", error);
       toast({ title: "Rejection Failed", variant: "destructive" });
     }
   };
-
 
   if (authLoading || !isClient || isAppConfigLoading || (!user || user.email !== ADMIN_EMAIL_CHECK)) {
     return (
@@ -210,7 +214,7 @@ export default function AdminPage() {
     );
   }
 
-  const getLabelForKey = (key: string) => { /* ... same as before ... */ 
+  const getLabelForKey = (key: string) => {
     switch (key) {
       case 'upiId': return 'UPI ID (for receiving payments)';
       case 'spinRefillPrice': return 'Spin Refill Price (₹)';
@@ -240,13 +244,34 @@ export default function AdminPage() {
         <CardContent className="p-6">
           <Tabs defaultValue="game-settings" className="w-full">
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 h-auto flex-wrap">
-              <TabsTrigger value="game-settings"><Settings className="mr-2 h-4 w-4"/>Game Settings</TabsTrigger>
-              <TabsTrigger value="news-ticker"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
+              <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund Req.</TabsTrigger>
               <TabsTrigger value="withdrawal-req"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal Req.</TabsTrigger>
+              <TabsTrigger value="game-settings"><Settings className="mr-2 h-4 w-4"/>Game Settings</TabsTrigger>
+              <TabsTrigger value="news-ticker"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
               <TabsTrigger value="leaderboard"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
-              <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
             </TabsList>
+
+             <TabsContent value="overview">
+              <Card className="bg-muted/20">
+                <CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users.</CardDescription></CardHeader>
+                <CardContent>
+                   <Table><TableHeader><TableRow><TableHead>User ID</TableHead><TableHead>Display Name</TableHead><TableHead>Email</TableHead><TableHead>Balance (₹)</TableHead><TableHead>Joined On</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {isLoadingData && <TableRow><TableCell colSpan={5} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>}
+                      {!isLoadingData && allUsers.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium text-xs">{u.id.substring(0,10)}...</TableCell>
+                          <TableCell>{u.displayName}</TableCell>
+                          <TableCell>{u.email}</TableCell>
+                          <TableCell>{u.balance.toFixed(2)}</TableCell>
+                          <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
+                        </TableRow>))}
+                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No users found.</TableCell></TableRow>)}
+                    </TableBody></Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="game-settings">
               <Card className="bg-muted/20">
@@ -295,8 +320,8 @@ export default function AdminPage() {
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingRequests && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
-                      {!isLoadingRequests && addFundRequests.map((req) => (
+                      {isLoadingData && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
+                      {!isLoadingData && addFundRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
                           <TableCell className="text-xs">{req.paymentReference}</TableCell>
@@ -308,7 +333,7 @@ export default function AdminPage() {
                               <Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
                             </>)}
                           </TableCell></TableRow>))}
-                      {!isLoadingRequests && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell></TableRow>)}
+                      {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell></TableRow>)}
                     </TableBody></Table>
                 </CardContent>
               </Card>
@@ -320,8 +345,8 @@ export default function AdminPage() {
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingRequests && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
-                      {!isLoadingRequests && withdrawalRequests.map((req) => (
+                      {isLoadingData && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
+                      {!isLoadingData && withdrawalRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
                           <TableCell className="text-xs">{req.paymentMethod === 'upi' ? `UPI: ${req.upiId}` : `Bank: ${req.bankDetails?.accountHolderName}, A/C ...${req.bankDetails?.accountNumber.slice(-4)}`}</TableCell>
@@ -333,21 +358,18 @@ export default function AdminPage() {
                               <Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
                             </>)}
                           </TableCell></TableRow>))}
-                      {!isLoadingRequests && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell></TableRow>)}
+                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell></TableRow>)}
                     </TableBody></Table>
                 </CardContent>
               </Card>
             </TabsContent>
             
-            {/* Placeholder Tabs for Leaderboard and Overview */}
+            {/* Placeholder Tabs for Leaderboard */}
             <TabsContent value="leaderboard"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard</CardTitle><CardDescription>Firestore integration needed.</CardDescription></CardHeader><CardContent><p>Leaderboard management coming soon.</p></CardContent></Card></TabsContent>
-            <TabsContent value="overview"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Users /> Overview</CardTitle><CardDescription>Firestore integration needed.</CardDescription></CardHeader><CardContent><p>User overview and stats coming soon.</p></CardContent></Card></TabsContent>
-
+            
           </Tabs>
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    
