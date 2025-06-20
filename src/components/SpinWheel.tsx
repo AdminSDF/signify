@@ -173,7 +173,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   return (
     <div
       className={cn(
-        "relative flex justify-center items-center my-8 select-none w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[450px] md:h-[450px] mx-auto",
+        "relative flex justify-center items-center my-8 select-none w-[320px] h-[320px] sm:w-[420px] sm:h-[420px] md:w-[480px] md:h-[480px] mx-auto",
         "transition-transform duration-150",
         onClick && !isSpinning && !isAnimatingRef.current && "cursor-pointer hover:scale-105 active:scale-95 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
       )}
@@ -265,3 +265,4 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
+

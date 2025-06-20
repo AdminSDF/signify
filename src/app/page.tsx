@@ -386,7 +386,13 @@ export default function HomePage() {
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
+      
+      <SpinifyGameHeader />
 
+      <div className="my-4 p-4 w-full max-w-3xl bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
+        Google AdSense Placeholder (e.g., Leaderboard 728x90)
+      </div>
+      
       {isClient && user && (
         <div className="w-full max-w-2xl flex justify-center my-4">
           <Card className="py-3 px-6 inline-flex items-center gap-3 shadow-md bg-primary-foreground/20 rounded-lg backdrop-blur-sm">
@@ -397,6 +403,10 @@ export default function HomePage() {
           </Card>
         </div>
       )}
+
+      <div className="my-4 p-4 w-full max-w-md bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
+        Google AdSense Placeholder (e.g., Medium Rectangle 300x250)
+      </div>
       
       {!user && isClient && (
          <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center my-8">
@@ -411,8 +421,6 @@ export default function HomePage() {
           </Card>
       )}
       
-      <SpinifyGameHeader />
-      
       <main className="flex flex-col items-center w-full max-w-2xl">
         <SpinWheel
           segments={wheelSegments}
@@ -421,6 +429,10 @@ export default function HomePage() {
           isSpinning={isSpinning}
           onClick={user && !isSpinning ? handleSpinClick : undefined} // Pass handleSpinClick if user logged in & not spinning
         />
+
+        <div className="my-4 p-4 w-full max-w-lg bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
+          Google AdSense Placeholder (e.g., Responsive Ad Unit)
+        </div>
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
         {user && (
@@ -431,7 +443,6 @@ export default function HomePage() {
                     : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span> (from balance). Paid today: {dailyPaidSpinsUsed}</>
                     }
                 </div>
-                {/* SpinButton component is removed */}
             </>
         )}
           <PrizeDisplay prize={currentPrize} />
@@ -464,4 +475,5 @@ export default function HomePage() {
     
 
     
+
 
