@@ -28,6 +28,7 @@ import {
   deleteDoc,
   writeBatch
 } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings } from '@/lib/appConfig';
 import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMIN_EMAIL } from '@/lib/appConfig';
 
@@ -45,6 +46,7 @@ const firebaseConfig: FirebaseOptions = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -124,6 +126,20 @@ export const updateUserData = async (userId: string, data: Partial<UserDocument>
   await updateDoc(userRef, updateData);
 };
 
+
+export const uploadProfilePhoto = async (userId: string, file: File): Promise<string> => {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("File is not an image.");
+  }
+  // Use a consistent file name to overwrite previous photo
+  const storageRef = ref(storage, `profile_photos/${userId}`);
+  
+  const snapshot = await uploadBytes(storageRef, file);
+  const downloadURL = await getDownloadURL(snapshot.ref);
+  
+  return downloadURL;
+};
+
 // --- Transaction Functions ---
 export interface TransactionData {
   userId: string;
@@ -137,34 +153,28 @@ export interface TransactionData {
 }
 
 export const addTransactionToFirestore = async (transactionDetails: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
-  const dataToSave: Omit<TransactionData, 'date'> & { date: Timestamp } = {
+  const dataToSave: Partial<TransactionData> & { userId: string, date: Timestamp, type: any, amount: number, description: string, status: any } = {
     userId: userId,
     type: transactionDetails.type,
     amount: transactionDetails.amount,
     description: transactionDetails.description,
-    status: transactionDetails.status,
+    status: transactionDetails.status || 'completed', // Default to completed if not provided
     date: Timestamp.now(),
   };
 
   // Only include optional fields if they are provided and are numbers
-  if (typeof transactionDetails.balanceBefore === 'number') {
+  if (typeof transactionDetails.balanceBefore === 'number' && !isNaN(transactionDetails.balanceBefore)) {
     dataToSave.balanceBefore = transactionDetails.balanceBefore;
   }
-  if (typeof transactionDetails.balanceAfter === 'number') {
+  if (typeof transactionDetails.balanceAfter === 'number' && !isNaN(transactionDetails.balanceAfter)) {
     dataToSave.balanceAfter = transactionDetails.balanceAfter;
   }
 
   // Log the exact data being sent for debugging
-  console.log("Attempting to save transaction:", JSON.stringify(dataToSave, (key, value) => {
-    if (value && typeof value === 'object' && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
-      return `Timestamp(seconds=${value.seconds}, nanoseconds=${value.nanoseconds})`;
-    }
-    return value;
-  }, 2));
+  console.log("Attempting to save transaction:", JSON.stringify(dataToSave, null, 2));
 
   try {
     const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave);
-    console.log("Transaction saved with ID:", docRef.id);
     return docRef.id;
   } catch (error) {
     console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction to Firestore. Data attempted:", JSON.stringify(dataToSave, null, 2), "Error:", error);
@@ -172,16 +182,29 @@ export const addTransactionToFirestore = async (transactionDetails: Omit<Transac
   }
 };
 
-
 export const getTransactionsFromFirestore = async (userId: string, count: number = 50): Promise<(TransactionData & {id: string})[]> => {
-  const q = query(
-    collection(db, TRANSACTIONS_COLLECTION),
-    where("userId", "==", userId),
-    orderBy("date", "desc"),
-    limit(count)
-  );
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (TransactionData & {id: string})));
+  try {
+    const q = query(
+      collection(db, TRANSACTIONS_COLLECTION),
+      where("userId", "==", userId),
+      orderBy("date", "desc"),
+      limit(count)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (TransactionData & {id: string})));
+  } catch(error: any) {
+      if (error.code === 'failed-precondition' && error.message.includes('index')) {
+        console.error(
+          "TRANSACTIONS_PAGE_ERROR: Firestore query requires an index. " +
+          "This usually happens when filtering by one field (e.g., 'userId') and ordering by another (e.g., 'date'). " +
+          "Please check the Firebase console (Firestore > Indexes) for a link/button to create the missing composite index. " +
+          "The error message in the console might contain a direct link to create it."
+        );
+      } else {
+        console.error("TRANSACTIONS_PAGE_ERROR: Error fetching transactions from Firestore:", error);
+      }
+      return []; // Return empty array on error
+  }
 };
 
 // --- App Configuration Functions ---
@@ -327,8 +350,8 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   const newBalance = currentBalance + amount;
   batch.update(userRef, { balance: newBalance });
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); // Create a new doc ref for transaction
-  const transactionPayload: TransactionData = { // Explicitly build the object
+  const transactionDocRef = doc(transactionCollRef); 
+  const transactionPayload: TransactionData = {
     userId: userId,
     type: 'credit',
     amount: amount,
@@ -357,8 +380,8 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const newBalance = currentBalance - amount;
   batch.update(userRef, { balance: newBalance });
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); // Create a new doc ref for transaction
-  const transactionPayload: TransactionData = { // Explicitly build the object
+  const transactionDocRef = doc(transactionCollRef); 
+  const transactionPayload: TransactionData = {
     userId: userId,
     type: 'debit',
     amount: amount,
@@ -377,9 +400,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
 };
 
 export {
-  app, auth, db, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
+  app, auth, db, storage, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
   Timestamp, FirebaseUser
 };
-
-    
