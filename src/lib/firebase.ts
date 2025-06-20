@@ -6,13 +6,13 @@ import {
   signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile, // Correctly imported
+  updateProfile,
   signOut as firebaseSignOut,
-  type User as FirebaseUser // Renamed to avoid conflict
+  type User as FirebaseUser
 } from "firebase/auth";
 import {
   getFirestore,
-  doc, // Imported here
+  doc,
   setDoc,
   getDoc,
   updateDoc,
@@ -29,7 +29,7 @@ import {
   writeBatch
 } from "firebase/firestore";
 import type { AppSettings } from '@/lib/appConfig';
-import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
+import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMIN_EMAIL } from '@/lib/appConfig';
 
 
 const firebaseConfig: FirebaseOptions = {
@@ -98,8 +98,8 @@ export const createUserData = async (
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
-    isAdmin: email === process.env.NEXT_PUBLIC_ADMIN_EMAIL || email === "jameafaizanrasool@gmail.com",
-    lastLogin: Timestamp.now(), // Set lastLogin during creation
+    isAdmin: email === (process.env.NEXT_PUBLIC_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL),
+    lastLogin: Timestamp.now(),
     totalWinnings: 0,
     totalSpinsPlayed: 0,
   };
@@ -117,7 +117,6 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
 
 export const updateUserData = async (userId: string, data: Partial<UserDocument>): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
-  // Ensure lastLogin is updated with serverTimestamp if it's part of the update
   const updateData = { ...data };
   if (data.hasOwnProperty('lastLogin')) {
     updateData.lastLogin = serverTimestamp() as Timestamp;
@@ -138,13 +137,34 @@ export interface TransactionData {
 }
 
 export const addTransactionToFirestore = async (transactionData: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
-  const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
-    ...transactionData,
-    userId,
-    date: Timestamp.now(),
-  });
-  return docRef.id;
+  try {
+    const dataToSave = {
+      ...transactionData,
+      userId,
+      date: Timestamp.now(),
+    };
+    // Log the data being sent for debugging
+    console.log("Attempting to save transaction:", JSON.stringify(dataToSave, (key, value) => {
+      // Firestore Timestamps can't be directly stringified, handle them
+      if (value && typeof value === 'object' && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
+        return `Timestamp(seconds=${value.seconds}, nanoseconds=${value.nanoseconds})`;
+      }
+      return value;
+    }, 2));
+
+    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave);
+    console.log("Transaction saved with ID:", docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction to Firestore directly. Data attempted:", JSON.stringify({
+      ...transactionData,
+      userId,
+      date: "Timestamp.now() placeholder" // Timestamp.now() cannot be stringified easily here
+    }, null, 2), "Error:", error);
+    throw error; // Re-throw the error so calling functions can also catch it
+  }
 };
+
 
 export const getTransactionsFromFirestore = async (userId: string, count: number = 50): Promise<(TransactionData & {id: string})[]> => {
   const q = query(
@@ -174,22 +194,17 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
     const docSnap = await getDoc(configRef);
     if (docSnap.exists()) {
       const fetchedData = docSnap.data();
-      // Merge fetched settings with defaults to ensure all keys are present
       const settings = { ...defaultAppSettings, ...(fetchedData?.settings || {}) };
       const newsItems = fetchedData?.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0
                         ? fetchedData.newsItems
                         : DEFAULT_NEWS_ITEMS;
       return { settings, newsItems };
     }
-
-    console.log(`App configuration document ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID} not found. Creating with defaults if possible (check rules).`);
-    // Try to create only if it doesn't exist. This might fail based on security rules.
-    // If it fails, the defaults are returned in the catch block anyway.
     await setDoc(configRef, defaults);
     return defaults;
   } catch (error) {
-    console.error(`Error in getAppConfiguration (fetching or creating ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID}). Using defaults. Error:`, error);
-    return defaults; // Return defaults on any error
+    console.error(`Error in getAppConfiguration. Using defaults. Error:`, error);
+    return defaults;
   }
 };
 
@@ -206,7 +221,7 @@ export const saveNewsItemsToFirestore = async (newsItems: string[]): Promise<voi
 
 // --- Withdrawal Request Functions ---
 export interface WithdrawalRequestData {
-  id?: string; // Firestore document ID
+  id?: string;
   userId: string;
   userEmail: string;
   amount: number;
@@ -255,7 +270,7 @@ export const updateWithdrawalRequestStatus = async (requestId: string, status: W
 
 // --- Add Fund Request Functions ---
 export interface AddFundRequestData {
-  id?: string; // Firestore document ID
+  id?: string;
   userId: string;
   userEmail: string;
   amount: number;
@@ -295,93 +310,57 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
   await updateDoc(requestRef, updateData);
 };
 
-// Helper to approve add fund and update balance
 export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
-  const currentBalance = userSnap.data()?.balance || 0;
+  const userData = userSnap.data() as UserDocument;
+  const currentBalance = userData.balance || 0;
   const newBalance = currentBalance + amount;
-
   batch.update(userRef, { balance: newBalance });
-
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); // Create a new doc reference
+  const transactionDocRef = doc(transactionCollRef);
   batch.set(transactionDocRef, {
-    userId,
-    type: 'credit',
-    amount,
+    userId, type: 'credit', amount,
     description: `Balance added (Admin Approval Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed',
-    date: Timestamp.now(),
-    balanceBefore: currentBalance,
-    balanceAfter: newBalance
+    status: 'completed', date: Timestamp.now(),
+    balanceBefore: currentBalance, balanceAfter: newBalance
   } as TransactionData);
-
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
-    status: "approved",
-    approvedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id // Store the new transaction's ID
+    status: "approved", approvedDate: Timestamp.now(), transactionId: transactionDocRef.id
   } as Partial<AddFundRequestData>);
-
   await batch.commit();
 };
 
-// Helper to approve withdrawal and update balance
 export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, paymentMethodDetails: string) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
-  const currentBalance = userSnap.data()?.balance || 0;
+  const userData = userSnap.data() as UserDocument;
+  const currentBalance = userData.balance || 0;
   if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
   const newBalance = currentBalance - amount;
-
   batch.update(userRef, { balance: newBalance });
-
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); // Create a new doc reference
+  const transactionDocRef = doc(transactionCollRef);
   batch.set(transactionDocRef, {
-    userId,
-    type: 'debit',
-    amount,
+    userId, type: 'debit', amount,
     description: `Withdrawal: ${paymentMethodDetails} (Admin Approval Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed',
-    date: Timestamp.now(),
-    balanceBefore: currentBalance,
-    balanceAfter: newBalance
+    status: 'completed', date: Timestamp.now(),
+    balanceBefore: currentBalance, balanceAfter: newBalance
   } as TransactionData);
-
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
-    status: "processed", // Changed from "approved" to "processed" as per previous logic
-    processedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id // Store the new transaction's ID
+    status: "processed", processedDate: Timestamp.now(), transactionId: transactionDocRef.id
   } as Partial<WithdrawalRequestData>);
-
   await batch.commit();
 };
 
-
 export {
-  app,
-  auth,
-  db, // db is already exported
-  doc, // Added doc to exports
-  getDoc, // Added getDoc to exports
-  googleProvider,
-  signInWithPopup,
-  firebaseSignOut,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-  Timestamp,
-  FirebaseUser // Export FirebaseUser type
+  app, auth, db, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+  Timestamp, FirebaseUser
 };
-// Removed 'type { User as FirebaseUser } from "firebase/auth";' as FirebaseUser is now directly imported and exported.
-// Explicitly re-exporting getDoc and doc for clarity and to ensure they are available.
-// db was already exported.
