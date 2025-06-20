@@ -70,7 +70,7 @@ export default function ProfilePage() {
     try {
       const userData = await getUserData(user.uid);
       if (userData) {
-        setBalance(userData.balance);
+        setBalance(userData.balance ?? 0);
         setUpiIdInput(userData.upiIdForWithdrawal || '');
         if (userData.bankDetailsForWithdrawal) {
           setAccountHolderName(userData.bankDetailsForWithdrawal.accountHolderName || '');
@@ -146,8 +146,8 @@ export default function ProfilePage() {
     }
   };
 
-  const minSafeWithdrawalAmount = appSettings?.minWithdrawalAmount ?? initialSettings.minWithdrawalAmount;
-  const minSafeAddBalanceAmount = appSettings?.minAddBalanceAmount ?? initialSettings.minAddBalanceAmount;
+  const minSafeWithdrawalAmount = appSettings?.minWithdrawalAmount ?? initialSettings.minWithdrawalAmount ?? 0;
+  const minSafeAddBalanceAmount = appSettings?.minAddBalanceAmount ?? initialSettings.minAddBalanceAmount ?? 0;
 
   const handlePaymentMethodChange = (value: string) => {
     setSelectedPaymentMethod(value as PaymentMethod);
@@ -329,7 +329,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex items-center p-6 border-2 border-primary rounded-lg bg-primary/10 shadow-inner">
             <DollarSign className="h-8 w-8 mr-4 text-primary" />
-            <div><p className="text-sm font-medium text-primary">Current Balance</p><p className="font-bold text-4xl text-primary">{balance !== null ? `₹${balance.toFixed(2)}` : 'Loading...'}</p></div>
+            <div><p className="text-sm font-medium text-primary">Current Balance</p><p className="font-bold text-4xl text-primary">{typeof balance === 'number' ? `₹${balance.toFixed(2)}` : 'Loading...'}</p></div>
           </div>
 
           <Card className="p-4 pt-2 bg-card shadow-md">
@@ -340,7 +340,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Label htmlFor="addBalanceAmount" className="text-sm font-medium text-muted-foreground">Or Enter Amount (₹)</Label>
-                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${(minSafeAddBalanceAmount || 0).toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
+                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${minSafeAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < minSafeAddBalanceAmount && (<p className="text-xs text-destructive text-center mt-1">Min amount to add is ₹{minSafeAddBalanceAmount.toFixed(2)}.</p>)}
               </div>
               <Button
@@ -359,7 +359,7 @@ export default function ProfilePage() {
             <CardContent className="space-y-4 p-2">
               <div>
                 <Label htmlFor="withdrawalAmount" className="text-sm font-medium text-muted-foreground">Amount to Withdraw (₹)</Label>
-                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${(minSafeWithdrawalAmount || 0).toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
+                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${minSafeWithdrawalAmount.toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
                 {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < minSafeWithdrawalAmount && (<p className="text-xs text-destructive text-center mt-1">Min withdrawal is ₹{minSafeWithdrawalAmount.toFixed(2)}.</p>)}
               </div>
               <div>
