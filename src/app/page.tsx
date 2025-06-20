@@ -4,18 +4,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Home, Shield, DollarSign, ShieldAlert } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
 import PrizeDisplay from '@/components/PrizeDisplay';
 import TipGeneratorButton from '@/components/TipGeneratorButton';
-import TipModal from '@/components/TipModal';
-import PaymentModal from '@/components/PaymentModal';
 import { useSound } from '@/hooks/useSound';
 import { useToast } from "@/hooks/use-toast";
 import type { SpinHistory } from '@/ai/flows/spinify-tip-generator';
 import { getAiTipAction, type TipGenerationResult } from './actions/generateTipAction';
-import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
@@ -29,6 +27,12 @@ import {
 
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
+
+// Dynamically import components that are not critical for the initial render
+const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
+const TipModal = dynamic(() => import('@/components/TipModal'), { ssr: false });
+const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
+
 
 interface WheelSegmentWithProbability extends Segment {
   probability: number;
