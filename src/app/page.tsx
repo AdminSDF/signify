@@ -133,12 +133,12 @@ export default function HomePage() {
         }
 
         // At this point, `data` is guaranteed to be valid user data.
-        setUserBalance(data.balance);
-        setSpinsAvailable(data.spinsAvailable);
+        setUserBalance(data.balance ?? 0);
+        setSpinsAvailable(data.spinsAvailable ?? 0);
 
         const todayStr = new Date().toLocaleDateString('en-CA');
         if (data.lastPaidSpinDate === todayStr) {
-          setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
+          setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed ?? 0);
         } else {
           // Reset daily spin count if it's a new day
           setDailyPaidSpinsUsed(0);
