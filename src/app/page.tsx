@@ -19,25 +19,14 @@ import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
+import { auth } from '@/lib/firebase'; // Import auth for currentUser metadata
 import {
   getUserData,
   updateUserData,
   addTransactionToFirestore,
-  // UserDocument, // Not directly used here, type comes via getUserData
   Timestamp
 } from '@/lib/firebase';
-// import { AppSettings } from '@/lib/appConfig'; // AppSettings type is now primarily from AuthContext
 
-// Define TransactionEvent locally or import if centralized
-// This was for localStorage, Firestore transactions are handled by addTransactionToFirestore
-// export interface TransactionEvent {
-//   id?: string;
-//   type: 'credit' | 'debit';
-//   amount: number;
-//   description: string;
-//   date: string;
-//   status: 'completed' | 'pending' | 'failed';
-// }
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
 
@@ -57,7 +46,7 @@ const wheelSegments: WheelSegmentWithProbability[] = [
 ];
 
 export default function HomePage() {
-  const { user, authLoading, appSettings, isAppConfigLoading } = useAuth(); // Use specific loading flags
+  const { user, authLoading, appSettings, isAppConfigLoading } = useAuth();
   const router = useRouter();
 
   const [isSpinning, setIsSpinning] = useState(false);
@@ -93,22 +82,23 @@ export default function HomePage() {
     if (!isClient) return;
 
     if (authLoading || isAppConfigLoading) {
-      // Ensure userDataLoading remains true if context is still loading
-      if (!userDataLoading) setUserDataLoading(true);
+      if (!userDataLoading) setUserDataLoading(true); // Keep userDataLoading true if context is still loading
       return;
     }
 
     if (!user) {
-      setUserDataLoading(false); // No user, so no user data to load.
-      // Clear any stale user-specific state if necessary
+      setUserDataLoading(false);
       setUserBalance(0);
       setSpinsAvailable(0);
       setDailyPaidSpinsUsed(0);
+      // No user, so no admin view check needed here
+      setShowAdminChoiceView(false);
       return;
     }
 
-    // User is present, and context is loaded. Fetch user data.
-    setUserDataLoading(true);
+    // User is present, and context (auth & app config) is loaded. Fetch user data.
+    if (!userDataLoading) setUserDataLoading(true); // Set to true before fetch
+
     getUserData(user.uid)
       .then(data => {
         if (data) {
@@ -119,42 +109,58 @@ export default function HomePage() {
             setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
           } else {
             setDailyPaidSpinsUsed(0);
-            updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr });
+            // Avoid fire-and-forget, handle potential errors
+            updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
+              .catch(err => console.warn("Failed to reset daily spins on date change:", err));
           }
           setLastPaidSpinDate(data.lastPaidSpinDate || todayStr);
           if (data.isAdmin && user.email === ADMIN_EMAIL) {
             setShowAdminChoiceView(true);
+          } else {
+            setShowAdminChoiceView(false);
           }
         } else {
-          console.error("User document not found in Firestore for UID:", user.uid, "This can happen if document creation failed during signup.");
-          // Fallback using appSettings (might not be ideal if user doc should exist)
+          // User document not found
+          const firebaseCurrentUser = auth.currentUser; // Get current user from Firebase Auth SDK
+          const creationTime = firebaseCurrentUser?.metadata?.creationTime ? new Date(firebaseCurrentUser.metadata.creationTime).getTime() : 0;
+          const lastSignInTime = firebaseCurrentUser?.metadata?.lastSignInTime ? new Date(firebaseCurrentUser.metadata.lastSignInTime).getTime() : 0;
+
+          // Check if it's a newly created user session (creation time and last sign-in are same and recent)
+          const isNewlyCreatedUserSession = creationTime === lastSignInTime && (Date.now() - creationTime < 15000); // 15-second window
+
+          if (isNewlyCreatedUserSession) {
+            console.warn("User document not found for newly created user UID:", user.uid, "Using defaults. Document might be created shortly.");
+            // Silently use defaults, assuming doc will appear soon or on next page load/interaction.
+          } else {
+            console.error("User document not found in Firestore for UID:", user.uid, "This can happen if document creation failed or was deleted.");
+            toast({ title: "Data Sync Issue", description: "Could not fully load game data. Defaults applied. Re-login if issues persist.", variant: "destructive" });
+          }
+          // Apply defaults in both cases (new user or actual missing doc for existing user)
           setUserBalance(appSettings.initialBalanceForNewUsers);
           setSpinsAvailable(appSettings.maxSpinsInBundle);
           setDailyPaidSpinsUsed(0);
-          toast({ title: "Data Sync Issue", description: "Could not fully load game data. Defaults applied. Re-login if issues persist.", variant: "destructive" });
+          setShowAdminChoiceView(false); // Ensure admin view is off if data is missing
         }
       })
       .catch(error => {
         console.error("Error fetching user data:", error);
         toast({ title: "Error Loading User Data", description: "Could not load your game progress. Try refreshing.", variant: "destructive" });
-        // Set some safe defaults or error state display
-        setUserBalance(0);
+        setUserBalance(0); // Fallback on error
         setSpinsAvailable(0);
+        setShowAdminChoiceView(false);
       })
       .finally(() => {
         setUserDataLoading(false);
       });
-  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]);
+  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]); // Removed userDataLoading from deps
 
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
     if (!user) return;
-    const currentBal = userBalance; // Capture balance before potential update in the same tick
+    const currentBal = userBalance;
     try {
       await addTransactionToFirestore({
-        ...details, // spread the details passed
-        // userId: user.uid, // addTransactionToFirestore adds this
-        // date: Timestamp.now(), // addTransactionToFirestore adds this
+        ...details,
         balanceBefore: currentBal,
         balanceAfter: details.type === 'credit' ? currentBal + details.amount : currentBal - details.amount,
       }, user.uid);
@@ -219,10 +225,10 @@ export default function HomePage() {
       const costForThisSpin = getCurrentPaidSpinCost(currentDailySpins);
       if (userBalance >= costForThisSpin) {
         const newBalance = userBalance - costForThisSpin;
-        
+
         addTransaction({ type: 'debit', amount: costForThisSpin, description: `Spin Cost (Paid Tier ${costForThisSpin === appSettings.tier1Cost ? 1 : costForThisSpin === appSettings.tier2Cost ? 2 : 3})` });
-        setUserBalance(newBalance); // Optimistic UI update for balance
-        
+        setUserBalance(newBalance);
+
         const newDailySpinsUsed = currentDailySpins + 1;
         setDailyPaidSpinsUsed(newDailySpinsUsed);
 
@@ -241,7 +247,7 @@ export default function HomePage() {
   }, [
     isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction,
     dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router, appSettings,
-    authLoading, isAppConfigLoading, userDataLoading // Include all loading flags
+    authLoading, isAppConfigLoading, userDataLoading
   ]);
 
   const handleSpinComplete = useCallback(async (winningSegment: Segment) => {
@@ -263,11 +269,11 @@ export default function HomePage() {
       addTransaction({ type: 'debit', amount: 0, description: `Spin Result: ${winningSegment.text}` });
       if (winningSegment.text === 'Try Again') playSound('tryAgain'); else playSound('win');
     }
-    setUserBalance(newBalance); // Optimistic UI update
+    setUserBalance(newBalance);
 
     const userData = await getUserData(user.uid);
-    await updateUserData(user.uid, { 
-        balance: newBalance, 
+    await updateUserData(user.uid, {
+        balance: newBalance,
         totalSpinsPlayed: (userData?.totalSpinsPlayed || 0) + 1,
         totalWinnings: (userData?.totalWinnings || 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
     });
@@ -283,15 +289,9 @@ export default function HomePage() {
     setTipLoading(false);
   }, [spinHistory, toast, user]);
 
-  const handlePaymentConfirm = useCallback(async () => { // For spin bundle purchase
+  const handlePaymentConfirm = useCallback(async () => {
     if (!user) return;
     setShowPaymentModal(false);
-
-    // For spin bundle purchase, we assume payment reference is handled by the modal/user.
-    // This directly gives spins and debits from balance if price is non-zero.
-    // Ideally, this would create an "addFundRequest" for the bundle price
-    // and admin approval would grant spins + update balance.
-    // For now, simplified: if spinRefillPrice > 0, it costs balance.
 
     const costOfBundle = appSettings.spinRefillPrice;
     const spinsInBundle = appSettings.maxSpinsInBundle;
@@ -301,22 +301,21 @@ export default function HomePage() {
         return;
     }
 
-    const newSpins = (spinsAvailable < 0 ? 0 : spinsAvailable) + spinsInBundle; // Ensure spinsAvailable isn't negative
+    const newSpins = (spinsAvailable < 0 ? 0 : spinsAvailable) + spinsInBundle;
     let newBalance = userBalance;
 
     if (costOfBundle > 0) {
         newBalance -= costOfBundle;
         addTransaction({ type: 'debit', amount: costOfBundle, description: `Purchased ${spinsInBundle} Spins Bundle`});
     } else {
-        // If price is 0, it's like a free refill, still log it if desired.
         addTransaction({ type: 'credit', amount: 0, description: `Claimed free ${spinsInBundle} Spins Bundle`});
     }
-    
-    setUserBalance(newBalance); // Optimistic update
-    setSpinsAvailable(newSpins); // Optimistic update
+
+    setUserBalance(newBalance);
+    setSpinsAvailable(newSpins);
 
     await updateUserData(user.uid, { balance: newBalance, spinsAvailable: newSpins });
-    
+
     toast({ title: "Spins Acquired!", description: `You now have ${newSpins} spins.`, variant: "default" });
   }, [toast, addTransaction, user, appSettings, userBalance, spinsAvailable]);
 
@@ -361,7 +360,6 @@ export default function HomePage() {
       <SpinifyGameHeader />
 
       <div className="my-4 w-full max-w-3xl text-center">
-        {/* AdSense Ad Unit 1: 728x90 */}
         <ins className="adsbygoogle"
              style={{display:"inline-block",width:"728px",height:"90px"}}
              data-ad-client="ca-pub-1425274923062587"
@@ -383,10 +381,16 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* AdSense Placeholder 2: 300x250 (Below Balance Card) */}
-      <div className="my-4 p-4 w-full max-w-xs bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
-         300x250 Ad Unit
-      </div>
+      <div className="my-4 w-full max-w-lg">
+           <ins className="adsbygoogle"
+               style={{display:"block"}}
+               data-ad-format="auto"
+               data-full-width-responsive={true}
+               data-ad-client="ca-pub-1425274923062587"
+               data-ad-slot="2603795181"></ins>
+          <script dangerouslySetInnerHTML={{ __html: `(adsbygoogle = window.adsbygoogle || []).push({});` }}/>
+        </div>
+
 
       {!user && isClient && (
          <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center my-8">
@@ -406,17 +410,6 @@ export default function HomePage() {
           onClick={user && !isSpinning ? handleSpinClick : undefined}
         />
 
-        {/* AdSense Ad Unit 3: Fluid (Below Spin Wheel) */}
-        <div className="my-4 w-full max-w-lg">
-           <ins className="adsbygoogle"
-               style={{display:"block"}}
-               data-ad-format="fluid"
-               data-ad-layout-key="-6t+ed+2i-1n-4w"
-               data-ad-client="ca-pub-1425274923062587"
-               data-ad-slot="2603795181"></ins> {/* Corrected from 7236071118 if this is the intended responsive */}
-          <script dangerouslySetInnerHTML={{ __html: `(adsbygoogle = window.adsbygoogle || []).push({});` }}/>
-        </div>
-
         <div className="my-8 w-full flex flex-col items-center gap-4">
         {user && (
             <>
@@ -434,7 +427,8 @@ export default function HomePage() {
       </main>
 
       <TipModal isOpen={showTipModal} onClose={() => setShowTipModal(false)} tip={generatedTip} isLoading={tipLoading} error={tipError} onGenerateTip={handleGenerateTip} />
-      <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} amount={appSettings.spinRefillPrice} spinsToGet={appSettings.maxSpinsInBundle}/>
+      <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} appName={appSettings.appName} amount={appSettings.spinRefillPrice} spinsToGet={appSettings.maxSpinsInBundle}/>
     </div>
   );
 }
+

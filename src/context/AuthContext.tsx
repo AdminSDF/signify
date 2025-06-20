@@ -9,7 +9,7 @@ import {
   firebaseSignOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile, // Import updateProfile
+  updateProfile,
   type FirebaseUser,
   createUserData as createFirestoreUser,
   getAppConfiguration,
@@ -22,11 +22,11 @@ import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS 
 
 interface AuthContextType {
   user: FirebaseUser | null;
-  loading: boolean; 
-  authLoading: boolean; 
+  loading: boolean;
+  authLoading: boolean;
   appSettings: AppSettings;
   newsItems: string[];
-  isAppConfigLoading: boolean; 
+  isAppConfigLoading: boolean;
   refreshAppConfig: () => Promise<void>;
   signUpWithEmailPassword: (credentials: SignUpCredentials) => Promise<void>;
   loginWithEmailPassword: (credentials: LoginCredentials) => Promise<void>;
@@ -37,49 +37,62 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [fbAuthLoading, setFbAuthLoading] = useState(true); 
+  const [fbAuthLoading, setFbAuthLoading] = useState(true);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [newsItems, setNewsItems] = useState<string[]>(DEFAULT_NEWS_ITEMS);
-  const [fbAppConfigLoading, setFbAppConfigLoading] = useState(true); 
+  const [fbAppConfigLoading, setFbAppConfigLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
 
   const fetchAppConfig = useCallback(async () => {
-    if (!fbAppConfigLoading) setFbAppConfigLoading(true); // Ensure loading is true if re-fetching
+    if (!fbAppConfigLoading) setFbAppConfigLoading(true);
     try {
       const config = await getAppConfiguration();
       setAppSettings(config.settings);
       setNewsItems(config.newsItems);
     } catch (error) {
       console.error("AuthContext: Error in fetchAppConfig:", error);
-      setAppSettings(defaultAppSettings); // Fallback to defaults
-      setNewsItems(DEFAULT_NEWS_ITEMS); // Fallback to defaults
+      setAppSettings(defaultAppSettings);
+      setNewsItems(DEFAULT_NEWS_ITEMS);
       toast({
-        title: "Could not load app settings. Using defaults.",
-        description: "There was an issue fetching app configuration from the server.",
+        title: "App Config Load Issue",
+        description: "Using default app settings. Problem fetching live configuration.",
         variant: "destructive"
       });
     } finally {
       setFbAppConfigLoading(false);
     }
-  }, [toast, fbAppConfigLoading]); // fbAppConfigLoading in deps to ensure it's current
+  }, [fbAppConfigLoading, toast]); // Added fbAppConfigLoading
 
   useEffect(() => {
     fetchAppConfig();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Fetch app config once on initial mount
+  }, []);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        try {
-          // Update lastLogin, but ensure it doesn't interfere with initial profile update
-          if(firebaseUser.displayName) { // Attempt update only if displayName is likely set
-             await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+        const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
+        const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
+
+        // Only update lastLogin if it's not a brand new user session (creation and last sign-in are not the same and very recent)
+        // This check helps avoid trying to update lastLogin before createUserData has finished for a new user.
+        const isTrulyNewSession = creationTime === lastSignInTime && (Date.now() - creationTime < 10000); // 10-second threshold
+
+        if (!isTrulyNewSession) {
+          try {
+            // Check if document exists before updating lastLogin to avoid errors on first very rapid login after signup if doc creation is slow
+            // This is an extra precaution, createUserData should set initial lastLogin
+             const userDoc = await getDoc(doc(auth.firestore, 'users', firebaseUser.uid));
+             if (userDoc.exists()) {
+                await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+             } else {
+                console.warn("User document not found for lastLogin update, possibly very new user:", firebaseUser.uid);
+             }
+          } catch (updateError) {
+            console.warn("Could not update lastLogin on auth state change:", updateError);
           }
-        } catch (updateError) {
-          console.warn("Could not update lastLogin on auth state change:", updateError);
         }
       }
       setFbAuthLoading(false);
@@ -88,15 +101,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const signUpWithEmailPassword = async ({ email, password, displayName }: SignUpCredentials) => {
-    setFbAuthLoading(true); 
+    setFbAuthLoading(true);
     let currentAppSettings = appSettings;
-    if (fbAppConfigLoading) { // If config is still loading, fetch it before creating user
+    if (fbAppConfigLoading) {
         try {
-            const config = await getAppConfiguration();
+            const config = await getAppConfiguration(); // ensure we have latest settings for new user
             currentAppSettings = config.settings;
+            if (fbAppConfigLoading) setFbAppConfigLoading(false); // If it was loading, mark as loaded
         } catch (e) {
-            console.error("Using default app settings for new user due to fetch error:", e);
-            currentAppSettings = defaultAppSettings; // Fallback
+            console.error("Using default app settings for new user due to fetch error during signup:", e);
+            currentAppSettings = defaultAppSettings;
         }
     }
 
@@ -104,18 +118,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
         await updateProfile(userCredential.user, { displayName });
-        // Fetch the photoURL from the userCredential, though it might be null
         const photoURL = userCredential.user.photoURL;
-        
+
         await createFirestoreUser(
           userCredential.user.uid,
-          userCredential.user.email, // email from userCredential is more reliable
+          userCredential.user.email,
           displayName,
-          photoURL, // Pass photoURL
-          currentAppSettings 
+          photoURL,
+          currentAppSettings
         );
-        
-        // The user object in AuthContext will update via onAuthStateChanged with the new displayName
         toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
         router.push('/');
       }
@@ -128,17 +139,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       else if (error.code === 'auth/invalid-credential') description = 'The email/password is not valid.';
       toast({ variant: "destructive", title: "Sign Up Failed", description });
     } finally {
-      // setFbAuthLoading(false); // Auth state change will handle this
+      // setFbAuthLoading(false); // Auth state change handles this
     }
   };
 
   const loginWithEmailPassword = async ({ email, password }: LoginCredentials) => {
-    setFbAuthLoading(true); 
+    setFbAuthLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      if (userCredential.user) {
-        await updateUserData(userCredential.user.uid, { lastLogin: Timestamp.now() });
-      }
+      // lastLogin update is handled by onAuthStateChanged
       toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/');
     } catch (error: any) {
@@ -153,7 +162,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       toast({ variant: "destructive", title: "Login Failed", description });
     } finally {
-      // setFbAuthLoading(false); // Auth state change will handle this
+      // setFbAuthLoading(false); // Auth state change handles this
     }
   };
 
@@ -162,7 +171,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await firebaseSignOut(auth);
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login');
-      setUser(null); // Explicitly clear user state on logout
+      setUser(null);
     } catch (error: any) {
       console.error("Error during logout (Code:", error.code, "):", error.message);
       toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
@@ -171,11 +180,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const contextValue = {
     user,
-    loading: fbAuthLoading || fbAppConfigLoading, 
-    authLoading: fbAuthLoading, 
+    loading: fbAuthLoading || fbAppConfigLoading,
+    authLoading: fbAuthLoading,
     appSettings,
     newsItems,
-    isAppConfigLoading: fbAppConfigLoading, 
+    isAppConfigLoading: fbAppConfigLoading,
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,

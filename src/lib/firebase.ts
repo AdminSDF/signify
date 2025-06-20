@@ -1,33 +1,34 @@
 
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
-import { 
-  getAuth, 
+import {
+  getAuth,
   GoogleAuthProvider,
-  signInWithPopup, 
+  signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile, // Added import for updateProfile
-  signOut as firebaseSignOut 
+  updateProfile, // Already correctly imported
+  signOut as firebaseSignOut,
+  type User as FirebaseUser // Renamed to avoid conflict
 } from "firebase/auth";
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  addDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  orderBy, 
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
   limit,
   Timestamp,
   serverTimestamp,
   deleteDoc,
   writeBatch
 } from "firebase/firestore";
-import type { AppSettings } from '@/lib/appConfig'; 
+import type { AppSettings } from '@/lib/appConfig';
 import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 
 
@@ -80,9 +81,9 @@ export interface UserDocument {
 }
 
 export const createUserData = async (
-  userId: string, 
-  email: string | null, 
-  displayName: string | null, 
+  userId: string,
+  email: string | null,
+  displayName: string | null,
   photoURL: string | null,
   initialAppSettings: AppSettings
 ): Promise<void> => {
@@ -97,8 +98,8 @@ export const createUserData = async (
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
-    isAdmin: email === process.env.NEXT_PUBLIC_ADMIN_EMAIL || email === "jameafaizanrasool@gmail.com", 
-    lastLogin: Timestamp.now(),
+    isAdmin: email === process.env.NEXT_PUBLIC_ADMIN_EMAIL || email === "jameafaizanrasool@gmail.com",
+    lastLogin: Timestamp.now(), // Set lastLogin during creation
     totalWinnings: 0,
     totalSpinsPlayed: 0,
   };
@@ -116,7 +117,12 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
 
 export const updateUserData = async (userId: string, data: Partial<UserDocument>): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
-  await updateDoc(userRef, { ...data, lastLogin: serverTimestamp() });
+  // Ensure lastLogin is updated with serverTimestamp if it's part of the update
+  const updateData = { ...data };
+  if (data.hasOwnProperty('lastLogin')) {
+    updateData.lastLogin = serverTimestamp() as Timestamp;
+  }
+  await updateDoc(userRef, updateData);
 };
 
 // --- Transaction Functions ---
@@ -127,8 +133,8 @@ export interface TransactionData {
   description: string;
   date: Timestamp;
   status: 'completed' | 'pending' | 'failed';
-  balanceBefore?: number; 
-  balanceAfter?: number;  
+  balanceBefore?: number;
+  balanceAfter?: number;
 }
 
 export const addTransactionToFirestore = async (transactionData: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
@@ -142,9 +148,9 @@ export const addTransactionToFirestore = async (transactionData: Omit<Transactio
 
 export const getTransactionsFromFirestore = async (userId: string, count: number = 50): Promise<(TransactionData & {id: string})[]> => {
   const q = query(
-    collection(db, TRANSACTIONS_COLLECTION), 
-    where("userId", "==", userId), 
-    orderBy("date", "desc"), 
+    collection(db, TRANSACTIONS_COLLECTION),
+    where("userId", "==", userId),
+    orderBy("date", "desc"),
     limit(count)
   );
   const querySnapshot = await getDocs(q);
@@ -168,19 +174,20 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
     const docSnap = await getDoc(configRef);
     if (docSnap.exists()) {
       const fetchedData = docSnap.data();
-      const settings = { ...defaultAppSettings, ...(fetchedData.settings || {}) };
-      const newsItems = fetchedData.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0 
-                        ? fetchedData.newsItems 
+      // Merge fetched settings with defaults to ensure all keys are present
+      const settings = { ...defaultAppSettings, ...(fetchedData?.settings || {}) };
+      const newsItems = fetchedData?.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0
+                        ? fetchedData.newsItems
                         : DEFAULT_NEWS_ITEMS;
       return { settings, newsItems };
     }
-    
+
     console.log(`App configuration document ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID} not found. Creating with defaults.`);
-    await setDoc(configRef, defaults);
+    await setDoc(configRef, defaults); // Attempt to create if not exists
     return defaults;
   } catch (error) {
-    console.error(`Error in getAppConfiguration (fetching or creating ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID}):`, error);
-    return defaults;
+    console.error(`Error in getAppConfiguration (fetching or creating ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID}). Using defaults. Error:`, error);
+    return defaults; // Return defaults on any error
   }
 };
 
@@ -212,7 +219,7 @@ export interface WithdrawalRequestData {
   status: "pending" | "approved" | "rejected" | "processed";
   processedDate?: Timestamp;
   adminNotes?: string;
-  transactionId?: string; 
+  transactionId?: string;
 }
 
 export const createWithdrawalRequest = async (data: Omit<WithdrawalRequestData, 'requestDate' | 'status' | 'id'>): Promise<string> => {
@@ -250,12 +257,12 @@ export interface AddFundRequestData {
   userId: string;
   userEmail: string;
   amount: number;
-  paymentReference: string; 
+  paymentReference: string;
   requestDate: Timestamp;
   status: "pending" | "approved" | "rejected";
   approvedDate?: Timestamp;
   adminNotes?: string;
-  transactionId?: string; 
+  transactionId?: string;
 }
 
 export const createAddFundRequest = async (data: Omit<AddFundRequestData, 'requestDate' | 'status' | 'id'>): Promise<string> => {
@@ -290,16 +297,16 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
 export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-  
+
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const currentBalance = userSnap.data()?.balance || 0;
   const newBalance = currentBalance + amount;
-  
+
   batch.update(userRef, { balance: newBalance });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); 
+  const transactionDocRef = doc(transactionCollRef);
   batch.set(transactionDocRef, {
     userId,
     type: 'credit',
@@ -310,12 +317,12 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
     balanceBefore: currentBalance,
     balanceAfter: newBalance
   } as TransactionData);
-  
+
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
-  batch.update(requestRef, { 
-    status: "approved", 
+  batch.update(requestRef, {
+    status: "approved",
     approvedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id 
+    transactionId: transactionDocRef.id
   } as Partial<AddFundRequestData>);
 
   await batch.commit();
@@ -335,40 +342,41 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   batch.update(userRef, { balance: newBalance });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); 
+  const transactionDocRef = doc(transactionCollRef);
   batch.set(transactionDocRef, {
     userId,
     type: 'debit',
     amount,
     description: `Withdrawal: ${paymentMethodDetails} (Admin Approval Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed', 
+    status: 'completed',
     date: Timestamp.now(),
     balanceBefore: currentBalance,
     balanceAfter: newBalance
   } as TransactionData);
-  
+
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
-  batch.update(requestRef, { 
-    status: "processed", 
+  batch.update(requestRef, {
+    status: "processed",
     processedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id 
+    transactionId: transactionDocRef.id
   } as Partial<WithdrawalRequestData>);
 
   await batch.commit();
 };
 
 
-export { 
-  app, 
-  auth, 
+export {
+  app,
+  auth,
   db,
-  googleProvider, 
-  signInWithPopup, 
+  googleProvider,
+  signInWithPopup,
   firebaseSignOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile, // Added updateProfile to exports
-  Timestamp
+  updateProfile,
+  Timestamp,
+  FirebaseUser // Export FirebaseUser type
 };
-export type { User as FirebaseUser } from "firebase/auth";
+// Removed 'type { User as FirebaseUser } from "firebase/auth";' as FirebaseUser is now directly imported and exported.
 
