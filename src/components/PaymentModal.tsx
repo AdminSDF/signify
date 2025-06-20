@@ -107,7 +107,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 rel="noopener noreferrer"
                 className="w-full"
               >
-                <Button variant="outline" className="w-full">
+                <Button variant="secondary" className="w-full">
                   <ExternalLink className="mr-2 h-4 w-4" />
                   Pay with UPI App (₹{amount.toFixed(2)})
                 </Button>

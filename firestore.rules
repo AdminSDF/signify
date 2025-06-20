@@ -1,12 +1,9 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------------------------------------------------------------
-    // Helper Functions
-    // ---------------------------------------------------------------------
+    // --- Helper Functions ---
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -14,195 +11,66 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    function isAdminByEmail(auth) {
-      return auth != null && auth.token.email_verified && auth.token.email == "jameafaizanrasool@gmail.com";
+
+    // Admin check based on email in the auth token.
+    function isAuthUserAdmin() {
+        return isAuthenticated() && request.auth.token.email == "jameafaizanrasool@gmail.com";
     }
 
-    function getIncomingData() {
-      return request.resource.data;
-    }
-
-    function getExistingData() {
-      return resource.data;
-    }
-
-    function isUserAdmin(userId) {
-      return isAuthenticated() &&
-             userId != null && userId != "" &&
-             exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
-    }
-    
-    function isAdmin(uid) {
-      return isUserAdmin(uid) || isAdminByEmail(request.auth);
-    }
-
-    // ---------------------------------------------------------------------
-    // USERS Collection
-    // ---------------------------------------------------------------------
+    // --- Collections ---
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin(request.auth.uid);
+      allow get: if isOwner(userId) || isAuthUserAdmin();
+      allow list: if isAuthUserAdmin();
 
       allow create: if isOwner(userId) &&
-        getIncomingData().uid == userId &&
-        getIncomingData().email == request.auth.token.email &&
-        getIncomingData().createdAt == request.time &&
-        getIncomingData().balance is number &&
-        getIncomingData().spinsAvailable is number &&
-        getIncomingData().dailyPaidSpinsUsed == 0 &&
-        getIncomingData().lastPaidSpinDate is string &&
-        (getIncomingData().isAdmin == false || isAdminByEmail(request.auth)) &&
-        getIncomingData().totalWinnings == 0 &&
-        getIncomingData().totalSpinsPlayed == 0 &&
-        (!('lastLogin' in getIncomingData()) || getIncomingData().lastLogin == request.time) &&
-        (!('upiIdForWithdrawal' in getIncomingData()) || getIncomingData().upiIdForWithdrawal is string) &&
-        (!('bankDetailsForWithdrawal' in getIncomingData()) || (
-            getIncomingData().bankDetailsForWithdrawal.accountHolderName is string &&
-            getIncomingData().bankDetailsForWithdrawal.accountNumber is string &&
-            getIncomingData().bankDetailsForWithdrawal.ifscCode is string
-        )) &&
-        getIncomingData().keys().hasOnly([
-          'uid', 'email', 'displayName', 'photoURL', 'createdAt', 'balance',
-          'spinsAvailable', 'dailyPaidSpinsUsed', 'lastPaidSpinDate', 'isAdmin',
-          'lastLogin', 'totalWinnings', 'totalSpinsPlayed',
-          'upiIdForWithdrawal', 'bankDetailsForWithdrawal'
-        ]);
-
+        request.resource.data.uid == userId &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.balance is number &&
+        request.resource.data.spinsAvailable is number &&
+        request.resource.data.dailyPaidSpinsUsed == 0 &&
+        request.resource.data.totalWinnings == 0 &&
+        request.resource.data.totalSpinsPlayed == 0;
+        
       allow update: if (isOwner(userId) &&
-        getIncomingData().uid == getExistingData().uid &&
-        getIncomingData().email == getExistingData().email &&
-        getIncomingData().createdAt == getExistingData().createdAt &&
-        (getIncomingData().isAdmin == getExistingData().isAdmin || isAdmin(request.auth.uid)) &&
-        getIncomingData().keys().hasOnly([
-          'displayName', 'photoURL', 'lastLogin',
-          'upiIdForWithdrawal', 'bankDetailsForWithdrawal',
-          'dailyPaidSpinsUsed', 'lastPaidSpinDate',
-          'totalWinnings', 'totalSpinsPlayed',
-          'balance', 'spinsAvailable',
-          'uid', 'email', 'createdAt', 'isAdmin'
-        ]) &&
-        (!('displayName' in getIncomingData()) || getIncomingData().displayName is string || getIncomingData().displayName == null) &&
-        (!('photoURL' in getIncomingData()) || getIncomingData().photoURL is string || getIncomingData().photoURL == null) &&
-        (!('lastLogin' in getIncomingData()) || getIncomingData().lastLogin is timestamp) &&
-        (!('upiIdForWithdrawal' in getIncomingData()) || getIncomingData().upiIdForWithdrawal is string) &&
-        (!('bankDetailsForWithdrawal' in getIncomingData()) || (
-            getIncomingData().bankDetailsForWithdrawal.accountHolderName is string &&
-            getIncomingData().bankDetailsForWithdrawal.accountNumber is string &&
-            getIncomingData().bankDetailsForWithdrawal.ifscCode is string
-        )) &&
-        (!('dailyPaidSpinsUsed' in getIncomingData()) || getIncomingData().dailyPaidSpinsUsed is number) &&
-        (!('lastPaidSpinDate' in getIncomingData()) || getIncomingData().lastPaidSpinDate is string) &&
-        (!('totalWinnings' in getIncomingData()) || getIncomingData().totalWinnings is number) &&
-        (!('totalSpinsPlayed' in getIncomingData()) || getIncomingData().totalSpinsPlayed is number) &&
-        (!('balance' in getIncomingData()) || getIncomingData().balance is number) &&
-        (!('spinsAvailable' in getIncomingData()) || getIncomingData().spinsAvailable is number)
-      ) || isAdmin(request.auth.uid);
+        request.resource.data.uid == resource.data.uid && // Prevent changing immutable fields
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.isAdmin == resource.data.isAdmin
+      ) || isAuthUserAdmin();
 
-      allow delete: if isAdmin(request.auth.uid);
+      allow delete: if isAuthUserAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // TRANSACTIONS Collection
-    // ---------------------------------------------------------------------
     match /transactions/{transactionId} {
-      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin(request.auth.uid));
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAuthUserAdmin());
+      // Users can only list their own transactions. Admins can list any if they construct the query.
+      allow list: if (isAuthenticated() && request.query.where.userId == request.auth.uid) || isAuthUserAdmin();
+
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       
-      allow list: if isAuthenticated() && (request.query.where.userId == request.auth.uid || isAdmin(request.auth.uid));
-
-      allow create: if isAuthenticated() &&
-        getIncomingData().userId == request.auth.uid &&
-        getIncomingData().type in ['credit', 'debit'] &&
-        getIncomingData().amount is number &&
-        getIncomingData().description is string &&
-        getIncomingData().status in ['completed', 'pending', 'failed'] &&
-        getIncomingData().date == request.time &&
-        (!('balanceBefore' in getIncomingData()) || getIncomingData().balanceBefore is number) &&
-        (!('balanceAfter' in getIncomingData()) || getIncomingData().balanceAfter is number) &&
-        getIncomingData().keys().hasOnly([
-          'userId', 'type', 'amount', 'description', 'status', 'date',
-          'balanceBefore', 'balanceAfter'
-        ]);
-
-      allow update, delete: if isAdmin(request.auth.uid);
+      allow update, delete: if isAuthUserAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // WITHDRAWAL REQUESTS Collection
-    // ---------------------------------------------------------------------
     match /withdrawalRequests/{requestId} {
-      allow read: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isAdmin(request.auth.uid));
-
-      allow create: if isAuthenticated() &&
-        getIncomingData().userId == request.auth.uid &&
-        getIncomingData().userEmail == request.auth.token.email &&
-        getIncomingData().amount is number && getIncomingData().amount > 0 &&
-        getIncomingData().paymentMethod in ['upi', 'bank'] &&
-        (getIncomingData().paymentMethod == 'upi' ? getIncomingData().upiId is string : true) &&
-        (getIncomingData().paymentMethod == 'bank' ?
-            getIncomingData().bankDetails.accountHolderName is string &&
-            getIncomingData().bankDetails.accountNumber is string &&
-            getIncomingData().bankDetails.ifscCode is string
-            : true) &&
-        getIncomingData().requestDate == request.time &&
-        getIncomingData().status == "pending" &&
-        getIncomingData().keys().hasOnly([
-          'userId', 'userEmail', 'amount', 'paymentMethod', 'upiId',
-          'bankDetails', 'requestDate', 'status'
-        ]);
-
-      allow update: if isAdmin(request.auth.uid) &&
-        getIncomingData().keys().hasAny(['status', 'adminNotes', 'processedDate', 'transactionId']) &&
-        getIncomingData().userId == getExistingData().userId &&
-        getIncomingData().amount == getExistingData().amount &&
-        getIncomingData().paymentMethod == getExistingData().paymentMethod &&
-        getIncomingData().userEmail == getExistingData().userEmail &&
-        (!('adminNotes' in getIncomingData()) || getIncomingData().adminNotes is string) &&
-        (!('processedDate' in getIncomingData()) || getIncomingData().processedDate is timestamp) &&
-        (!('transactionId' in getIncomingData()) || getIncomingData().transactionId is string) &&
-        getIncomingData().status in ['pending', 'approved', 'rejected', 'processed'];
-
-      allow delete: if isAdmin(request.auth.uid);
-    }
-
-    // ---------------------------------------------------------------------
-    // ADD FUND REQUESTS Collection
-    // ---------------------------------------------------------------------
-    match /addFundRequests/{requestId} {
-      allow read: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isAdmin(request.auth.uid));
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAuthUserAdmin());
+      allow list: if isAuthUserAdmin(); // Only admin can list all withdrawal requests.
       
-      allow list: if isAuthenticated() && isAdmin(request.auth.uid);
-
-      allow create: if isAuthenticated() &&
-        getIncomingData().userId == request.auth.uid &&
-        getIncomingData().userEmail == request.auth.token.email &&
-        getIncomingData().amount is number && getIncomingData().amount > 0 &&
-        getIncomingData().paymentReference is string &&
-        getIncomingData().requestDate == request.time &&
-        getIncomingData().status == "pending" &&
-        getIncomingData().keys().hasOnly([
-          'userId', 'userEmail', 'amount', 'paymentReference', 'requestDate', 'status'
-        ]);
-
-      allow update: if isAdmin(request.auth.uid) &&
-        getIncomingData().keys().hasAny(['status', 'adminNotes', 'approvedDate', 'transactionId']) &&
-        getIncomingData().userId == getExistingData().userId &&
-        getIncomingData().amount == getExistingData().amount &&
-        getIncomingData().userEmail == getExistingData().userEmail &&
-        (!('adminNotes' in getIncomingData()) || getIncomingData().adminNotes is string) &&
-        (!('approvedDate' in getIncomingData()) || getIncomingData().approvedDate is timestamp) &&
-        (!('transactionId' in getIncomingData()) || getIncomingData().transactionId is string) &&
-        getIncomingData().status in ['pending', 'approved', 'rejected'];
-
-      allow delete: if isAdmin(request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthUserAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // APP CONFIGURATION Collection
-    // ---------------------------------------------------------------------
+    match /addFundRequests/{requestId} {
+      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAuthUserAdmin());
+      allow list: if isAuthUserAdmin(); // Only admin can list all add fund requests.
+
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthUserAdmin();
+    }
+
     match /appConfiguration/{docId} {
       allow read: if true;
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isAuthUserAdmin();
     }
   }
 }
