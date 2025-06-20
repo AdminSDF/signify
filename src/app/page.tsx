@@ -368,7 +368,7 @@ export default function HomePage() {
             >
               <Home className="mr-2 h-5 w-5" /> Go to Main App
             </Button>
-            <Link href="/admin">
+            <Link href="/admin" passHref>
               <Button variant="outline" size="lg" className="w-full">
                 <Shield className="mr-2 h-5 w-5" /> Go to Admin Panel
               </Button>
@@ -390,8 +390,6 @@ export default function HomePage() {
       <SpinifyGameHeader />
 
       <div className="my-4 w-full max-w-3xl text-center">
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
-          crossOrigin="anonymous"></script>
         {/* Spinify 1 ad */}
         <ins className="adsbygoogle"
           style={{display:'inline-block',width:'728px',height:'90px'}}
@@ -405,11 +403,14 @@ export default function HomePage() {
       </div>
       
       {isClient && user && (
-        <div className="w-full max-w-2xl flex justify-center my-4">
-          <Card className="py-3 px-6 inline-flex items-center gap-3 shadow-md bg-primary-foreground/20 rounded-lg backdrop-blur-sm">
-            <DollarSign className="h-7 w-7 text-primary" />
-            <span className="text-xl font-semibold text-foreground">
-              Balance: <span className="font-bold text-primary">₹{userBalance.toFixed(2)}</span>
+        <div className="w-full max-w-md flex justify-center my-6">
+          <Card className="py-4 px-8 inline-flex flex-col items-center gap-2 shadow-lg bg-gradient-to-br from-primary-foreground/30 to-secondary/30 border-2 border-primary/50 rounded-xl backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-8 w-8 text-primary" />
+              <span className="text-sm font-medium text-primary-foreground/80 tracking-wider uppercase">Your Balance</span>
+            </div>
+            <span className="text-3xl font-bold text-primary-foreground glow">
+              ₹{userBalance.toFixed(2)}
             </span>
           </Card>
         </div>
@@ -442,7 +443,6 @@ export default function HomePage() {
         />
 
         <div className="my-4 w-full max-w-lg">
-          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587" crossOrigin="anonymous"></script>
           <ins className="adsbygoogle"
                style={{display:'block'}}
                data-ad-client="ca-pub-1425274923062587"
@@ -493,7 +493,3 @@ export default function HomePage() {
     </div>
   );
 }
-    
-    
-    
-

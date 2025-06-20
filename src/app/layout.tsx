@@ -27,10 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Removed amp-auto-ads script as this is not an AMP page */}
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587" crossOrigin="anonymous"></script>
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
-        {/* Removed amp-auto-ads tag */}
         <AuthProvider> {/* Wrap with AuthProvider */}
           <SiteHeader />
           <NewsTicker />
