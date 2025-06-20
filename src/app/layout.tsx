@@ -26,7 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head></head>
+      <head>
+        <script
+          async
+          custom-element="amp-auto-ads"
+          src="https://cdn.ampproject.org/v0/amp-auto-ads-0.1.js"
+        />
+      </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
         <AuthProvider> {/* Wrap with AuthProvider */}
           <SiteHeader />
