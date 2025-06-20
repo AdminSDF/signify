@@ -19,8 +19,8 @@ interface SpinWheelProps {
   onSpinComplete: (winningSegment: Segment) => void;
   targetSegmentIndex: number | null;
   isSpinning: boolean;
-  spinDuration?: number; // in seconds
-  onClick?: () => void; 
+  spinDuration?: number; // user's script implies 20s, but we'll keep prop for flexibility if needed elsewhere, defaulting to 20
+  onClick?: () => void;
 }
 
 // Helper to modify HSL lightness
@@ -39,93 +39,69 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   onSpinComplete,
   targetSegmentIndex,
   isSpinning,
-  spinDuration = 5,
+  spinDuration = 20, // Default to 20 seconds as per user's script example
   onClick,
 }) => {
-  // currentRotation stores the logical resting angle of the wheel.
-  // 0 degrees means the start of the first segment is at the top pointer.
-  const [currentRotation, setCurrentRotation] = useState(0);
+  const [accumulatedRotation, setAccumulatedRotation] = useState(0);
   const wheelRef = useRef<SVGSVGElement>(null);
 
   const numSegments = segments.length;
   const anglePerSegment = 360 / numSegments;
 
-  // Effect to update the --wheel-actual-rotation CSS variable for the resting state.
-  useEffect(() => {
-    if (wheelRef.current) {
-      wheelRef.current.style.setProperty('--wheel-actual-rotation', `${currentRotation}deg`);
-    }
-  }, [currentRotation]);
-
-  // Effect to handle the spinning animation
   useEffect(() => {
     if (isSpinning && targetSegmentIndex !== null && wheelRef.current) {
-      // Get the current visual rotation from the CSS variable (which currentRotation state sets)
-      const currentVisualAngle = parseFloat(
-        wheelRef.current.style.getPropertyValue('--wheel-actual-rotation').replace('deg', '') || '0'
-      );
+      const wheelElement = wheelRef.current;
 
-      const minRotations = 5;
-      const maxRotations = 7;
-      const randomExtraRotations = Math.floor(Math.random() * (maxRotations - minRotations + 1)) + minRotations;
-      const baseDegrees = randomExtraRotations * 360;
-      
       // Calculate the desired final resting angle for the pointer to be in the middle of the target segment.
-      // A positive angle means clockwise rotation of the segment to the pointer.
-      // A negative angle means counter-clockwise rotation of the segment to the pointer.
-      // Since the pointer is fixed at the top (0 deg), the wheel rotates.
-      // If target segment is 0, its middle is at anglePerSegment / 2. To bring this to 0, wheel rotates by -(anglePerSegment / 2).
-      const finalRestingAngleForSegment = -((targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2));
-      const randomOffset = (Math.random() - 0.5) * (anglePerSegment * 0.6); // Small random offset within the segment
-      const desiredFinalAbsoluteRotation = finalRestingAngleForSegment + randomOffset;
+      const randomOffsetWithinSegment = (Math.random() - 0.5) * anglePerSegment * 0.6; // Small random offset
+      const targetMiddleAngle = (targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2);
+      // The wheel needs to rotate such that this targetMiddleAngle is at the top (0 deg pointer).
+      // So, the wheel's final orientation relative to its starting point (0 deg) should be -targetMiddleAngle.
+      const finalOrientationAngle = -(targetMiddleAngle + randomOffsetWithinSegment);
 
-      // The animation will spin from its current visual angle to a new angle
-      // that incorporates many full spins and lands on the desired segment.
-      // Total rotation = current visual + full spins + (adjustment to new target from current orientation)
-      // To ensure it always spins forward for the "full spins" part:
-      const animationEndAngle = currentVisualAngle + baseDegrees + (desiredFinalAbsoluteRotation - (currentVisualAngle % 360));
-      // The (desiredFinalAbsoluteRotation - (currentVisualAngle % 360)) part calculates the shortest rotation
-      // from the current normalized orientation to the target normalized orientation.
-      // Adding baseDegrees ensures it spins forward multiple times.
+      const fullSpinsDegrees = 7200; // 20 full rotations (20 * 360)
 
-      wheelRef.current.style.setProperty('--animation-start-angle', `${currentVisualAngle}deg`);
-      wheelRef.current.style.setProperty('--animation-end-angle', `${animationEndAngle}deg`);
-      wheelRef.current.style.setProperty('--spin-duration', `${spinDuration}s`);
-      
-      wheelRef.current.classList.add('animate-wheel-spin');
+      // Calculate rotation needed from current orientation to new target orientation
+      const currentNormalizedAngle = accumulatedRotation % 360;
+      // Amount to rotate to get from currentNormalizedAngle to finalOrientationAngle, spinning forward
+      let rotationToNewOrientation = (finalOrientationAngle - currentNormalizedAngle);
+      // Ensure it's a positive rotation by adding multiples of 360 if needed to go the long way for the "spin"
+      // This ensures the additional rotation for the final segment alignment is always forward.
+      while (rotationToNewOrientation <= 0 && numSegments > 0) { // Check numSegments to prevent infinite loop if anglePerSegment is 0
+        rotationToNewOrientation += 360;
+      }
+       if (numSegments > 0) { // Only add if there are segments
+         rotationToNewOrientation = (rotationToNewOrientation % 360); // Ensure it's within 0-359 for the final adjustment
+       } else {
+         rotationToNewOrientation = 0;
+       }
+
+
+      const totalAdditionalRotation = fullSpinsDegrees + rotationToNewOrientation;
+      const newFinalAccumulatedRotation = accumulatedRotation + totalAdditionalRotation;
+
+      wheelElement.style.transition = `transform ${spinDuration}s cubic-bezier(0.17, 0.67, 0.83, 0.67)`;
+      wheelElement.style.transform = `rotate(${newFinalAccumulatedRotation}deg)`;
+
+      setAccumulatedRotation(newFinalAccumulatedRotation);
 
       const timer = setTimeout(() => {
         if (wheelRef.current) { // Check if ref is still valid
-            wheelRef.current.classList.remove('animate-wheel-spin');
-            // Clean up CSS variables from element style after animation
-            wheelRef.current.style.removeProperty('--animation-start-angle');
-            wheelRef.current.style.removeProperty('--animation-end-angle');
-            wheelRef.current.style.removeProperty('--spin-duration');
+            wheelRef.current.style.transition = 'none'; // Remove transition after animation
         }
-        
-        // Update currentRotation state to the new normalized resting angle
-        let newRestingAngle = desiredFinalAbsoluteRotation % 360;
-        if (newRestingAngle <= -180) newRestingAngle += 360; // Normalize to prefer -179 to 180 range if needed, or 0-359
-        if (newRestingAngle > 180) newRestingAngle -=360; // Ensure consistent range, e.g., closer to 0.
-
-        // Or simpler normalization to 0-359 range:
-        newRestingAngle = animationEndAngle % 360;
-        if (newRestingAngle < 0) {
-          newRestingAngle += 360;
-        }
-        
-        setCurrentRotation(newRestingAngle); // This will trigger the effect to update --wheel-actual-rotation
         onSpinComplete(segments[targetSegmentIndex]);
       }, spinDuration * 1000);
 
       return () => clearTimeout(timer);
     } else if (!isSpinning && wheelRef.current) {
-      // Ensure animation class is removed if isSpinning becomes false (e.g. component unmounts during spin)
-       if (wheelRef.current.classList.contains('animate-wheel-spin')) {
-           wheelRef.current.classList.remove('animate-wheel-spin');
-       }
+      // Ensure transition is none when not spinning
+      if (wheelRef.current.style.transition !== 'none') {
+        wheelRef.current.style.transition = 'none';
+      }
+      // Ensure the wheel is at its correct resting rotation if it was interrupted
+      wheelRef.current.style.transform = `rotate(${accumulatedRotation}deg)`;
     }
-  }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration, currentRotation]); // Added currentRotation here to re-evaluate if it changes externally
+  }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration, accumulatedRotation, numSegments]);
 
 
   const gradientDefs = useMemo(() => {
@@ -138,8 +114,8 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
     });
 
     return Array.from(uniqueColors.entries()).map(([colorStr, id]) => {
-      const lighterColor = modifyHslColor(colorStr, 15); 
-      const darkerColor = modifyHslColor(colorStr, -10); 
+      const lighterColor = modifyHslColor(colorStr, 15);
+      const darkerColor = modifyHslColor(colorStr, -10);
       return (
         <radialGradient key={id} id={id} cx="50%" cy="50%" r="65%" fx="50%" fy="50%">
           <stop offset="0%" style={{ stopColor: `hsl(${lighterColor})`, stopOpacity: 1 }} />
@@ -148,11 +124,11 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       );
     });
   }, [segments]);
-  
+
   const colorToGradientIdMap = useMemo(() => {
     const map = new Map<string, string>();
     segments.forEach((segment) => {
-       const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`; 
+       const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`;
       if (!map.has(segment.color)) {
         map.set(segment.color, gradId);
       }
@@ -165,7 +141,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
     const parts = backgroundColor.split(' ');
     if (parts.length === 3) {
       const l = parseInt(parts[2].replace('%', ''), 10);
-      return l > 55 ? '0 0% 10%' : '0 0% 95%'; 
+      return l > 55 ? '0 0% 10%' : '0 0% 95%';
     }
     return '0 0% 0%';
   };
@@ -175,6 +151,15 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       onClick();
     }
   };
+  
+  // Effect to set initial rotation and update if accumulatedRotation changes for resting state
+  useEffect(() => {
+    if (wheelRef.current && !isSpinning) {
+      wheelRef.current.style.transition = 'none'; // No transition for setting resting state
+      wheelRef.current.style.transform = `rotate(${accumulatedRotation}deg)`;
+    }
+  }, [accumulatedRotation, isSpinning]);
+
 
   return (
     <div
@@ -191,7 +176,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick && !isSpinning) { handleWheelClick(); e.preventDefault();}}}
     >
       <div
-        className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10" 
+        className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10"
         aria-hidden="true"
       >
         <svg width="36" height="50" viewBox="0 0 36 50" fill="hsl(var(--primary))" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'url(#dropShadowPointer)'}}>
@@ -202,14 +187,15 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
       <svg
         ref={wheelRef}
+        id="wheel" // Added id for potential direct manipulation if user wants, though ref is primary
         viewBox="0 0 200 200"
         className={cn(
-          "w-full h-full rounded-full shadow-2xl svg-wheel-graphics"
-          // The 'animate-wheel-spin' class is added dynamically in the useEffect hook
+          "w-full h-full rounded-full shadow-2xl"
+          // Removed 'svg-wheel-graphics' as its style is now directly managed
         )}
         style={{
-          filter: 'url(#dropShadowWheel)'
-          // CSS variables for animation are set dynamically in the useEffect hook
+          filter: 'url(#dropShadowWheel)',
+          transform: `rotate(${accumulatedRotation}deg)` // Initial and subsequent resting rotation
         } as React.CSSProperties}
       >
         <defs>
@@ -224,7 +210,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
           </filter>
           {gradientDefs}
         </defs>
-        
+
         <g>
           {segments.map((segment, i) => {
             const startAngle = i * anglePerSegment;
@@ -235,16 +221,16 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
             const x2 = 100 + 98 * Math.cos(Math.PI / 180 * (endAngle - 90));
             const y2 = 100 + 98 * Math.sin(Math.PI / 180 * (endAngle - 90));
             const pathData = `M100,100 L${x1},${y1} A98,98 0 0,1 ${x2},${y2} z`;
-            
+
             const effectiveTextColor = segment.textColor || getTextColorFallback(segment.color);
             const gradientId = colorToGradientIdMap.get(segment.color);
 
             return (
               <g key={segment.id} role="listitem" aria-label={`Prize: ${segment.text} ${segment.amount !== undefined ? `(value ${segment.amount})` : ''}`}>
-                <path 
-                  d={pathData} 
-                  fill={gradientId ? `url(#${gradientId})` : `hsl(${segment.color})`} 
-                  stroke="hsl(var(--card))" 
+                <path
+                  d={pathData}
+                  fill={gradientId ? `url(#${gradientId})` : `hsl(${segment.color})`}
+                  stroke="hsl(var(--card))"
                   strokeWidth="1.5"
                 />
                 <text
@@ -274,3 +260,4 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
+

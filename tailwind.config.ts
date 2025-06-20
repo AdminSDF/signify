@@ -97,24 +97,16 @@ export default {
           '0%, 100%': { textShadow: '0 0 5px hsl(var(--primary)), 0 0 10px hsl(var(--primary)), 0 0 15px hsl(var(--primary))' },
           '50%': { textShadow: '0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary)), 0 0 30px hsl(var(--primary) / 0.7)' },
         },
-        wheelSpin: {
-          from: {
-            transform: 'rotate(var(--animation-start-angle, 0deg))'
-          },
-          to: {
-            transform: 'rotate(var(--animation-end-angle, 0deg))'
-          }
-        }
+        // wheelSpin keyframes are removed as animation is now JS-driven
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
-        // Ensure the wheelSpin animation is registered here if you want to use it like `animate-wheelSpin`
-        // However, we are applying it directly in `globals.css`'s `.animate-wheel-spin` class using the 'wheelSpin' keyframes
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
+

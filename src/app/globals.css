@@ -121,17 +121,6 @@ body {
     0 0 35px hsl(var(--primary));
 }
 
-/* Consistent spin animation with CSS variables */
-.svg-wheel-graphics {
-  /* This variable will hold the wheel's current orientation. */
-  transform: rotate(var(--wheel-actual-rotation, 0deg));
-}
-
-.animate-wheel-spin {
-  /* The animation itself defines the transform based on its own variables in tailwind.config.ts keyframes */
-  animation: wheelSpin var(--spin-duration, 5s) cubic-bezier(0.23, 1, 0.32, 1) forwards;
-}
-
 
 /* Keyframes for Animations */
 @keyframes marquee {
@@ -151,7 +140,8 @@ body {
 
 .marquee-content-wrapper {
   /* Default duration is 60s, can be overridden by --marquee-duration CSS variable */
-  animation: marquee var(--marquee-duration, 60s) linear infinite; 
+  animation: marquee var(--marquee-duration, 60s) linear infinite;
   white-space: nowrap;
   display: inline-block;
 }
+
