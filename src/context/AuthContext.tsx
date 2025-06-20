@@ -11,21 +11,21 @@ import {
   signInWithEmailAndPassword,
   type FirebaseUser,
   createUserData as createFirestoreUser,
-  getAppConfiguration,
-  AppConfiguration,
+  getAppConfiguration, // Updated: Now a direct import for AppConfiguration type
+  AppConfiguration as AppConfigType, // Use a distinct name for the type if needed
   updateUserData,
   Timestamp
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { AuthCredentials } from '@/lib/validators/auth';
-import { AppSettings, NewsItem, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig'; // Ensure NewsItem is defined or use string[]
+import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 
 interface AuthContextType {
   user: FirebaseUser | null;
-  loading: boolean;
+  loading: boolean; // Auth loading
   appSettings: AppSettings;
-  newsItems: string[]; // Or NewsItem[]
-  isAppConfigLoading: boolean;
+  newsItems: string[];
+  isAppConfigLoading: boolean; // App config specific loading
   refreshAppConfig: () => Promise<void>;
   signUpWithEmailPassword: (credentials: AuthCredentials) => Promise<void>;
   loginWithEmailPassword: (credentials: AuthCredentials) => Promise<void>;
@@ -36,26 +36,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // For Firebase Auth state
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [newsItems, setNewsItems] = useState<string[]>(DEFAULT_NEWS_ITEMS);
-  const [isAppConfigLoading, setIsAppConfigLoading] = useState(true);
+  const [isAppConfigLoading, setIsAppConfigLoading] = useState(true); // Specifically for app config
   const router = useRouter();
   const { toast } = useToast();
 
   const fetchAppConfig = useCallback(async () => {
     setIsAppConfigLoading(true);
     try {
-      const config = await getAppConfiguration();
-      setAppSettings(config.settings || defaultAppSettings);
-      setNewsItems(config.newsItems || DEFAULT_NEWS_ITEMS);
+      const config = await getAppConfiguration(); // This now handles its own errors and returns defaults
+      setAppSettings(config.settings);
+      setNewsItems(config.newsItems);
     } catch (error) {
-      console.error("Error fetching app configuration:", error);
-      setAppSettings(defaultAppSettings); // Fallback to defaults
+      // This catch block might be less likely to be hit if getAppConfiguration handles its own errors
+      // and returns defaults, but kept for safety for other unforeseen issues.
+      console.error("Critical error in fetchAppConfig within AuthContext:", error);
+      setAppSettings(defaultAppSettings); 
       setNewsItems(DEFAULT_NEWS_ITEMS);
       toast({
-        title: "Error Loading Config",
-        description: "Could not load app settings. Using defaults.",
+        title: "Error Initializing App",
+        description: "Using default app settings due to an unexpected issue.",
         variant: "destructive"
       });
     } finally {
@@ -64,34 +66,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [toast]);
 
   useEffect(() => {
-    fetchAppConfig();
-  }, [fetchAppConfig]);
-
-  useEffect(() => {
+    // Auth state listener
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Optionally update lastLogin or fetch more user data if needed here
         await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
       }
-      setLoading(false);
+      setLoading(false); // Auth loading finished
     });
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    // Only fetch app config once the initial authentication state has been determined.
+    // This helps if Firestore rules for app configuration depend on `request.auth`.
+    if (!loading) { // `loading` is the auth loading state
+      fetchAppConfig();
+    }
+  }, [loading, fetchAppConfig]); // Add `loading` to the dependency array
+
   const signUpWithEmailPassword = async ({email, password}: AuthCredentials) => {
-    setLoading(true);
+    // setLoading(true); // Handled by component if needed, context loading is for auth state
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
         // Fetch the latest app settings to pass for new user creation
-        const currentConfig = await getAppConfiguration(); 
+        // Ensure appConfig is loaded or use defaults if critical path
+        let currentAppSettings = appSettings;
+        if (isAppConfigLoading) { // If still loading, get fresh or use defaults
+            const freshConfig = await getAppConfiguration();
+            currentAppSettings = freshConfig.settings;
+        }
+
         await createFirestoreUser(
           userCredential.user.uid, 
           userCredential.user.email, 
           userCredential.user.displayName, 
           userCredential.user.photoURL,
-          currentConfig.settings // Pass current app settings
+          currentAppSettings 
         );
       }
       toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
@@ -104,12 +116,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       else if (error.code === 'auth/invalid-email') description = 'The email address is not valid.';
       toast({ variant: "destructive", title: "Sign Up Failed", description });
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   };
 
   const loginWithEmailPassword = async ({email, password}: AuthCredentials) => {
-    setLoading(true);
+    // setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
@@ -129,12 +141,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       toast({ variant: "destructive", title: "Login Failed", description });
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   };
 
   const logout = async () => {
-    setLoading(true);
+    // setLoading(true);
     try {
       await firebaseSignOut(auth);
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
@@ -143,16 +155,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error("Error during logout:", error);
       toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   };
 
   const contextValue = {
     user,
-    loading,
+    loading, // Auth loading
     appSettings,
     newsItems,
-    isAppConfigLoading,
+    isAppConfigLoading, // App config loading
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,
@@ -173,4 +185,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

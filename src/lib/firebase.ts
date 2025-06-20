@@ -26,7 +26,7 @@ import {
   deleteDoc,
   writeBatch
 } from "firebase/firestore";
-import type { AppSettings, NewsItem } from '@/lib/appConfig'; // Assuming NewsItem type if you have one, else string[]
+import type { AppSettings } from '@/lib/appConfig'; 
 import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
 
 
@@ -96,8 +96,10 @@ export const createUserData = async (
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
-    isAdmin: email === process.env.NEXT_PUBLIC_ADMIN_EMAIL || email === "jameafaizanrasool@gmail.com", // Example admin check
+    isAdmin: email === process.env.NEXT_PUBLIC_ADMIN_EMAIL || email === "jameafaizanrasool@gmail.com", 
     lastLogin: Timestamp.now(),
+    totalWinnings: 0,
+    totalSpinsPlayed: 0,
   };
   await setDoc(userRef, userData);
 };
@@ -124,8 +126,8 @@ export interface TransactionData {
   description: string;
   date: Timestamp;
   status: 'completed' | 'pending' | 'failed';
-  balanceBefore?: number; // Optional, but good for auditing
-  balanceAfter?: number;  // Optional
+  balanceBefore?: number; 
+  balanceAfter?: number;  
 }
 
 export const addTransactionToFirestore = async (transactionData: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
@@ -137,7 +139,7 @@ export const addTransactionToFirestore = async (transactionData: Omit<Transactio
   return docRef.id;
 };
 
-export const getTransactionsFromFirestore = async (userId: string, count: number = 20): Promise<TransactionData[]> => {
+export const getTransactionsFromFirestore = async (userId: string, count: number = 50): Promise<(TransactionData & {id: string})[]> => {
   const q = query(
     collection(db, TRANSACTIONS_COLLECTION), 
     where("userId", "==", userId), 
@@ -145,28 +147,41 @@ export const getTransactionsFromFirestore = async (userId: string, count: number
     limit(count)
   );
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TransactionData));
+  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (TransactionData & {id: string})));
 };
 
 // --- App Configuration Functions ---
 export interface AppConfiguration {
   settings: AppSettings;
-  newsItems: string[]; // Or NewsItem[] if you define a specific type
+  newsItems: string[];
 }
 
 export const getAppConfiguration = async (): Promise<AppConfiguration> => {
   const configRef = doc(db, APP_CONFIG_COLLECTION, APP_CONFIG_DOC_ID);
-  const docSnap = await getDoc(configRef);
-  if (docSnap.exists()) {
-    return docSnap.data() as AppConfiguration;
-  }
-  // If not exists, create with defaults
-  const defaultConfig: AppConfiguration = {
+  const defaults: AppConfiguration = {
     settings: defaultAppSettings,
     newsItems: DEFAULT_NEWS_ITEMS,
   };
-  await setDoc(configRef, defaultConfig);
-  return defaultConfig;
+
+  try {
+    const docSnap = await getDoc(configRef);
+    if (docSnap.exists()) {
+      // Validate if fetched data conforms to AppConfiguration, merge with defaults if necessary
+      const fetchedData = docSnap.data();
+      const settings = { ...defaultAppSettings, ...fetchedData.settings };
+      const newsItems = fetchedData.newsItems || DEFAULT_NEWS_ITEMS;
+      return { settings, newsItems } as AppConfiguration;
+    }
+    
+    // If not exists, create with defaults
+    console.log(`App configuration document ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID} not found. Creating with defaults.`);
+    await setDoc(configRef, defaults);
+    return defaults;
+  } catch (error) {
+    console.error(`Error in getAppConfiguration (fetching or creating ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID}):`, error);
+    // Explicitly return defaults from here if any error occurs within this function
+    return defaults;
+  }
 };
 
 export const saveAppSettingsToFirestore = async (settings: AppSettings): Promise<void> => {
@@ -182,6 +197,7 @@ export const saveNewsItemsToFirestore = async (newsItems: string[]): Promise<voi
 
 // --- Withdrawal Request Functions ---
 export interface WithdrawalRequestData {
+  id?: string; // Firestore document ID
   userId: string;
   userEmail: string;
   amount: number;
@@ -196,10 +212,10 @@ export interface WithdrawalRequestData {
   status: "pending" | "approved" | "rejected" | "processed";
   processedDate?: Timestamp;
   adminNotes?: string;
-  transactionId?: string; // Firestore ID of the debit transaction after approval
+  transactionId?: string; 
 }
 
-export const createWithdrawalRequest = async (data: Omit<WithdrawalRequestData, 'requestDate' | 'status'>): Promise<string> => {
+export const createWithdrawalRequest = async (data: Omit<WithdrawalRequestData, 'requestDate' | 'status' | 'id'>): Promise<string> => {
   const docRef = await addDoc(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), {
     ...data,
     requestDate: Timestamp.now(),
@@ -208,15 +224,15 @@ export const createWithdrawalRequest = async (data: Omit<WithdrawalRequestData, 
   return docRef.id;
 };
 
-export const getWithdrawalRequests = async (status?: WithdrawalRequestData['status']): Promise<(WithdrawalRequestData & {id: string})[]> => {
+export const getWithdrawalRequests = async (statusFilter?: WithdrawalRequestData['status']): Promise<(WithdrawalRequestData & {id: string})[]> => {
   let q;
-  if (status) {
-    q = query(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), where("status", "==", status), orderBy("requestDate", "desc"));
+  if (statusFilter) {
+    q = query(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), where("status", "==", statusFilter), orderBy("requestDate", "desc"));
   } else {
     q = query(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), orderBy("requestDate", "desc"));
   }
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (WithdrawalRequestData & {id: string})));
+  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (WithdrawalRequestData & {id: string})));
 };
 
 export const updateWithdrawalRequestStatus = async (requestId: string, status: WithdrawalRequestData['status'], adminNotes?: string): Promise<void> => {
@@ -230,18 +246,19 @@ export const updateWithdrawalRequestStatus = async (requestId: string, status: W
 
 // --- Add Fund Request Functions ---
 export interface AddFundRequestData {
+  id?: string; // Firestore document ID
   userId: string;
   userEmail: string;
   amount: number;
-  paymentReference: string; // e.g., UPI transaction ID or screenshot identifier
+  paymentReference: string; 
   requestDate: Timestamp;
   status: "pending" | "approved" | "rejected";
   approvedDate?: Timestamp;
   adminNotes?: string;
-  transactionId?: string; // Firestore ID of the credit transaction after approval
+  transactionId?: string; 
 }
 
-export const createAddFundRequest = async (data: Omit<AddFundRequestData, 'requestDate' | 'status'>): Promise<string> => {
+export const createAddFundRequest = async (data: Omit<AddFundRequestData, 'requestDate' | 'status' | 'id'>): Promise<string> => {
   const docRef = await addDoc(collection(db, ADD_FUND_REQUESTS_COLLECTION), {
     ...data,
     requestDate: Timestamp.now(),
@@ -250,15 +267,15 @@ export const createAddFundRequest = async (data: Omit<AddFundRequestData, 'reque
   return docRef.id;
 };
 
-export const getAddFundRequests = async (status?: AddFundRequestData['status']): Promise<(AddFundRequestData & {id: string})[]> => {
+export const getAddFundRequests = async (statusFilter?: AddFundRequestData['status']): Promise<(AddFundRequestData & {id: string})[]> => {
   let q;
-  if (status) {
-    q = query(collection(db, ADD_FUND_REQUESTS_COLLECTION), where("status", "==", status), orderBy("requestDate", "desc"));
+  if (statusFilter) {
+    q = query(collection(db, ADD_FUND_REQUESTS_COLLECTION), where("status", "==", statusFilter), orderBy("requestDate", "desc"));
   } else {
     q = query(collection(db, ADD_FUND_REQUESTS_COLLECTION), orderBy("requestDate", "desc"));
   }
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (AddFundRequestData & {id: string})));
+  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (AddFundRequestData & {id: string})));
 };
 
 export const updateAddFundRequestStatus = async (requestId: string, status: AddFundRequestData['status'], adminNotes?: string): Promise<void> => {
@@ -272,36 +289,34 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
 // Helper to approve add fund and update balance
 export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number) => {
   const batch = writeBatch(db);
-
-  // 1. Update user balance
   const userRef = doc(db, USERS_COLLECTION, userId);
+  
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const currentBalance = userSnap.data()?.balance || 0;
   const newBalance = currentBalance + amount;
+  
   batch.update(userRef, { balance: newBalance });
 
-  // 2. Add transaction record
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); // Create a new doc ref for transaction
+  const transactionDocRef = doc(transactionCollRef); 
   batch.set(transactionDocRef, {
     userId,
     type: 'credit',
     amount,
-    description: `Balance added via UPI (Req ID: ${requestId.substring(0,6)})`,
+    description: `Balance added (Admin Approval Req ID: ${requestId.substring(0,6)})`,
     status: 'completed',
     date: Timestamp.now(),
     balanceBefore: currentBalance,
     balanceAfter: newBalance
-  });
+  } as TransactionData);
   
-  // 3. Update add fund request status
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, { 
     status: "approved", 
     approvedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id // Store the transaction ID
-  });
+    transactionId: transactionDocRef.id 
+  } as Partial<AddFundRequestData>);
 
   await batch.commit();
 };
@@ -309,37 +324,35 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
 // Helper to approve withdrawal and update balance
 export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, paymentMethodDetails: string) => {
   const batch = writeBatch(db);
-
-  // 1. Update user balance
   const userRef = doc(db, USERS_COLLECTION, userId);
+
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const currentBalance = userSnap.data()?.balance || 0;
   if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
   const newBalance = currentBalance - amount;
+
   batch.update(userRef, { balance: newBalance });
 
-  // 2. Add transaction record
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); // Create a new doc ref for transaction
+  const transactionDocRef = doc(transactionCollRef); 
   batch.set(transactionDocRef, {
     userId,
     type: 'debit',
     amount,
-    description: `Withdrawal: ${paymentMethodDetails} (Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed', // Or 'processed' if there's another step
+    description: `Withdrawal: ${paymentMethodDetails} (Admin Approval Req ID: ${requestId.substring(0,6)})`,
+    status: 'completed', 
     date: Timestamp.now(),
     balanceBefore: currentBalance,
     balanceAfter: newBalance
-  });
+  } as TransactionData);
   
-  // 3. Update withdrawal request status
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, { 
-    status: "processed", // Or "approved" if processing is the final step by admin
+    status: "processed", 
     processedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id // Store the transaction ID
-  });
+    transactionId: transactionDocRef.id 
+  } as Partial<WithdrawalRequestData>);
 
   await batch.commit();
 };
@@ -357,4 +370,3 @@ export {
   Timestamp
 };
 export type { User as FirebaseUser } from "firebase/auth";
-
