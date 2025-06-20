@@ -389,8 +389,19 @@ export default function HomePage() {
       
       <SpinifyGameHeader />
 
-      <div className="my-4 p-4 w-full max-w-3xl bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
-        Google AdSense Placeholder (e.g., Leaderboard 728x90)
+      <div className="my-4 w-full max-w-3xl text-center">
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
+          crossOrigin="anonymous"></script>
+        {/* Spinify 1 ad */}
+        <ins className="adsbygoogle"
+          style={{display:'inline-block',width:'728px',height:'90px'}}
+          data-ad-client="ca-pub-1425274923062587"
+          data-ad-slot="9499288281"></ins>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(adsbygoogle = window.adsbygoogle || []).push({});`,
+          }}
+        />
       </div>
       
       {isClient && user && (
@@ -485,3 +496,4 @@ export default function HomePage() {
     
     
     
+
