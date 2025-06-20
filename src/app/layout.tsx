@@ -34,6 +34,9 @@ export default function RootLayout({
         />
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
+        <amp-auto-ads type="adsense"
+            data-ad-client="ca-pub-1425274923062587">
+        </amp-auto-ads>
         <AuthProvider> {/* Wrap with AuthProvider */}
           <SiteHeader />
           <NewsTicker />
@@ -47,3 +50,4 @@ export default function RootLayout({
     </html>
   );
 }
+
