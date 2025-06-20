@@ -254,9 +254,6 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                 >
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.6em">{segment.emoji}</tspan>
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{segment.text}</tspan>
-                  {segment.amount !== undefined && segment.amount > 0 && (
-                    <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">₹{segment.amount}</tspan>
-                  )}
                 </text>
               </g>
             );
