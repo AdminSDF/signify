@@ -19,7 +19,7 @@ interface SpinWheelProps {
   onSpinComplete: (winningSegment: Segment) => void;
   targetSegmentIndex: number | null;
   isSpinning: boolean;
-  spinDuration?: number; // user's script implies 20s, but we'll keep prop for flexibility if needed elsewhere, defaulting to 20
+  spinDuration?: number;
   onClick?: () => void;
 }
 
@@ -39,69 +39,87 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   onSpinComplete,
   targetSegmentIndex,
   isSpinning,
-  spinDuration = 20, // Default to 20 seconds as per user's script example
+  spinDuration = 12, // Default duration set to 12 seconds
   onClick,
 }) => {
   const [accumulatedRotation, setAccumulatedRotation] = useState(0);
   const wheelRef = useRef<SVGSVGElement>(null);
+  const isAnimatingRef = useRef(false); // Ref to track if animation is active for the current spin
 
   const numSegments = segments.length;
-  const anglePerSegment = 360 / numSegments;
+  const anglePerSegment = numSegments > 0 ? 360 / numSegments : 0;
 
   useEffect(() => {
-    if (isSpinning && targetSegmentIndex !== null && wheelRef.current) {
+    if (isSpinning && targetSegmentIndex !== null && wheelRef.current && !isAnimatingRef.current) {
+      isAnimatingRef.current = true; // Mark that an animation is starting
+
       const wheelElement = wheelRef.current;
 
-      // Calculate the desired final resting angle for the pointer to be in the middle of the target segment.
-      const randomOffsetWithinSegment = (Math.random() - 0.5) * anglePerSegment * 0.6; // Small random offset
+      const randomOffsetWithinSegment = (Math.random() - 0.5) * anglePerSegment * 0.6;
       const targetMiddleAngle = (targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2);
       // The wheel needs to rotate such that this targetMiddleAngle is at the top (0 deg pointer).
-      // So, the wheel's final orientation relative to its starting point (0 deg) should be -targetMiddleAngle.
       const finalOrientationAngle = -(targetMiddleAngle + randomOffsetWithinSegment);
 
-      const fullSpinsDegrees = 7200; // 20 full rotations (20 * 360)
+      // Number of full spins for visual effect. e.g., 10 full rotations
+      const fullSpinsDegrees = 360 * 10;
 
-      // Calculate rotation needed from current orientation to new target orientation
+      // Calculate rotation needed from current accumulatedRotation (which is the resting state)
+      // to the new target orientation. The animation starts from `accumulatedRotation`.
       const currentNormalizedAngle = accumulatedRotation % 360;
-      // Amount to rotate to get from currentNormalizedAngle to finalOrientationAngle, spinning forward
       let rotationToNewOrientation = (finalOrientationAngle - currentNormalizedAngle);
-      // Ensure it's a positive rotation by adding multiples of 360 if needed to go the long way for the "spin"
+      
+      // Ensure it's a positive rotation by adding multiples of 360 if needed.
       // This ensures the additional rotation for the final segment alignment is always forward.
-      while (rotationToNewOrientation <= 0 && numSegments > 0) { // Check numSegments to prevent infinite loop if anglePerSegment is 0
+      while (rotationToNewOrientation <= 0 && numSegments > 0) {
         rotationToNewOrientation += 360;
       }
-       if (numSegments > 0) { // Only add if there are segments
-         rotationToNewOrientation = (rotationToNewOrientation % 360); // Ensure it's within 0-359 for the final adjustment
+       if (numSegments > 0) {
+         rotationToNewOrientation = (rotationToNewOrientation % 360);
        } else {
          rotationToNewOrientation = 0;
        }
 
-
       const totalAdditionalRotation = fullSpinsDegrees + rotationToNewOrientation;
+      // This newFinalAccumulatedRotation is the target for the CSS transform.
+      // The actual accumulatedRotation state will be updated *after* the animation.
       const newFinalAccumulatedRotation = accumulatedRotation + totalAdditionalRotation;
 
       wheelElement.style.transition = `transform ${spinDuration}s cubic-bezier(0.17, 0.67, 0.83, 0.67)`;
       wheelElement.style.transform = `rotate(${newFinalAccumulatedRotation}deg)`;
 
-      setAccumulatedRotation(newFinalAccumulatedRotation);
-
       const timer = setTimeout(() => {
-        if (wheelRef.current) { // Check if ref is still valid
+        // Update the React state for accumulatedRotation to the new resting position
+        setAccumulatedRotation(newFinalAccumulatedRotation);
+
+        if (wheelRef.current) {
             wheelRef.current.style.transition = 'none'; // Remove transition after animation
+            // The transform is already at newFinalAccumulatedRotation due to CSS animation.
+            // Setting it again ensures consistency if needed, but primarily handled by setAccumulatedRotation + resting effect.
         }
         onSpinComplete(segments[targetSegmentIndex]);
+        isAnimatingRef.current = false; // Reset for next spin
       }, spinDuration * 1000);
 
-      return () => clearTimeout(timer);
-    } else if (!isSpinning && wheelRef.current) {
-      // Ensure transition is none when not spinning
-      if (wheelRef.current.style.transition !== 'none') {
-        wheelRef.current.style.transition = 'none';
-      }
-      // Ensure the wheel is at its correct resting rotation if it was interrupted
+      return () => {
+        clearTimeout(timer);
+        // If the component unmounts or spin is interrupted, reset the flag.
+        // Also, ensure transition is removed if the effect is cleaned up mid-animation.
+        if (wheelRef.current) {
+          wheelRef.current.style.transition = 'none';
+        }
+        isAnimatingRef.current = false;
+      };
+    }
+  }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration, numSegments, accumulatedRotation]);
+
+
+  // Effect to set initial rotation and the wheel's resting position when not spinning
+  useEffect(() => {
+    if (wheelRef.current && !isSpinning) { // Only apply when not actively spinning
+      wheelRef.current.style.transition = 'none'; // No transition for setting resting state
       wheelRef.current.style.transform = `rotate(${accumulatedRotation}deg)`;
     }
-  }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration, accumulatedRotation, numSegments]);
+  }, [accumulatedRotation, isSpinning]); // Runs when accumulatedRotation changes or when isSpinning changes
 
 
   const gradientDefs = useMemo(() => {
@@ -147,33 +165,24 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   };
 
   const handleWheelClick = () => {
-    if (onClick && !isSpinning) {
+    if (onClick && !isSpinning && !isAnimatingRef.current) {
       onClick();
     }
   };
   
-  // Effect to set initial rotation and update if accumulatedRotation changes for resting state
-  useEffect(() => {
-    if (wheelRef.current && !isSpinning) {
-      wheelRef.current.style.transition = 'none'; // No transition for setting resting state
-      wheelRef.current.style.transform = `rotate(${accumulatedRotation}deg)`;
-    }
-  }, [accumulatedRotation, isSpinning]);
-
-
   return (
     <div
       className={cn(
         "relative flex justify-center items-center my-8 select-none w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[450px] md:h-[450px] mx-auto",
         "transition-transform duration-150",
-        onClick && !isSpinning && "cursor-pointer hover:scale-105 active:scale-95 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
+        onClick && !isSpinning && !isAnimatingRef.current && "cursor-pointer hover:scale-105 active:scale-95 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
       )}
       onClick={handleWheelClick}
       style={{ perspective: '1000px' }}
       role={onClick && !isSpinning ? "button" : undefined}
       tabIndex={onClick && !isSpinning ? 0 : -1}
       aria-label="Spinning prize wheel"
-      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick && !isSpinning) { handleWheelClick(); e.preventDefault();}}}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick && !isSpinning && !isAnimatingRef.current) { handleWheelClick(); e.preventDefault();}}}
     >
       <div
         className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10"
@@ -187,15 +196,14 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
       <svg
         ref={wheelRef}
-        id="wheel" // Added id for potential direct manipulation if user wants, though ref is primary
+        id="wheel" 
         viewBox="0 0 200 200"
         className={cn(
           "w-full h-full rounded-full shadow-2xl"
-          // Removed 'svg-wheel-graphics' as its style is now directly managed
         )}
         style={{
           filter: 'url(#dropShadowWheel)',
-          transform: `rotate(${accumulatedRotation}deg)` // Initial and subsequent resting rotation
+          transform: `rotate(${accumulatedRotation}deg)` // Initial and resting rotation
         } as React.CSSProperties}
       >
         <defs>
@@ -260,4 +268,3 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
-
