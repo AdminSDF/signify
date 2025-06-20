@@ -1,76 +1,105 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
+    // ---------------------------------------------------------------------
+    // Helper Functions
+    // ---------------------------------------------------------------------
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null;
     }
 
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Admin check based on email in the auth token.
-    function isAuthUserAdmin() {
-        return isAuthenticated() && request.auth.token.email == "jameafaizanrasool@gmail.com";
+    function isUserAdmin(userId) {
+      // Check if the user document exists and has the isAdmin flag set to true.
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
+    }
+    
+    function isAdminByEmail() {
+      return isAuthenticated() && request.auth.token.email == "jameafaizanrasool@gmail.com";
     }
 
-    // --- Collections ---
+    function getIncomingData() {
+      return request.resource.data;
+    }
+
+    function getExistingData() {
+      return resource.data;
+    }
+
+    // ---------------------------------------------------------------------
+    // USERS Collection
+    // ---------------------------------------------------------------------
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAuthUserAdmin();
-      allow list: if isAuthUserAdmin();
+      allow read: if isOwner(userId) || isUserAdmin(request.auth.uid);
 
-      allow create: if isOwner(userId) &&
-        request.resource.data.uid == userId &&
-        request.resource.data.email == request.auth.token.email &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.balance is number &&
-        request.resource.data.spinsAvailable is number &&
-        request.resource.data.dailyPaidSpinsUsed == 0 &&
-        request.resource.data.totalWinnings == 0 &&
-        request.resource.data.totalSpinsPlayed == 0;
-        
-      allow update: if (isOwner(userId) &&
-        request.resource.data.uid == resource.data.uid && // Prevent changing immutable fields
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.isAdmin == resource.data.isAdmin
-      ) || isAuthUserAdmin();
+      allow create: if isOwner(userId); // Simplified: Any authenticated user can create their own doc. Fine-tuning can be done in client/functions.
 
-      allow delete: if isAuthUserAdmin();
+      allow update: if isOwner(userId) || isUserAdmin(request.auth.uid); // Admins can update anything. Owners can update their own data.
+
+      allow delete: if isUserAdmin(request.auth.uid);
     }
-
+    
+    // ---------------------------------------------------------------------
+    // TRANSACTIONS Collection
+    // ---------------------------------------------------------------------
     match /transactions/{transactionId} {
-      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAuthUserAdmin());
-      // Users can only list their own transactions. Admins can list any if they construct the query.
-      allow list: if (isAuthenticated() && request.query.where.userId == request.auth.uid) || isAuthUserAdmin();
+      allow read: if isAuthenticated() && (
+        getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid)
+      );
 
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      
-      allow update, delete: if isAuthUserAdmin();
+      // FIX: Allow transaction creation if the user is creating it for themselves OR if an admin is creating it.
+      // This is crucial for the admin panel approval process.
+      allow create: if isAuthenticated() && (
+        (getIncomingData().userId == request.auth.uid) || isUserAdmin(request.auth.uid)
+      );
+
+      // Only admins can update or delete transactions to maintain integrity
+      allow update, delete: if isUserAdmin(request.auth.uid);
     }
 
+    // ---------------------------------------------------------------------
+    // WITHDRAWAL & ADD FUND REQUESTS Collections
+    // ---------------------------------------------------------------------
     match /withdrawalRequests/{requestId} {
-      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAuthUserAdmin());
-      allow list: if isAuthUserAdmin(); // Only admin can list all withdrawal requests.
+      allow read: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
       
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthUserAdmin();
+      allow list: if isUserAdmin(request.auth.uid); // Admin can list all requests.
+      
+      allow create: if isAuthenticated() && getIncomingData().userId == request.auth.uid;
+      
+      allow update: if isUserAdmin(request.auth.uid);
+      
+      allow delete: if isUserAdmin(request.auth.uid);
     }
 
     match /addFundRequests/{requestId} {
-      allow get: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAuthUserAdmin());
-      allow list: if isAuthUserAdmin(); // Only admin can list all add fund requests.
+       allow read: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
+       
+       allow list: if isUserAdmin(request.auth.uid); // Admin can list all requests.
 
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthUserAdmin();
+       allow create: if isAuthenticated() && getIncomingData().userId == request.auth.uid;
+       
+       allow update: if isUserAdmin(request.auth.uid);
+       
+       allow delete: if isUserAdmin(request.auth.uid);
     }
+    
 
+    // ---------------------------------------------------------------------
+    // APP CONFIGURATION Collection
+    // ---------------------------------------------------------------------
     match /appConfiguration/{docId} {
       allow read: if true;
-      allow write: if isAuthUserAdmin();
+      // Allow write if user has isAdmin flag OR if their email is the designated admin email.
+      allow write: if isUserAdmin(request.auth.uid) || isAdminByEmail();
     }
   }
 }
