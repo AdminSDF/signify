@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -11,8 +10,8 @@ service cloud.firestore {
 
     // 🔹 Helper: Check if user is admin
     function isAdmin(userId) {
-      // Ensure userId is not null or empty before trying to access its document
-      return userId != null && userId != '' &&
+      // Ensure userId is not null or empty before attempting to get/check admin status
+      return userId != null && userId != "" &&
              exists(/databases/$(database)/documents/users/$(userId)) &&
              get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
     }
@@ -24,7 +23,7 @@ service cloud.firestore {
 
     // 🔹 USERS Collection
     match /users/{userId} {
-      allow read: if isOwner(userId) || (isAuthenticated() && isAdmin(request.auth.uid));
+      allow read: if isOwner(userId) || isAdmin(request.auth.uid);
 
       allow create: if isOwner(userId) &&
         request.resource.data.uid == userId &&
@@ -34,35 +33,52 @@ service cloud.firestore {
         request.resource.data.spinsAvailable is number &&
         request.resource.data.dailyPaidSpinsUsed == 0 &&
         request.resource.data.lastPaidSpinDate is string &&
-        // For initial admin creation, replace with your actual admin email or manage separately
-        (request.resource.data.isAdmin == false || request.resource.data.email == "YOUR_ADMIN_EMAIL_HERE@example.com");
+        (request.resource.data.isAdmin == false || request.resource.data.email == "YOUR_ADMIN_EMAIL_HERE@example.com"); // Replace with actual admin email if needed
 
-      allow update: if (isOwner(userId) &&
+      allow update: if (
+        // Condition 1: User is the owner
+        isOwner(userId) &&
+        // Core immutable fields check (uid, email, createdAt)
         request.resource.data.uid == resource.data.uid &&
-        request.resource.data.email == resource.data.email && // Email change should be handled carefully, usually server-side
+        request.resource.data.email == resource.data.email &&
         request.resource.data.createdAt == resource.data.createdAt &&
-        !(request.resource.data.isAdmin != resource.data.isAdmin && resource.data.isAdmin == false) && // User cannot make themselves admin
+        // User cannot change their own admin status.
+        // If 'isAdmin' field is present in the request, its value must match the existing value.
+        // If 'isAdmin' is not present in the request, this check passes.
+        (!request.resource.data.keys().hasAny(['isAdmin']) || request.resource.data.isAdmin == resource.data.isAdmin) &&
+
+        // Check if only allowed fields are being written by the user
         request.resource.data.keys().hasOnly([
           'displayName', 'photoURL', 'lastLogin',
           'upiIdForWithdrawal', 'bankDetailsForWithdrawal',
           'dailyPaidSpinsUsed', 'lastPaidSpinDate',
           'totalWinnings', 'totalSpinsPlayed',
           'balance', 'spinsAvailable',
-          'uid', 'email', 'createdAt', 'isAdmin' // isAdmin included, but protected above
+          // Core fields that must be part of hasOnly check even if not directly modified by user,
+          // because they are part of the document structure being "written" to.
+          'uid', 'email', 'createdAt', 'isAdmin'
         ]) &&
-        // Balance and spins should ideally be server-controlled.
-        // This allows admins to update, and users to update if balance/spins are only decreasing or staying same (e.g. spending).
+        // Type validations for potentially updated fields
+        (!request.resource.data.keys().hasAny(['balance']) || request.resource.data.balance is number) &&
+        (!request.resource.data.keys().hasAny(['spinsAvailable']) || request.resource.data.spinsAvailable is number) &&
+        (!request.resource.data.keys().hasAny(['totalWinnings']) || request.resource.data.totalWinnings is number) &&
+        (!request.resource.data.keys().hasAny(['totalSpinsPlayed']) || request.resource.data.totalSpinsPlayed is number) &&
+        (!request.resource.data.keys().hasAny(['dailyPaidSpinsUsed']) || request.resource.data.dailyPaidSpinsUsed is number) &&
+        (!request.resource.data.keys().hasAny(['lastPaidSpinDate']) || request.resource.data.lastPaidSpinDate is string) &&
+        (!request.resource.data.keys().hasAny(['displayName']) || request.resource.data.displayName is string || request.resource.data.displayName == null) &&
+        (!request.resource.data.keys().hasAny(['photoURL']) || request.resource.data.photoURL is string || request.resource.data.photoURL == null) &&
+        (!request.resource.data.keys().hasAny(['lastLogin']) || request.resource.data.lastLogin is timestamp) &&
+        (!request.resource.data.keys().hasAny(['upiIdForWithdrawal']) || request.resource.data.upiIdForWithdrawal is string || request.resource.data.upiIdForWithdrawal == null) &&
         (
-          (request.resource.data.balance is number && (request.resource.data.balance <= resource.data.balance)) ||
-          (isAuthenticated() && isAdmin(request.auth.uid))
-        ) &&
-        (
-          (request.resource.data.spinsAvailable is number && (request.resource.data.spinsAvailable <= resource.data.spinsAvailable)) ||
-          (isAuthenticated() && isAdmin(request.auth.uid))
+          !request.resource.data.keys().hasAny(['bankDetailsForWithdrawal']) ||
+          request.resource.data.bankDetailsForWithdrawal is map ||
+          request.resource.data.bankDetailsForWithdrawal == null
         )
-      ) || (isAuthenticated() && isAdmin(request.auth.uid));
+      ) ||
+      // Condition 2: Requester is an admin (can update anything for any user)
+      isAdmin(request.auth.uid);
 
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // 🔹 TRANSACTIONS Collection
@@ -75,19 +91,19 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid &&
         (request.resource.data.type == 'credit' || request.resource.data.type == 'debit') &&
         request.resource.data.amount is number &&
-        request.resource.data.description is string && request.resource.data.description.size() > 0 && request.resource.data.description.size() < 200 &&
+        request.resource.data.description is string &&
         request.resource.data.status in ['completed', 'pending', 'failed'] &&
         request.resource.data.date is timestamp &&
-        // Ensure optional fields are numbers if they exist
+        // Optional fields check
         (!('balanceBefore' in request.resource.data) || request.resource.data.balanceBefore is number) &&
         (!('balanceAfter' in request.resource.data) || request.resource.data.balanceAfter is number) &&
         // Ensure only expected fields are present
         request.resource.data.keys().hasOnly([
           'userId', 'type', 'amount', 'description', 'status', 'date',
-          'balanceBefore', 'balanceAfter' // Optional fields must be listed here
+          'balanceBefore', 'balanceAfter'
         ]);
 
-      allow update, delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow update, delete: if isAdmin(request.auth.uid);
     }
 
     // 🔹 WITHDRAWAL REQUESTS
@@ -100,30 +116,31 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid &&
         request.resource.data.userEmail == request.auth.token.email &&
         request.resource.data.amount is number && request.resource.data.amount > 0 &&
-        (request.resource.data.paymentMethod == "upi" || request.resource.data.paymentMethod == "bank") &&
-        request.resource.data.requestDate is timestamp && // should be set by server ideally, but client can send
+        request.resource.data.paymentMethod is string && (request.resource.data.paymentMethod == 'upi' || request.resource.data.paymentMethod == 'bank') &&
+        request.resource.data.requestDate is timestamp && // Client sends this as serverTimestamp() resolved on client, or a specific client time.
         request.resource.data.status == "pending" &&
-        // Conditional validation for payment details
-        (request.resource.data.paymentMethod == "upi" ? request.resource.data.upiId is string && request.resource.data.upiId.size() > 0 : true) &&
-        (request.resource.data.paymentMethod == "bank" ?
+        (
+          (request.resource.data.paymentMethod == 'upi' && request.resource.data.upiId is string && request.resource.data.upiId.size() > 0) ||
+          (request.resource.data.paymentMethod == 'bank' &&
+            request.resource.data.bankDetails is map &&
             request.resource.data.bankDetails.accountHolderName is string && request.resource.data.bankDetails.accountHolderName.size() > 0 &&
             request.resource.data.bankDetails.accountNumber is string && request.resource.data.bankDetails.accountNumber.size() > 0 &&
             request.resource.data.bankDetails.ifscCode is string && request.resource.data.bankDetails.ifscCode.size() > 0
-            : true
+          )
         ) &&
-        request.resource.data.keys().hasOnly([
-            'userId', 'userEmail', 'amount', 'paymentMethod', 'upiId', 'bankDetails', 'requestDate', 'status'
-        ]);
+        request.resource.data.keys().hasOnly(
+          request.resource.data.paymentMethod == 'upi'
+          ? ['userId', 'userEmail', 'amount', 'paymentMethod', 'upiId', 'requestDate', 'status']
+          : ['userId', 'userEmail', 'amount', 'paymentMethod', 'bankDetails', 'requestDate', 'status']
+        );
 
 
-      allow update: if isAuthenticated() && isAdmin(request.auth.uid) &&
+      allow update: if isAdmin(request.auth.uid) &&
         request.resource.data.keys().hasAny(['status', 'adminNotes', 'processedDate', 'transactionId']) &&
-        request.resource.data.userId == resource.data.userId && // Ensure critical fields are not changed
-        request.resource.data.amount == resource.data.amount &&
-        request.resource.data.paymentMethod == resource.data.paymentMethod;
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.amount == resource.data.amount;
 
-
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // 🔹 ADD FUND REQUESTS
@@ -136,19 +153,17 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid &&
         request.resource.data.userEmail == request.auth.token.email &&
         request.resource.data.amount is number && request.resource.data.amount > 0 &&
-        request.resource.data.paymentReference is string && request.resource.data.paymentReference.size() > 0 &&
-        request.resource.data.requestDate is timestamp && // should be set by server ideally
+        request.resource.data.paymentReference is string &&
+        request.resource.data.requestDate is timestamp && // Client sends this as serverTimestamp() resolved on client, or a specific client time.
         request.resource.data.status == "pending" &&
-        request.resource.data.keys().hasOnly([
-            'userId', 'userEmail', 'amount', 'paymentReference', 'requestDate', 'status'
-        ]);
+        request.resource.data.keys().hasOnly(['userId', 'userEmail', 'amount', 'paymentReference', 'requestDate', 'status']);
 
-      allow update: if isAuthenticated() && isAdmin(request.auth.uid) &&
+      allow update: if isAdmin(request.auth.uid) &&
         request.resource.data.keys().hasAny(['status', 'adminNotes', 'approvedDate', 'transactionId']) &&
-        request.resource.data.userId == resource.data.userId && // Ensure critical fields are not changed
+        request.resource.data.userId == resource.data.userId &&
         request.resource.data.amount == resource.data.amount;
 
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // 🔹 APP CONFIGURATION
@@ -156,5 +171,8 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAuthenticated() && isAdmin(request.auth.uid);
     }
+
   }
 }
+
+    
