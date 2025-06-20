@@ -82,7 +82,7 @@ export default function HomePage() {
     if (!isClient) return;
 
     if (authLoading || isAppConfigLoading) {
-      if (!userDataLoading) setUserDataLoading(true); // Keep userDataLoading true if context is still loading
+      if (!userDataLoading) setUserDataLoading(true); 
       return;
     }
 
@@ -91,13 +91,11 @@ export default function HomePage() {
       setUserBalance(0);
       setSpinsAvailable(0);
       setDailyPaidSpinsUsed(0);
-      // No user, so no admin view check needed here
       setShowAdminChoiceView(false);
       return;
     }
 
-    // User is present, and context (auth & app config) is loaded. Fetch user data.
-    if (!userDataLoading) setUserDataLoading(true); // Set to true before fetch
+    if (!userDataLoading) setUserDataLoading(true); 
 
     getUserData(user.uid)
       .then(data => {
@@ -109,7 +107,6 @@ export default function HomePage() {
             setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
           } else {
             setDailyPaidSpinsUsed(0);
-            // Avoid fire-and-forget, handle potential errors
             updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
               .catch(err => console.warn("Failed to reset daily spins on date change:", err));
           }
@@ -120,55 +117,51 @@ export default function HomePage() {
             setShowAdminChoiceView(false);
           }
         } else {
-          // User document not found
-          const firebaseCurrentUser = auth.currentUser; // Get current user from Firebase Auth SDK
+          const firebaseCurrentUser = auth.currentUser; 
           const creationTime = firebaseCurrentUser?.metadata?.creationTime ? new Date(firebaseCurrentUser.metadata.creationTime).getTime() : 0;
           const lastSignInTime = firebaseCurrentUser?.metadata?.lastSignInTime ? new Date(firebaseCurrentUser.metadata.lastSignInTime).getTime() : 0;
-
-          // Check if it's a newly created user session (creation time and last sign-in are same and recent)
-          const isNewlyCreatedUserSession = creationTime === lastSignInTime && (Date.now() - creationTime < 15000); // 15-second window
+          const isNewlyCreatedUserSession = creationTime === lastSignInTime && (Date.now() - creationTime < 15000); 
 
           if (isNewlyCreatedUserSession) {
             console.warn("User document not found for newly created user UID:", user.uid, "Using defaults. Document might be created shortly.");
-            // Silently use defaults, assuming doc will appear soon or on next page load/interaction.
           } else {
             console.error("User document not found in Firestore for UID:", user.uid, "This can happen if document creation failed or was deleted.");
             toast({ title: "Data Sync Issue", description: "Could not fully load game data. Defaults applied. Re-login if issues persist.", variant: "destructive" });
           }
-          // Apply defaults in both cases (new user or actual missing doc for existing user)
           setUserBalance(appSettings.initialBalanceForNewUsers);
           setSpinsAvailable(appSettings.maxSpinsInBundle);
           setDailyPaidSpinsUsed(0);
-          setShowAdminChoiceView(false); // Ensure admin view is off if data is missing
+          setShowAdminChoiceView(false); 
         }
       })
       .catch(error => {
         console.error("Error fetching user data:", error);
         toast({ title: "Error Loading User Data", description: "Could not load your game progress. Try refreshing.", variant: "destructive" });
-        setUserBalance(0); // Fallback on error
+        setUserBalance(0); 
         setSpinsAvailable(0);
         setShowAdminChoiceView(false);
       })
       .finally(() => {
         setUserDataLoading(false);
       });
-  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]); // Removed userDataLoading from deps
+  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]); 
 
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
     if (!user) return;
-    const currentBal = userBalance;
+    // const currentBal = userBalance; // Not strictly needed here if not setting balanceBefore/After from this function
     try {
       await addTransactionToFirestore({
-        ...details,
-        balanceBefore: currentBal,
-        balanceAfter: details.type === 'credit' ? currentBal + details.amount : currentBal - details.amount,
+        type: details.type,
+        amount: details.amount,
+        description: details.description,
+        status: details.status || 'completed', // Ensure status is always sent
       }, user.uid);
     } catch (error) {
       console.error("Error adding transaction to Firestore:", error);
       toast({ title: "Transaction Error", description: "Could not save transaction.", variant: "destructive" });
     }
-  }, [user, toast, userBalance]);
+  }, [user, toast]);
 
   const selectWinningSegmentByProbability = useCallback((segments: WheelSegmentWithProbability[]): number => {
     const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);

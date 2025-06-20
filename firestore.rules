@@ -6,9 +6,7 @@ service cloud.firestore {
 
     // Helper function to check if a user is an admin
     function isAdmin(userId) {
-      // Ensure userId is not null and exists before trying to access its data
-      return userId != null &&
-             exists(/databases/$(database)/documents/users/$(userId)) &&
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
              get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
     }
 
@@ -24,101 +22,127 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      allow read: if isOwner(userId) || (isAuthenticated() && isAdmin(request.auth.uid));
+      allow read: if isOwner(userId) || isAdmin(request.auth.uid);
 
       allow create: if isOwner(userId) &&
                       request.resource.data.uid == userId &&
                       request.resource.data.email == request.auth.token.email &&
-                      request.resource.data.createdAt == request.time && // For creation, request.time is fine.
+                      request.resource.data.createdAt == request.time &&
                       request.resource.data.balance is number &&
                       request.resource.data.spinsAvailable is number &&
                       request.resource.data.dailyPaidSpinsUsed == 0 &&
                       request.resource.data.lastPaidSpinDate is string &&
-                      // For isAdmin: new users are not admin by default.
-                      // If you want a specific email to become admin on signup, replace placeholder.
-                      // Otherwise, set isAdmin manually in Firestore console or via a trusted function.
-                      (request.resource.data.isAdmin == false || request.resource.data.email == "YOUR_ADMIN_EMAIL_HERE@example.com");
-
+                      (request.resource.data.isAdmin == false || request.resource.data.email == "YOUR_ADMIN_EMAIL_HERE@example.com"); // Replace with actual admin email
 
       allow update: if (isOwner(userId) &&
                        request.resource.data.uid == resource.data.uid &&
                        request.resource.data.email == resource.data.email &&
                        request.resource.data.createdAt == resource.data.createdAt &&
-                       !(request.resource.data.isAdmin != resource.data.isAdmin) && // User cannot change their admin status
-                       (request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'lastLogin', 'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'dailyPaidSpinsUsed', 'lastPaidSpinDate', 'totalWinnings', 'totalSpinsPlayed', 'balance', 'spinsAvailable', 'uid', 'email', 'createdAt', 'isAdmin'])) &&
-                       (request.resource.data.balance == resource.data.balance || request.resource.data.balance < resource.data.balance || (isAuthenticated() && isAdmin(request.auth.uid)) ) &&
-                       (request.resource.data.spinsAvailable == resource.data.spinsAvailable || request.resource.data.spinsAvailable < resource.data.spinsAvailable || (isAuthenticated() && isAdmin(request.auth.uid)) )
-                      ) || (isAuthenticated() && isAdmin(request.auth.uid));
+                       !(request.resource.data.isAdmin != resource.data.isAdmin) &&
+                       request.resource.data.keys().hasOnly([
+                         'displayName', 'photoURL', 'lastLogin',
+                         'upiIdForWithdrawal', 'bankDetailsForWithdrawal',
+                         'dailyPaidSpinsUsed', 'lastPaidSpinDate',
+                         'totalWinnings', 'totalSpinsPlayed',
+                         'balance', 'spinsAvailable',
+                         'uid', 'email', 'createdAt', 'isAdmin'
+                       ]) &&
+                       (
+                         request.resource.data.balance == resource.data.balance ||
+                         request.resource.data.balance < resource.data.balance || // Allow decrement by user (e.g. paying for spins)
+                         isAdmin(request.auth.uid)
+                       ) &&
+                       (
+                         request.resource.data.spinsAvailable == resource.data.spinsAvailable ||
+                         request.resource.data.spinsAvailable < resource.data.spinsAvailable || // Allow decrement by user (using a spin)
+                         isAdmin(request.auth.uid)
+                       )
+                      ) || isAdmin(request.auth.uid);
 
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Transactions Collection
     match /transactions/{transactionId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin(request.auth.uid));
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin(request.auth.uid)
+      );
 
       allow create: if isAuthenticated() &&
-                       request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.date is timestamp && // Corrected: Check if it's a timestamp
-                       request.resource.data.type is string && (request.resource.data.type == 'credit' || request.resource.data.type == 'debit') &&
-                       request.resource.data.amount is number &&
-                       request.resource.data.description is string && request.resource.data.description.size() > 0 &&
-                       request.resource.data.status is string && (request.resource.data.status == 'completed' || request.resource.data.status == 'pending' || request.resource.data.status == 'failed') &&
-                       // Validate optional fields only if they are present
-                       (!('balanceBefore' in request.resource.data) || request.resource.data.balanceBefore is number) &&
-                       (!('balanceAfter' in request.resource.data) || request.resource.data.balanceAfter is number);
+        request.resource.data.userId == request.auth.uid &&
+        (request.resource.data.type == 'credit' || request.resource.data.type == 'debit') &&
+        request.resource.data.amount is number &&
+        request.resource.data.description is string &&
+        // Ensure status is one of the allowed values
+        request.resource.data.status in ['completed', 'pending', 'failed'] &&
+        request.resource.data.date is timestamp &&
+        // Allow optional fields if present, and ensure they are numbers
+        (!('balanceBefore' in request.resource.data) || request.resource.data.balanceBefore is number) &&
+        (!('balanceAfter' in request.resource.data) || request.resource.data.balanceAfter is number) &&
+        // Ensure only expected fields are present.
+        request.resource.data.keys().hasOnly([
+          'userId', 'type', 'amount', 'description', 'status', 'date',
+          'balanceBefore', 'balanceAfter'
+        ]);
 
-      allow update, delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow update, delete: if isAdmin(request.auth.uid);
     }
 
     // Withdrawal Requests Collection
     match /withdrawalRequests/{requestId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin(request.auth.uid));
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin(request.auth.uid)
+      );
 
       allow create: if isAuthenticated() &&
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.userEmail == request.auth.token.email &&
                        request.resource.data.amount is number && request.resource.data.amount > 0 &&
                        request.resource.data.paymentMethod is string && (request.resource.data.paymentMethod == 'upi' || request.resource.data.paymentMethod == 'bank') &&
-                       request.resource.data.requestDate is timestamp && // Check if it's a timestamp
+                       // Conditional validation for UPI
+                       (request.resource.data.paymentMethod == 'bank' || (request.resource.data.paymentMethod == 'upi' && request.resource.data.upiId is string && request.resource.data.upiId.size() > 3)) &&
+                       // Conditional validation for Bank
+                       (request.resource.data.paymentMethod == 'upi' || (request.resource.data.paymentMethod == 'bank' &&
+                           request.resource.data.bankDetails is map &&
+                           request.resource.data.bankDetails.accountHolderName is string && request.resource.data.bankDetails.accountHolderName.size() > 0 &&
+                           request.resource.data.bankDetails.accountNumber is string && request.resource.data.bankDetails.accountNumber.size() > 0 &&
+                           request.resource.data.bankDetails.ifscCode is string && request.resource.data.bankDetails.ifscCode.size() > 0
+                       )) &&
+                       request.resource.data.requestDate is timestamp && // was request.time
                        request.resource.data.status == "pending" &&
-                       // Conditional validation for payment details
-                       (request.resource.data.paymentMethod == 'upi' ? request.resource.data.upiId is string && request.resource.data.upiId.size() > 0 : true) &&
-                       (request.resource.data.paymentMethod == 'bank' ?
-                         request.resource.data.bankDetails is map &&
-                         request.resource.data.bankDetails.accountHolderName is string && request.resource.data.bankDetails.accountHolderName.size() > 0 &&
-                         request.resource.data.bankDetails.accountNumber is string && request.resource.data.bankDetails.accountNumber.size() > 0 &&
-                         request.resource.data.bankDetails.ifscCode is string && request.resource.data.bankDetails.ifscCode.size() > 0
-                       : true);
+                       request.resource.data.keys().hasOnly(['userId', 'userEmail', 'amount', 'paymentMethod', 'upiId', 'bankDetails', 'requestDate', 'status']);
 
 
-      allow update: if isAuthenticated() && isAdmin(request.auth.uid) &&
+      allow update: if isAdmin(request.auth.uid) &&
                        request.resource.data.keys().hasAny(['status', 'adminNotes', 'processedDate', 'transactionId']) &&
                        request.resource.data.userId == resource.data.userId &&
                        request.resource.data.amount == resource.data.amount;
 
 
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Add Fund Requests Collection
     match /addFundRequests/{requestId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin(request.auth.uid));
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin(request.auth.uid)
+      );
 
       allow create: if isAuthenticated() &&
                        request.resource.data.userId == request.auth.uid &&
                        request.resource.data.userEmail == request.auth.token.email &&
                        request.resource.data.amount is number && request.resource.data.amount > 0 &&
-                       request.resource.data.paymentReference is string && request.resource.data.paymentReference.size() > 0 &&
-                       request.resource.data.requestDate is timestamp && // Check if it's a timestamp
-                       request.resource.data.status == "pending";
+                       request.resource.data.paymentReference is string &&
+                       request.resource.data.requestDate is timestamp && // was request.time
+                       request.resource.data.status == "pending" &&
+                       request.resource.data.keys().hasOnly(['userId', 'userEmail', 'amount', 'paymentReference', 'requestDate', 'status']);
 
-      allow update: if isAuthenticated() && isAdmin(request.auth.uid) &&
+      allow update: if isAdmin(request.auth.uid) &&
                        request.resource.data.keys().hasAny(['status', 'adminNotes', 'approvedDate', 'transactionId']) &&
                        request.resource.data.userId == resource.data.userId &&
                        request.resource.data.amount == resource.data.amount;
 
-      allow delete: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // App Configuration Document
@@ -128,5 +152,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
