@@ -88,7 +88,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (!isTrulyNewSession) {
           try {
-             const userDocRef = doc(auth.firestore, 'users', firebaseUser.uid);
+             const userDocRef = doc(db, 'users', firebaseUser.uid);
              const userDoc = await getDoc(userDocRef);
              if (userDoc.exists()) { // Only update if document exists
                 await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
@@ -236,3 +236,5 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
+    

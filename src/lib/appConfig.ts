@@ -61,3 +61,5 @@ export type NewsItem = string;
 
 export const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail';
 export const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
+
+    
