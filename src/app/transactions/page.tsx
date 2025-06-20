@@ -1,81 +1,106 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { ArrowDownLeft, ArrowUpRight, ShoppingCart } from 'lucide-react'; // Added ShoppingCart
+import { ArrowDownLeft, ArrowUpRight, ShoppingCart, RefreshCw } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { getTransactionsFromFirestore, TransactionData as FirestoreTransactionData, Timestamp } from '@/lib/firebase';
+import { Button } from '@/components/ui/button'; // Added Button import
 
-interface Transaction {
-  id: string;
-  type: 'credit' | 'debit';
-  amount: number;
-  description: string;
-  date: string;
-  status: 'completed' | 'pending' | 'failed';
+interface TransactionDisplayItem extends Omit<FirestoreTransactionData, 'date'> {
+  id: string; // Firestore document ID
+  date: string; // Formatted date string for display
 }
 
-const TRANSACTION_STORAGE_KEY = 'spinifyTransactions';
-
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const { user, loading: authLoading } = useAuth();
+  const [transactions, setTransactions] = useState<TransactionDisplayItem[]>([]);
   const [isClient, setIsClient] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // For loading state of transactions
 
   useEffect(() => {
     setIsClient(true);
-    if (typeof window !== 'undefined') {
-      const storedTransactions = localStorage.getItem(TRANSACTION_STORAGE_KEY);
-      if (storedTransactions) {
-        try {
-          const parsedTransactions = JSON.parse(storedTransactions) as Transaction[];
-          // Sort by date descending before setting
-          parsedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          setTransactions(parsedTransactions);
-        } catch (e) {
-          console.error("Error parsing transactions from localStorage", e);
-          setTransactions([]);
-        }
-      } else {
-        setTransactions([]); // Set to empty if nothing in storage
-      }
-    }
   }, []);
 
-  if (!isClient) {
+  const fetchTransactions = useCallback(async () => {
+    if (!user || !isClient) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const firestoreTransactions = await getTransactionsFromFirestore(user.uid, 50); // Fetch more, e.g., 50
+      const displayableTransactions = firestoreTransactions.map(t => ({
+        ...t,
+        id: (t as any).id, // Ensure id is present
+        date: t.date instanceof Timestamp ? t.date.toDate().toISOString() : new Date(t.date).toISOString(), // Handle if date is already string or Timestamp
+      }));
+      setTransactions(displayableTransactions);
+    } catch (error) {
+      console.error("Error fetching transactions from Firestore:", error);
+      setTransactions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, isClient]);
+
+  useEffect(() => {
+    if (isClient && user && !authLoading) {
+      fetchTransactions();
+    } else if (!user && !authLoading) {
+      setIsLoading(false); // No user, so not loading
+      setTransactions([]); // Clear transactions if user logs out
+    }
+  }, [isClient, user, authLoading, fetchTransactions]);
+
+  if (!isClient || authLoading) {
     return (
        <div className="container mx-auto py-8">
         <Card className="w-full max-w-2xl mx-auto shadow-xl">
-          <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center font-headline text-primary">
-              Transaction History
-            </CardTitle>
-            <CardDescription className="text-center text-muted-foreground">
-              Loading transaction history...
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="h-[400px] flex items-center justify-center">
-            <p className="text-muted-foreground">Loading...</p>
+          <CardHeader><CardTitle className="text-3xl font-bold text-center font-headline text-primary">Transaction History</CardTitle><CardDescription className="text-center text-muted-foreground">Loading...</CardDescription></CardHeader>
+          <CardContent className="h-[400px] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div></CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  if (!user && isClient && !authLoading) {
+     return (
+       <div className="container mx-auto py-8">
+        <Card className="w-full max-w-2xl mx-auto shadow-xl">
+          <CardHeader><CardTitle className="text-3xl font-bold text-center font-headline text-primary">Transaction History</CardTitle></CardHeader>
+          <CardContent className="h-[400px] flex flex-col items-center justify-center text-center">
+            <p className="text-muted-foreground mb-4">Please log in to view your transaction history.</p>
+            <Button onClick={() => window.location.href = '/login'}>Go to Login</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
+
   return (
     <div className="container mx-auto py-8">
       <Card className="w-full max-w-2xl mx-auto shadow-xl">
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold text-center font-headline text-primary">
-            Transaction History
-          </CardTitle>
-          <CardDescription className="text-center text-muted-foreground">
-            View all your recent account activities.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-3xl font-bold font-headline text-primary">Transaction History</CardTitle>
+            <CardDescription className="text-muted-foreground">View all your recent account activities.</CardDescription>
+          </div>
+          <Button variant="outline" size="icon" onClick={fetchTransactions} disabled={isLoading} aria-label="Refresh transactions">
+            <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[400px] pr-4">
-            {transactions.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : transactions.length === 0 ? (
               <p className="text-center text-muted-foreground py-10">No transactions yet. Play the game to see your history!</p>
             ) : (
               <ul className="space-y-4">
@@ -89,13 +114,11 @@ export default function TransactionsPage() {
                     amountColorClass = 'text-blue-600';
                   } else if (transaction.type === 'credit') {
                     icon = <ArrowUpRight className="h-6 w-6 text-green-500" />;
-                    amountColorClass = transaction.amount > 0 ? 'text-green-600' : 'text-foreground'; // Green for positive credit, default for 0
-                  } else { // debit
+                    amountColorClass = transaction.amount > 0 ? 'text-green-600' : 'text-foreground';
+                  } else { 
                     icon = <ArrowDownLeft className="h-6 w-6 text-red-500" />;
-                    amountColorClass = transaction.amount > 0 ? 'text-red-600' : 'text-foreground'; // Red for positive debit, default for 0
+                    amountColorClass = transaction.amount > 0 ? 'text-red-600' : 'text-foreground';
                   }
-                  
-                  // For "Try Again" or 0 amount prizes, don't show +/- sign if amount is 0.
                   const amountPrefix = transaction.amount === 0 ? '' : (transaction.type === 'credit' && !isPurchase ? '+' : '-');
 
                   return (
@@ -109,18 +132,8 @@ export default function TransactionsPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                           <p className={`font-bold ${amountColorClass}`}>
-                            {isPurchase ? '-' : amountPrefix}₹{transaction.amount.toFixed(2)}
-                          </p>
-                          <Badge 
-                            variant={
-                              transaction.status === 'completed' ? 'default' :
-                              transaction.status === 'pending' ? 'secondary' : 'destructive'
-                            }
-                            className="mt-1 capitalize"
-                          >
-                            {transaction.status}
-                          </Badge>
+                           <p className={`font-bold ${amountColorClass}`}>{isPurchase ? '-' : amountPrefix}₹{transaction.amount.toFixed(2)}</p>
+                          <Badge variant={transaction.status === 'completed' ? 'default' : transaction.status === 'pending' ? 'secondary' : 'destructive'} className="mt-1 capitalize">{transaction.status}</Badge>
                         </div>
                       </div>
                     </li>

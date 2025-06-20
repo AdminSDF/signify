@@ -14,110 +14,195 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, CalendarPlus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { AppSettings, initialSettings as defaultAppSettings, getAppSettings, saveAppSettings, getNewsItems, saveNewsItems, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
+import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems } from '@/lib/appConfig';
+import { 
+  saveAppSettingsToFirestore, 
+  saveNewsItemsToFirestore,
+  getWithdrawalRequests,
+  WithdrawalRequestData,
+  updateWithdrawalRequestStatus,
+  getAddFundRequests,
+  AddFundRequestData,
+  updateAddFundRequestStatus,
+  approveAddFundAndUpdateBalance,
+  approveWithdrawalAndUpdateBalance,
+  Timestamp
+} from '@/lib/firebase';
 
-const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail';
-const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
-
-// Dummy data - replace with Firestore data later
-const dummyWithdrawalRequests = [
-  { id: 'WR001', userId: 'user123', userEmail: 'test@example.com', amount: 550, upiId: 'user@upi', date: new Date().toISOString(), status: 'Pending' },
-  { id: 'WR002', userId: 'user456', userEmail: 'another@example.com', amount: 1200, upiId: 'test@okaxis', date: new Date(Date.now() - 86400000).toISOString(), status: 'Pending' },
-];
-
-const dummyAddFundRequests = [
-  { id: 'AF001', userId: 'user789', userEmail: 'fund@example.com', amount: 200, paymentMethod: 'UPI Screenshot', date: new Date().toISOString(), status: 'Pending' },
-  { id: 'AF002', userId: 'userABC', userEmail: 'add@example.com', amount: 500, paymentMethod: 'UPI ID Ref', date: new Date(Date.now() - 172800000).toISOString(), status: 'Pending' },
-];
-
+const ADMIN_EMAIL_CHECK = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
 
 export default function AdminPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, appSettings: contextAppSettings, newsItems: contextNewsItems, isAppConfigLoading, refreshAppConfig } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  const [adminEmail, setAdminEmail] = useState(DEFAULT_ADMIN_EMAIL);
-  const [appSettings, setAppSettingsState] = useState<AppSettings>(defaultAppSettings);
-  const [newsItems, setNewsItemsState] = useState<string[]>(DEFAULT_NEWS_ITEMS);
+  const [currentAppSettings, setCurrentAppSettings] = useState<AppSettings>(fallbackAppSettings);
+  const [currentNewsItems, setCurrentNewsItems] = useState<string[]>(fallbackNewsItems);
+  
   const [newNewsItem, setNewNewsItem] = useState('');
   const [editingNewsItemIndex, setEditingNewsItemIndex] = useState<number | null>(null);
   const [editingNewsItemText, setEditingNewsItemText] = useState('');
   
+  const [withdrawalRequests, setWithdrawalRequests] = useState<(WithdrawalRequestData & {id: string})[]>([]);
+  const [addFundRequests, setAddFundRequests] = useState<(AddFundRequestData & {id:string})[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    if (typeof window !== 'undefined') {
-      const storedAdminEmail = localStorage.getItem(ADMIN_EMAIL_CONFIG_KEY) || DEFAULT_ADMIN_EMAIL;
-      setAdminEmail(storedAdminEmail);
-      setAppSettingsState(getAppSettings());
-      setNewsItemsState(getNewsItems());
-    }
   }, []);
   
+  useEffect(() => {
+    if (isClient && !isAppConfigLoading) {
+      setCurrentAppSettings(contextAppSettings);
+      setCurrentNewsItems(contextNewsItems);
+    }
+  }, [isClient, contextAppSettings, contextNewsItems, isAppConfigLoading]);
+
+  const fetchRequests = useCallback(async () => {
+    if (!isClient) return;
+    setIsLoadingRequests(true);
+    try {
+      const [withdrawals, adds] = await Promise.all([
+        getWithdrawalRequests(),
+        getAddFundRequests()
+      ]);
+      setWithdrawalRequests(withdrawals);
+      setAddFundRequests(adds);
+    } catch (error) {
+      console.error("Error fetching requests:", error);
+      toast({ title: "Error Fetching Requests", description: "Could not load fund/withdrawal requests.", variant: "destructive" });
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  }, [isClient, toast]);
+
+  useEffect(() => {
+    if (user && user.email === ADMIN_EMAIL_CHECK && isClient) {
+      fetchRequests();
+    }
+  }, [user, isClient, fetchRequests]);
+
 
   useEffect(() => {
     if (!authLoading && isClient) {
-      if (!user || user.email !== adminEmail) {
+      if (!user || user.email !== ADMIN_EMAIL_CHECK) { // Use a consistent admin check
         router.push('/'); 
       }
     }
-  }, [user, authLoading, router, adminEmail, isClient]);
+  }, [user, authLoading, router, isClient]);
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setAppSettingsState(prev => ({
+    setCurrentAppSettings(prev => ({
       ...prev,
       [name]: typeof prev[name as keyof AppSettings] === 'number' ? parseFloat(value) || 0 : value,
     }));
   };
 
-  const handleSaveAppSettings = () => {
-    saveAppSettings(appSettings);
-    toast({ title: "Game Settings Saved", description: "Changes have been saved to local storage." });
+  const handleSaveAppSettings = async () => {
+    try {
+      await saveAppSettingsToFirestore(currentAppSettings);
+      await refreshAppConfig(); // Refresh context after saving
+      toast({ title: "Game Settings Saved", description: "Changes saved to Firestore." });
+    } catch (error) {
+      console.error("Error saving app settings:", error);
+      toast({ title: "Save Failed", description: "Could not save game settings.", variant: "destructive" });
+    }
   };
 
   const handleAddNewsItem = () => {
     if (newNewsItem.trim() === '') return;
-    setNewsItemsState([...newsItems, newNewsItem.trim()]);
+    setCurrentNewsItems(prev => [...prev, newNewsItem.trim()]);
     setNewNewsItem('');
   };
 
   const handleRemoveNewsItem = (index: number) => {
-    setNewsItemsState(newsItems.filter((_, i) => i !== index));
+    setCurrentNewsItems(prev => prev.filter((_, i) => i !== index));
   };
   
   const startEditNewsItem = (index: number) => {
     setEditingNewsItemIndex(index);
-    setEditingNewsItemText(newsItems[index]);
+    setEditingNewsItemText(currentNewsItems[index]);
   };
 
   const handleSaveEditedNewsItem = () => {
     if (editingNewsItemIndex === null) return;
-    const updatedNewsItems = [...newsItems];
+    const updatedNewsItems = [...currentNewsItems];
     updatedNewsItems[editingNewsItemIndex] = editingNewsItemText;
-    setNewsItemsState(updatedNewsItems);
+    setCurrentNewsItems(updatedNewsItems);
     setEditingNewsItemIndex(null);
     setEditingNewsItemText('');
   };
 
-  const handleSaveNewsItems = () => {
-    saveNewsItems(newsItems);
-    toast({ title: "News Items Saved", description: "News ticker items have been saved to local storage." });
+  const handleSaveNewsItems = async () => {
+    try {
+      await saveNewsItemsToFirestore(currentNewsItems);
+      await refreshAppConfig(); // Refresh context after saving
+      toast({ title: "News Items Saved", description: "News ticker items saved to Firestore." });
+    } catch (error) {
+      console.error("Error saving news items:", error);
+      toast({ title: "Save Failed", description: "Could not save news items.", variant: "destructive" });
+    }
   };
 
-  if (authLoading || !isClient || (!user || user.email !== adminEmail)) {
+  const handleApproveAddFund = async (request: AddFundRequestData & {id: string}) => {
+    try {
+      await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount);
+      toast({ title: "Fund Request Approved", description: `₹${request.amount} added to user ${request.userEmail}.`});
+      fetchRequests(); // Refresh list
+    } catch (error: any) {
+      console.error("Error approving add fund request:", error);
+      toast({ title: "Approval Failed", description: error.message || "Could not approve request.", variant: "destructive" });
+    }
+  };
+  
+  const handleRejectAddFund = async (requestId: string) => {
+     try {
+      await updateAddFundRequestStatus(requestId, "rejected", "Rejected by admin.");
+      toast({ title: "Fund Request Rejected" });
+      fetchRequests();
+    } catch (error) {
+      console.error("Error rejecting add fund request:", error);
+      toast({ title: "Rejection Failed", variant: "destructive" });
+    }
+  };
+
+  const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => {
+    const paymentMethodDetails = request.paymentMethod === 'upi' ? `UPI: ${request.upiId}` : `Bank: A/C ending ${request.bankDetails?.accountNumber.slice(-4)}`;
+    try {
+      await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, paymentMethodDetails);
+      toast({ title: "Withdrawal Approved & Processed", description: `₹${request.amount} processed for ${request.userEmail}.`});
+      fetchRequests(); // Refresh list
+    } catch (error: any) {
+      console.error("Error approving withdrawal request:", error);
+      toast({ title: "Approval Failed", description: error.message || "Could not approve withdrawal.", variant: "destructive" });
+    }
+  };
+
+  const handleRejectWithdrawal = async (requestId: string) => {
+    try {
+      await updateWithdrawalRequestStatus(requestId, "rejected", "Rejected by admin.");
+      toast({ title: "Withdrawal Request Rejected" });
+      fetchRequests();
+    } catch (error) {
+      console.error("Error rejecting withdrawal request:", error);
+      toast({ title: "Rejection Failed", variant: "destructive" });
+    }
+  };
+
+
+  if (authLoading || !isClient || isAppConfigLoading || (!user || user.email !== ADMIN_EMAIL_CHECK)) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
-        {authLoading || !isClient ? (
+        {(authLoading || !isClient || isAppConfigLoading) ? (
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         ) : (
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
             <ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" />
             <CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle>
-            <CardDescription className="text-muted-foreground mt-2">
-              You do not have permission to view this page.
-            </CardDescription>
+            <CardDescription className="text-muted-foreground mt-2">You do not have permission.</CardDescription>
             <Button onClick={() => router.push('/')} className="mt-6">Go to Home</Button>
           </Card>
         )}
@@ -125,9 +210,9 @@ export default function AdminPage() {
     );
   }
 
-  const getLabelForKey = (key: string) => {
+  const getLabelForKey = (key: string) => { /* ... same as before ... */ 
     switch (key) {
-      case 'upiId': return 'UPI ID';
+      case 'upiId': return 'UPI ID (for receiving payments)';
       case 'spinRefillPrice': return 'Spin Refill Price (₹)';
       case 'maxSpinsInBundle': return 'Max Spins in Bundle';
       case 'initialBalanceForNewUsers': return 'Initial Balance for New Users (₹)';
@@ -148,281 +233,115 @@ export default function AdminPage() {
       <Card className="w-full max-w-5xl shadow-xl bg-card text-card-foreground rounded-lg">
         <CardHeader className="items-center text-center border-b pb-6">
           <ShieldCheck className="h-16 w-16 text-primary mb-3" />
-          <CardTitle className="text-4xl font-bold font-headline text-primary">
-            Admin Panel
-          </CardTitle>
-          <CardDescription className="text-muted-foreground text-lg mt-1">
-            Spinify Game Management Dashboard
-          </CardDescription>
-           <Link href="/" passHref className="mt-4">
-            <Button variant="outline">
-              <Home className="mr-2 h-4 w-4" /> Back to Main App
-            </Button>
-          </Link>
+          <CardTitle className="text-4xl font-bold font-headline text-primary">Admin Panel</CardTitle>
+          <CardDescription className="text-muted-foreground text-lg mt-1">Spinify Game Management</CardDescription>
+           <Link href="/" passHref className="mt-4"><Button variant="outline"><Home className="mr-2 h-4 w-4" />Back to App</Button></Link>
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="game-settings" className="w-full">
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 h-auto flex-wrap">
-              <TabsTrigger value="game-settings" className="py-2 px-3 text-sm"><Settings className="mr-2 h-4 w-4"/>Game Settings</TabsTrigger>
-              <TabsTrigger value="news-ticker" className="py-2 px-3 text-sm"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
-              <TabsTrigger value="add-fund" className="py-2 px-3 text-sm"><Banknote className="mr-2 h-4 w-4"/>Add Fund Req.</TabsTrigger>
-              <TabsTrigger value="withdrawal-req" className="py-2 px-3 text-sm"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal Req.</TabsTrigger>
-              <TabsTrigger value="leaderboard" className="py-2 px-3 text-sm"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
-              <TabsTrigger value="overview" className="py-2 px-3 text-sm"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
+              <TabsTrigger value="game-settings"><Settings className="mr-2 h-4 w-4"/>Game Settings</TabsTrigger>
+              <TabsTrigger value="news-ticker"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
+              <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund Req.</TabsTrigger>
+              <TabsTrigger value="withdrawal-req"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal Req.</TabsTrigger>
+              <TabsTrigger value="leaderboard"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
+              <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
             </TabsList>
 
             <TabsContent value="game-settings">
               <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Settings /> Game Settings</CardTitle>
-                  <CardDescription>Modify core game parameters. Changes are saved to local storage.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Settings /> Game Settings</CardTitle><CardDescription>Modify core game parameters. Saved to Firestore.</CardDescription></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {(Object.keys(appSettings) as Array<keyof AppSettings>).map((key) => (
+                  {(Object.keys(currentAppSettings) as Array<keyof AppSettings>).map((key) => (
                     <div key={key} className="space-y-1">
                       <Label htmlFor={key} className="capitalize">{getLabelForKey(key)}</Label>
-                      <Input
-                        type={typeof appSettings[key] === 'number' ? 'number' : 'text'}
-                        id={key}
-                        name={key}
-                        value={appSettings[key]}
-                        onChange={handleSettingsChange}
-                        className="bg-background"
-                        step={key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('balance') || key.toLowerCase().includes('amount') ? "0.01" : "1"}
-                      />
+                      <Input type={typeof currentAppSettings[key] === 'number' ? 'number' : 'text'} id={key} name={key} value={currentAppSettings[key]} onChange={handleSettingsChange} className="bg-background" step={key.toLowerCase().includes('cost') || key.toLowerCase().includes('price') || key.toLowerCase().includes('balance') || key.toLowerCase().includes('amount') ? "0.01" : "1"}/>
                     </div>
                   ))}
                 </CardContent>
-                <CardFooter>
-                  <Button onClick={handleSaveAppSettings} className="w-full md:w-auto"><Save className="mr-2 h-4 w-4" /> Save Game Settings</Button>
-                </CardFooter>
+                <CardFooter><Button onClick={handleSaveAppSettings}><Save className="mr-2 h-4 w-4" />Save Game Settings</Button></CardFooter>
               </Card>
             </TabsContent>
 
             <TabsContent value="news-ticker">
               <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><ListPlus /> News Ticker Management</CardTitle>
-                  <CardDescription>Manage items displayed in the news ticker. Saved to local storage.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><ListPlus /> News Ticker</CardTitle><CardDescription>Manage news ticker items. Saved to Firestore.</CardDescription></CardHeader>
                 <CardContent className="space-y-4">
-                  {newsItems.map((item, index) => (
+                  {currentNewsItems.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
                       {editingNewsItemIndex === index ? (
-                        <>
-                          <Textarea 
-                            value={editingNewsItemText} 
-                            onChange={(e) => setEditingNewsItemText(e.target.value)}
-                            className="flex-grow bg-background"
-                            rows={2}
-                          />
+                        <><Textarea value={editingNewsItemText} onChange={(e) => setEditingNewsItemText(e.target.value)} className="flex-grow bg-background" rows={2}/>
                           <Button onClick={handleSaveEditedNewsItem} size="icon" variant="outline"><Save className="h-4 w-4 text-green-500" /></Button>
-                          <Button onClick={() => setEditingNewsItemIndex(null)} size="icon" variant="ghost"><X className="h-4 w-4" /></Button>
-                        </>
+                          <Button onClick={() => setEditingNewsItemIndex(null)} size="icon" variant="ghost"><X className="h-4 w-4" /></Button></>
                       ) : (
-                        <>
-                          <Input value={item} readOnly className="flex-grow bg-background/50" />
-                          <Button onClick={() => startEditNewsItem(index)} variant="outline" size="icon" aria-label="Edit item">
-                            <Edit2 className="h-4 w-4 text-blue-500" />
-                          </Button>
-                          <Button onClick={() => handleRemoveNewsItem(index)} variant="destructive" size="icon" aria-label="Remove item">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
+                        <><Input value={item} readOnly className="flex-grow bg-background/50" />
+                          <Button onClick={() => startEditNewsItem(index)} variant="outline" size="icon"><Edit2 className="h-4 w-4 text-blue-500" /></Button>
+                          <Button onClick={() => handleRemoveNewsItem(index)} variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button></>
                       )}
                     </div>
                   ))}
                   <div className="flex items-center gap-2 pt-4 border-t">
-                    <Textarea
-                      placeholder="Enter new news item..."
-                      value={newNewsItem}
-                      onChange={(e) => setNewNewsItem(e.target.value)}
-                      className="flex-grow bg-background"
-                      rows={2}
-                    />
+                    <Textarea placeholder="New news item..." value={newNewsItem} onChange={(e) => setNewNewsItem(e.target.value)} className="flex-grow bg-background" rows={2}/>
                     <Button onClick={handleAddNewsItem} variant="outline" className="self-end">Add Item</Button>
                   </div>
                 </CardContent>
-                <CardFooter>
-                  <Button onClick={handleSaveNewsItems} className="w-full md:w-auto"><Save className="mr-2 h-4 w-4" /> Save News Items</Button>
-                </CardFooter>
+                <CardFooter><Button onClick={handleSaveNewsItems}><Save className="mr-2 h-4 w-4" />Save News Items</Button></CardFooter>
               </Card>
             </TabsContent>
 
             <TabsContent value="add-fund">
               <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Banknote /> Add Fund Requests</CardTitle>
-                  <CardDescription>View and manage pending user requests to add funds.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Banknote /> Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Req ID</TableHead>
-                        <TableHead>User Email</TableHead>
-                        <TableHead>Amount (₹)</TableHead>
-                        <TableHead>Payment Ref/Details</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {dummyAddFundRequests.map((req) => (
+                      {isLoadingRequests && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
+                      {!isLoadingRequests && addFundRequests.map((req) => (
                         <TableRow key={req.id}>
-                          <TableCell className="font-medium">{req.id}</TableCell>
-                          <TableCell>{req.userEmail}</TableCell>
-                          <TableCell>{req.amount.toFixed(2)}</TableCell>
-                          <TableCell>{req.paymentMethod}</TableCell>
-                          <TableCell>{new Date(req.date).toLocaleDateString()}</TableCell>
+                          <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs">{req.paymentReference}</TableCell>
+                          <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
+                          <TableCell><span className={`px-2 py-1 text-xs rounded-full ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'approved' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{req.status}</span></TableCell>
                           <TableCell>
-                            <span className={`px-2 py-1 text-xs rounded-full ${req.status === 'Pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
-                              {req.status}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" disabled><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
-                            <Button variant="destructive" size="sm" disabled><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {dummyAddFundRequests.length === 0 && (
-                         <TableRow>
-                            <TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell>
-                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                            {req.status === 'pending' && (<>
+                              <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
+                            </>)}
+                          </TableCell></TableRow>))}
+                      {!isLoadingRequests && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell></TableRow>)}
+                    </TableBody></Table>
                 </CardContent>
-                <CardFooter className="text-sm text-muted-foreground">
-                  Full add fund request management requires Firestore integration.
-                </CardFooter>
               </Card>
             </TabsContent>
 
             <TabsContent value="withdrawal-req">
               <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle>
-                  <CardDescription>View and manage pending user withdrawal requests.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Req ID</TableHead>
-                        <TableHead>User Email</TableHead>
-                        <TableHead>Amount (₹)</TableHead>
-                        <TableHead>UPI/Details</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {dummyWithdrawalRequests.map((req) => (
+                      {isLoadingRequests && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
+                      {!isLoadingRequests && withdrawalRequests.map((req) => (
                         <TableRow key={req.id}>
-                          <TableCell className="font-medium">{req.id}</TableCell>
-                          <TableCell>{req.userEmail}</TableCell>
-                          <TableCell>{req.amount.toFixed(2)}</TableCell>
-                          <TableCell>{req.upiId}</TableCell>
-                          <TableCell>{new Date(req.date).toLocaleDateString()}</TableCell>
+                          <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs">{req.paymentMethod === 'upi' ? `UPI: ${req.upiId}` : `Bank: ${req.bankDetails?.accountHolderName}, A/C ...${req.bankDetails?.accountNumber.slice(-4)}`}</TableCell>
+                          <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
+                          <TableCell><span className={`px-2 py-1 text-xs rounded-full ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'processed' || req.status === 'approved' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{req.status}</span></TableCell>
                           <TableCell>
-                            <span className={`px-2 py-1 text-xs rounded-full ${req.status === 'Pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
-                              {req.status}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" disabled><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
-                             <Button variant="destructive" size="sm" disabled><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {dummyWithdrawalRequests.length === 0 && (
-                         <TableRow>
-                            <TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell>
-                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                            {req.status === 'pending' && (<>
+                              <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
+                            </>)}
+                          </TableCell></TableRow>))}
+                      {!isLoadingRequests && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell></TableRow>)}
+                    </TableBody></Table>
                 </CardContent>
-                <CardFooter className="text-sm text-muted-foreground">
-                  Full withdrawal management requires Firestore integration.
-                </CardFooter>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="leaderboard">
-              <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard Management</CardTitle>
-                  <CardDescription>Oversee leaderboards, tournaments, and player rankings.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <h4 className="font-semibold mb-2 flex items-center gap-2"><BarChart3 /> Current Standings</h4>
-                    <p className="text-sm text-muted-foreground">Leaderboard data will be displayed here once backend is integrated.</p>
-                    {/* Placeholder for table or list of top players */}
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-2 flex items-center gap-2"><RefreshCcw /> Manage Leaderboards</h4>
-                    <Button variant="outline" disabled className="mr-2">Reset Weekly Leaderboard</Button>
-                    <Button variant="outline" disabled>Reset Monthly Leaderboard</Button>
-                    <p className="text-xs text-muted-foreground mt-1">Requires Firestore integration.</p>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-2 flex items-center gap-2"><CalendarPlus /> Tournament Management</h4>
-                    <Button variant="outline" disabled>Create New Tournament</Button>
-                     <p className="text-sm text-muted-foreground mt-2">Tournament creation and management tools will appear here.</p>
-                    <p className="text-xs text-muted-foreground mt-1">Requires Firestore integration.</p>
-                  </div>
-                </CardContent>
-                <CardFooter className="text-sm text-muted-foreground">
-                  Full leaderboard and tournament management requires Firestore integration.
-                </CardFooter>
               </Card>
             </TabsContent>
             
-            <TabsContent value="overview">
-              <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Users /> User & Financial Overview</CardTitle>
-                  <CardDescription>View user statistics, activity, and global financial summaries.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <h4 className="font-semibold mb-2 flex items-center gap-2"><DollarSign /> Global Financials</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <Card className="p-4 bg-background">
-                        <p className="text-sm text-muted-foreground">Total Funds Added (All Users)</p>
-                        <p className="text-2xl font-bold text-primary">₹ [Coming Soon]</p>
-                      </Card>
-                      <Card className="p-4 bg-background">
-                        <p className="text-sm text-muted-foreground">Total Funds Withdrawn (All Users)</p>
-                        <p className="text-2xl font-bold text-accent">₹ [Coming Soon]</p>
-                      </Card>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-2 flex items-center gap-2"><Activity /> User Activity & Management</h4>
-                     <div className="flex items-center gap-2 mb-4">
-                        <Input type="search" placeholder="Search users by email or ID..." className="bg-background" disabled/>
-                        <Button variant="outline" disabled><Search className="mr-2 h-4 w-4" /> Search</Button>
-                     </div>
-                    <p className="text-sm text-muted-foreground">Detailed user activity logs and management tools will be available here.</p>
-                  </div>
-                   <div>
-                    <h4 className="font-semibold mb-2 flex items-center gap-2"><History /> Global Transaction Log</h4>
-                    <p className="text-sm text-muted-foreground">A comprehensive log of all transactions across the platform.</p>
-                    <Button variant="link" disabled className="p-0 h-auto text-base">View Full Transaction Log (Coming Soon)</Button>
-                  </div>
-                </CardContent>
-                <CardFooter className="text-sm text-muted-foreground">
-                  Full user management, financial overviews, and transaction logs require Firestore integration.
-                </CardFooter>
-              </Card>
-            </TabsContent>
+            {/* Placeholder Tabs for Leaderboard and Overview */}
+            <TabsContent value="leaderboard"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard</CardTitle><CardDescription>Firestore integration needed.</CardDescription></CardHeader><CardContent><p>Leaderboard management coming soon.</p></CardContent></Card></TabsContent>
+            <TabsContent value="overview"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Users /> Overview</CardTitle><CardDescription>Firestore integration needed.</CardDescription></CardHeader><CardContent><p>User overview and stats coming soon.</p></CardContent></Card></TabsContent>
 
           </Tabs>
         </CardContent>
@@ -430,4 +349,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

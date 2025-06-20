@@ -1,7 +1,5 @@
 
-'use client';
-
-// Default Game Settings
+// Default Game Settings - These serve as fallbacks or initial structure
 export const DEFAULT_UPI_ID = "9828786246@jio";
 export const DEFAULT_SPIN_REFILL_PRICE = 10;
 export const DEFAULT_MAX_SPINS_IN_BUNDLE = 10;
@@ -15,14 +13,11 @@ export const DEFAULT_MIN_WITHDRAWAL_AMOUNT = 500;
 export const DEFAULT_MIN_ADD_BALANCE_AMOUNT = 100;
 export const DEFAULT_NEWS_TICKER_SPEED = 60; // Default speed in seconds
 
-// Default News Items
+// Default News Items - Fallback
 export const DEFAULT_NEWS_ITEMS: string[] = [
-  "🎉 Welcome to Spinify! New players get 10 FREE spins!",
-  "🔥 Hot Prize Alert: Chance to win up to ₹20 on the wheel!",
-  "💸 Special Offer: Buy a spin bundle and get extra value!",
-  "🏆 Leaderboard coming soon - compete for glory!",
-  "💡 Tip: Check the AI Pro Tip feature for winning strategies!",
-  "✨ Spin more, win more! Good luck, Spinify players!",
+  "🎉 Welcome to Spinify! Loading latest news...",
+  "🔥 Hot Prize Alert! Check the wheel for big wins!",
+  "✨ Spin more, win more! Good luck!",
 ];
 
 export interface AppSettings {
@@ -37,9 +32,11 @@ export interface AppSettings {
   tier3Cost: number;
   minWithdrawalAmount: number;
   minAddBalanceAmount: number;
-  newsTickerSpeed: number; // Added news ticker speed
+  newsTickerSpeed: number;
 }
 
+// This is the initial structure / fallback if Firestore is unavailable.
+// The actual settings will be fetched from Firestore via AuthContext.
 export const initialSettings: AppSettings = {
   upiId: DEFAULT_UPI_ID,
   spinRefillPrice: DEFAULT_SPIN_REFILL_PRICE,
@@ -52,48 +49,28 @@ export const initialSettings: AppSettings = {
   tier3Cost: DEFAULT_TIER3_COST,
   minWithdrawalAmount: DEFAULT_MIN_WITHDRAWAL_AMOUNT,
   minAddBalanceAmount: DEFAULT_MIN_ADD_BALANCE_AMOUNT,
-  newsTickerSpeed: DEFAULT_NEWS_TICKER_SPEED, // Added news ticker speed
+  newsTickerSpeed: DEFAULT_NEWS_TICKER_SPEED,
 };
 
-const SETTINGS_STORAGE_KEY = 'spinifyAdminSettings';
-const NEWS_ITEMS_STORAGE_KEY = 'spinifyAdminNewsItems';
+// NewsItem type can be defined if news items have more structure,
+// for now, assuming string array.
+export type NewsItem = string; 
 
-// --- AppSettings Management ---
-export const getAppSettings = (): AppSettings => {
-  if (typeof window === 'undefined') return initialSettings;
-  const storedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
-  try {
-    return storedSettings ? { ...initialSettings, ...JSON.parse(storedSettings) } : initialSettings;
-  } catch (error) {
-    console.error("Error parsing app settings from localStorage", error);
-    return initialSettings;
-  }
-};
+// Note: Functions like getAppSettings, saveAppSettings, getNewsItems, saveNewsItems
+// that directly interacted with localStorage for these global configs are now superseded.
+// App settings and news items are fetched from Firestore by AuthContext
+// and saved to Firestore by the Admin Panel. Client components should consume these
+// from AuthContext.
 
-export const saveAppSettings = (settings: Partial<AppSettings>) => {
-  if (typeof window === 'undefined') return;
-  const currentSettings = getAppSettings();
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ...currentSettings, ...settings }));
-  // Dispatch a custom event to notify other parts of the app
-  window.dispatchEvent(new CustomEvent('app-settings-changed'));
-};
+// The constants DEFAULT_ADMIN_EMAIL and ADMIN_EMAIL_CONFIG_KEY might still be used
+// locally in admin page for initial admin check if needed, but primary user.isAdmin
+// check will be from Firestore user document.
+export const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail';
+export const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
 
+// It's generally better to avoid exporting functions that directly manipulate 
+// global state like settings from here if AuthContext is the provider.
+// Admin panel will use direct Firestore save functions.
+// Client reads from AuthContext.
 
-// --- NewsItems Management ---
-export const getNewsItems = (): string[] => {
-  if (typeof window === 'undefined') return DEFAULT_NEWS_ITEMS;
-  const storedNewsItems = localStorage.getItem(NEWS_ITEMS_STORAGE_KEY);
-  try {
-    return storedNewsItems ? JSON.parse(storedNewsItems) : DEFAULT_NEWS_ITEMS;
-  } catch (error) {
-    console.error("Error parsing news items from localStorage", error);
-    return DEFAULT_NEWS_ITEMS;
-  }
-};
-
-export const saveNewsItems = (items: string[]) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(NEWS_ITEMS_STORAGE_KEY, JSON.stringify(items));
-  window.dispatchEvent(new CustomEvent('news-items-changed'));
-};
-
+// This file now primarily serves to define the AppSettings structure and default fallbacks.

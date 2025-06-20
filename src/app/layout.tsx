@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
 import NewsTicker from '@/components/NewsTicker';
-import { AuthProvider } from '@/context/AuthContext'; // Import AuthProvider
+import { AuthProvider } from '@/context/AuthContext';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -27,10 +27,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587" crossOrigin="anonymous"></script>
+        {/* Single AdSense script load */}
+        <script 
+          async 
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587" 
+          crossOrigin="anonymous"
+        ></script>
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
-        <AuthProvider> {/* Wrap with AuthProvider */}
+        <AuthProvider>
           <SiteHeader />
           <NewsTicker />
           <main className="flex-grow container mx-auto px-4 py-8">
