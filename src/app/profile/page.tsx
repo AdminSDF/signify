@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,8 @@ import {
   addTransactionToFirestore, 
   createWithdrawalRequest, 
   createAddFundRequest,
-  Timestamp
+  Timestamp,
+  type UserDocument // Correctly import type UserDocument
 } from '@/lib/firebase';
 // AppSettings type is now sourced from AuthContext
 
@@ -45,6 +46,7 @@ export default function ProfilePage() {
   const [addBalanceAmount, setAddBalanceAmount] = useState<string>('');
   const [isAddingBalance, setIsAddingBalance] = useState(false); // For button state during submission
   const [showAddBalanceModal, setShowAddBalanceModal] = useState(false);
+  const [currentAmountForModal, setCurrentAmountForModal] = useState<number>(0); // For QR code amount
   
   const [isClient, setIsClient] = useState(false);
 
@@ -130,6 +132,8 @@ export default function ProfilePage() {
         amount: amount,
         description: `Withdrawal request (${selectedPaymentMethod}) - Pending`,
         status: 'pending',
+        balanceBefore: balance, // Log balance before
+        balanceAfter: balance - amount, // Log potential balance after if approved
       }, user.uid);
 
       toast({ title: 'Withdrawal Request Submitted', description: `₹${amount.toFixed(2)} request is pending admin approval.` });
@@ -153,44 +157,50 @@ export default function ProfilePage() {
     return false;
   };
 
-  const handleOpenAddBalanceModal = () => {
+  const handleOpenAddBalanceModal = (amountValue: number) => {
     if (!isClient) return;
-    const amount = parseFloat(addBalanceAmount);
-    if (isNaN(amount) || amount < appSettings.minAddBalanceAmount) {
+    if (isNaN(amountValue) || amountValue < appSettings.minAddBalanceAmount) {
       toast({ title: 'Invalid Amount', description: `Min to add is ₹${appSettings.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
       return;
     }
+    setCurrentAmountForModal(amountValue);
     setShowAddBalanceModal(true);
   };
   
   const handlePresetAddBalanceClick = (amount: number) => {
-    setAddBalanceAmount(amount.toString());
-    if (amount >= appSettings.minAddBalanceAmount && isClient) setShowAddBalanceModal(true);
-    else if (isClient) toast({ title: 'Invalid Amount', description: `Min to add is ₹${appSettings.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
+    setAddBalanceAmount(amount.toString()); // Update input field as well
+    if (amount >= appSettings.minAddBalanceAmount && isClient) {
+      handleOpenAddBalanceModal(amount);
+    } else if (isClient) {
+      toast({ title: 'Invalid Amount', description: `Min to add is ₹${appSettings.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
+    }
   };
 
-  const handleConfirmAddBalance = async (paymentRef?: string) => { // paymentRef can be optional or mandatory
+  const handleConfirmAddBalance = async (paymentRef?: string) => { 
     if (!isClient || !user) return;
     setIsAddingBalance(true); 
-    const amount = parseFloat(addBalanceAmount);
+    const amount = currentAmountForModal; // Use amount from modal state
 
     try {
       await createAddFundRequest({
         userId: user.uid,
         userEmail: user.email || 'N/A',
         amount,
-        paymentReference: paymentRef || "User Confirmed Payment", // Use a proper reference
+        paymentReference: paymentRef || "User Confirmed Payment", 
       });
-      // Log a PENDING transaction for add fund request
+      
       await addTransactionToFirestore({
         userId: user.uid,
         type: 'credit',
         amount: amount,
-        description: `Add balance request via UPI (₹${amount.toFixed(2)}) - Pending`,
+        description: `Add balance request (₹${amount.toFixed(2)}) - Pending`,
         status: 'pending',
+        balanceBefore: balance ?? 0, // Log balance before
+        balanceAfter: (balance ?? 0) + amount, // Log potential balance after
       }, user.uid);
+
       toast({ title: 'Add Balance Request Submitted', description: `Request to add ₹${amount.toFixed(2)} is pending.`, variant: 'default' });
-      setAddBalanceAmount('');
+      setAddBalanceAmount(''); // Clear the input field
     } catch (error) {
       console.error("Add fund request error:", error);
       toast({ title: 'Request Failed', description: 'Could not submit add fund request.', variant: 'destructive' });
@@ -204,9 +214,9 @@ export default function ProfilePage() {
   if (authLoading || !isClient || (!user && isClient) || isAppConfigLoading || userDataLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-        {(authLoading || !isClient || isAppConfigLoading || userDataLoading) && !(!user && isClient && !authLoading) ? ( // Show loader if any loading is true, unless it's confirmed no user
+        {(authLoading || !isClient || isAppConfigLoading || userDataLoading) && !(!user && isClient && !authLoading) ? ( 
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        ) : ( // This part is for when there's definitively no user and client is ready
+        ) : ( 
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
             <ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" />
             <CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle>
@@ -258,7 +268,14 @@ export default function ProfilePage() {
                 <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${appSettings.minAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < appSettings.minAddBalanceAmount && (<p className="text-xs text-destructive text-center mt-1">Min amount to add is ₹{appSettings.minAddBalanceAmount.toFixed(2)}.</p>)}
               </div>
-              <Button onClick={handleOpenAddBalanceModal} disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < appSettings.minAddBalanceAmount || !isClient} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">Request Add Balance</Button>
+              <Button 
+                onClick={() => handleOpenAddBalanceModal(parseFloat(addBalanceAmount))} 
+                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < appSettings.minAddBalanceAmount || !isClient} 
+                className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+              >
+                <QrCode className="mr-2 h-5 w-5" />
+                Request Add Balance
+              </Button>
             </CardContent>
           </Card>
 
@@ -293,7 +310,16 @@ export default function ProfilePage() {
         </CardContent>
         <CardFooter className="flex justify-center pt-6"><Button variant="outline" className="w-full max-w-xs" disabled><Edit3 className="mr-2 h-4 w-4" />Edit Profile (Coming Soon)</Button></CardFooter>
       </Card>
-      <PaymentModal isOpen={showAddBalanceModal && isClient} onClose={() => setShowAddBalanceModal(false)} onConfirm={() => handleConfirmAddBalance("User Confirmed Payment In Modal")} upiId={appSettings.upiId} amount={parseFloat(addBalanceAmount) || 0}/>
+      {isClient && (
+        <PaymentModal 
+          isOpen={showAddBalanceModal} 
+          onClose={() => setShowAddBalanceModal(false)} 
+          onConfirm={() => handleConfirmAddBalance("User Confirmed Payment In Modal")} 
+          upiId={appSettings.upiId}
+          appName={appSettings.appName}
+          amount={currentAmountForModal}
+        />
+      )}
     </div>
   );
 }

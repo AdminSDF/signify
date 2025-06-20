@@ -1,7 +1,8 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Dialog,
   DialogContent,
@@ -14,15 +15,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, CreditCard } from 'lucide-react';
+import { Copy, CreditCard, ExternalLink, QrCode } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
-// No need to import getAppSettings here directly, upiId will be passed as prop
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  upiId: string; // Now mandatory, passed from parent
+  upiId: string;
+  appName: string; // Added for Payee Name in UPI link
   amount: number;
   spinsToGet?: number; 
 }
@@ -31,11 +32,30 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
-  upiId, // Use the passed prop
+  upiId,
+  appName,
   amount,
   spinsToGet,
 }) => {
   const { toast } = useToast();
+  const [upiPaymentLink, setUpiPaymentLink] = useState('');
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && upiId && amount > 0 && appName) {
+      // Standard UPI deeplink format:
+      // upi://pay?pa={upi_id}&pn={payee_name}&am={amount}&cu=INR&tn={transaction_note}
+      // Ensure appName is URL encoded if it can contain special characters
+      const payeeName = encodeURIComponent(appName);
+      const transactionNote = encodeURIComponent(spinsToGet ? `Buy ${spinsToGet} Spins for ${appName}` : `Add Balance to ${appName}`);
+      const link = `upi://pay?pa=${upiId}&pn=${payeeName}&am=${amount.toFixed(2)}&cu=INR&tn=${transactionNote}`;
+      setUpiPaymentLink(link);
+    }
+  }, [isOpen, upiId, amount, appName, spinsToGet]);
 
   const handleCopyUpiId = async () => {
     try {
@@ -59,7 +79,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   
   const modalTitle = spinsToGet && spinsToGet > 0 ? "Purchase More Spins" : "Add Balance";
 
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md bg-card text-card-foreground">
@@ -73,16 +92,38 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           {descriptionText}
         </DialogDescription>
         
-        <div className="my-6 space-y-4">
+        <div className="my-6 space-y-6">
+          {isClient && upiPaymentLink && amount > 0 && (
+            <div className="flex flex-col items-center gap-4 p-4 border rounded-lg bg-muted/20">
+              <p className="text-sm font-medium text-muted-foreground text-center">
+                Scan QR or click link to pay <span className="font-bold text-primary">₹{amount.toFixed(2)}</span>
+              </p>
+              <div className="p-2 bg-white rounded-md shadow-md inline-block">
+                <QRCodeSVG value={upiPaymentLink} size={160} includeMargin={false} />
+              </div>
+              <a
+                href={upiPaymentLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full"
+              >
+                <Button variant="outline" className="w-full">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Pay with UPI App (₹{amount.toFixed(2)})
+                </Button>
+              </a>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="upiIdDisplay" className="text-sm font-medium text-muted-foreground">
-              Pay to the following UPI ID:
+              Or, manually pay to UPI ID:
             </Label>
             <div className="flex items-center gap-2 mt-1">
               <Input
                 id="upiIdDisplay"
                 type="text"
-                value={upiId} // Use the upiId prop
+                value={upiId}
                 readOnly
                 className="bg-muted/50 border-border focus-visible:ring-primary"
               />
@@ -93,14 +134,15 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
           <p className="text-xs text-center text-muted-foreground">
             After completing the payment, click the button below to confirm.
+            Your request will be reviewed by an admin.
           </p>
         </div>
 
-        <DialogFooter className="sm:justify-between gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
+        <DialogFooter className="sm:justify-between gap-2 flex-col sm:flex-row">
+          <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button type="button" variant="default" onClick={onConfirm} className="bg-green-600 hover:bg-green-700 text-white">
+          <Button type="button" variant="default" onClick={onConfirm} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white">
             I have made the payment (₹{amount.toFixed(2)})
           </Button>
         </DialogFooter>

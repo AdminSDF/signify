@@ -1,5 +1,6 @@
 
 // Default Game Settings - These serve as fallbacks or initial structure
+export const DEFAULT_APP_NAME = "Spinify";
 export const DEFAULT_UPI_ID = "9828786246@jio";
 export const DEFAULT_SPIN_REFILL_PRICE = 10;
 export const DEFAULT_MAX_SPINS_IN_BUNDLE = 10;
@@ -21,6 +22,7 @@ export const DEFAULT_NEWS_ITEMS: string[] = [
 ];
 
 export interface AppSettings {
+  appName: string;
   upiId: string;
   spinRefillPrice: number;
   maxSpinsInBundle: number;
@@ -38,6 +40,7 @@ export interface AppSettings {
 // This is the initial structure / fallback if Firestore is unavailable.
 // The actual settings will be fetched from Firestore via AuthContext.
 export const initialSettings: AppSettings = {
+  appName: DEFAULT_APP_NAME,
   upiId: DEFAULT_UPI_ID,
   spinRefillPrice: DEFAULT_SPIN_REFILL_PRICE,
   maxSpinsInBundle: DEFAULT_MAX_SPINS_IN_BUNDLE,
@@ -56,21 +59,5 @@ export const initialSettings: AppSettings = {
 // for now, assuming string array.
 export type NewsItem = string; 
 
-// Note: Functions like getAppSettings, saveAppSettings, getNewsItems, saveNewsItems
-// that directly interacted with localStorage for these global configs are now superseded.
-// App settings and news items are fetched from Firestore by AuthContext
-// and saved to Firestore by the Admin Panel. Client components should consume these
-// from AuthContext.
-
-// The constants DEFAULT_ADMIN_EMAIL and ADMIN_EMAIL_CONFIG_KEY might still be used
-// locally in admin page for initial admin check if needed, but primary user.isAdmin
-// check will be from Firestore user document.
 export const ADMIN_EMAIL_CONFIG_KEY = 'adminUserEmail';
 export const DEFAULT_ADMIN_EMAIL = "jameafaizanrasool@gmail.com";
-
-// It's generally better to avoid exporting functions that directly manipulate 
-// global state like settings from here if AuthContext is the provider.
-// Admin panel will use direct Firestore save functions.
-// Client reads from AuthContext.
-
-// This file now primarily serves to define the AppSettings structure and default fallbacks.
