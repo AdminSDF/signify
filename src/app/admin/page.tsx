@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShieldCheck, Settings, Users, BarChart3, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, DollarSign, Activity, Search, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, CalendarPlus } from 'lucide-react';
+import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems } from '@/lib/appConfig';
 import {
@@ -234,7 +234,7 @@ export default function AdminPage() {
 
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
-      <Card className="w-full max-w-5xl shadow-xl bg-card text-card-foreground rounded-lg">
+      <Card className="w-full max-w-6xl shadow-xl bg-card text-card-foreground rounded-lg">
         <CardHeader className="items-center text-center border-b pb-6">
           <ShieldCheck className="h-16 w-16 text-primary mb-3" />
           <CardTitle className="text-4xl font-bold font-headline text-primary">Admin Panel</CardTitle>
@@ -242,7 +242,7 @@ export default function AdminPage() {
            <Link href="/" passHref className="mt-4"><Button variant="outline"><Home className="mr-2 h-4 w-4" />Back to App</Button></Link>
         </CardHeader>
         <CardContent className="p-6">
-          <Tabs defaultValue="game-settings" className="w-full">
+          <Tabs defaultValue="overview" className="w-full">
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund Req.</TabsTrigger>
@@ -328,10 +328,10 @@ export default function AdminPage() {
                           <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
                           <TableCell><span className={`px-2 py-1 text-xs rounded-full ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'approved' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{req.status}</span></TableCell>
                           <TableCell>
-                            {req.status === 'pending' && (<>
-                              <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
+                            {req.status === 'pending' && (<div className="flex gap-1">
+                              <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
                               <Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
-                            </>)}
+                            </div>)}
                           </TableCell></TableRow>))}
                       {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell></TableRow>)}
                     </TableBody></Table>
@@ -353,10 +353,10 @@ export default function AdminPage() {
                           <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
                           <TableCell><span className={`px-2 py-1 text-xs rounded-full ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'processed' || req.status === 'approved' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{req.status}</span></TableCell>
                           <TableCell>
-                            {req.status === 'pending' && (<>
-                              <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white mr-1" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
+                            {req.status === 'pending' && (<div className="flex gap-1">
+                              <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
                               <Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
-                            </>)}
+                            </div>)}
                           </TableCell></TableRow>))}
                       {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell></TableRow>)}
                     </TableBody></Table>
@@ -365,7 +365,7 @@ export default function AdminPage() {
             </TabsContent>
             
             {/* Placeholder Tabs for Leaderboard */}
-            <TabsContent value="leaderboard"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard</CardTitle><CardDescription>Firestore integration needed.</CardDescription></CardHeader><CardContent><p>Leaderboard management coming soon.</p></CardContent></Card></TabsContent>
+            <TabsContent value="leaderboard"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard</CardTitle><CardDescription>View top players and their earnings.</CardDescription></CardHeader><CardContent><p>Leaderboard management coming soon.</p></CardContent></Card></TabsContent>
             
           </Tabs>
         </CardContent>
@@ -373,3 +373,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
