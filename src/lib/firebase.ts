@@ -136,32 +136,39 @@ export interface TransactionData {
   balanceAfter?: number;
 }
 
-export const addTransactionToFirestore = async (transactionData: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
-  try {
-    const dataToSave = {
-      ...transactionData,
-      userId,
-      date: Timestamp.now(),
-    };
-    // Log the data being sent for debugging
-    console.log("Attempting to save transaction:", JSON.stringify(dataToSave, (key, value) => {
-      // Firestore Timestamps can't be directly stringified, handle them
-      if (value && typeof value === 'object' && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
-        return `Timestamp(seconds=${value.seconds}, nanoseconds=${value.nanoseconds})`;
-      }
-      return value;
-    }, 2));
+export const addTransactionToFirestore = async (transactionDetails: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
+  const dataToSave: Omit<TransactionData, 'date'> & { date: Timestamp } = {
+    userId: userId,
+    type: transactionDetails.type,
+    amount: transactionDetails.amount,
+    description: transactionDetails.description,
+    status: transactionDetails.status,
+    date: Timestamp.now(),
+  };
 
+  // Only include optional fields if they are provided and are numbers
+  if (typeof transactionDetails.balanceBefore === 'number') {
+    dataToSave.balanceBefore = transactionDetails.balanceBefore;
+  }
+  if (typeof transactionDetails.balanceAfter === 'number') {
+    dataToSave.balanceAfter = transactionDetails.balanceAfter;
+  }
+
+  // Log the exact data being sent for debugging
+  console.log("Attempting to save transaction:", JSON.stringify(dataToSave, (key, value) => {
+    if (value && typeof value === 'object' && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
+      return `Timestamp(seconds=${value.seconds}, nanoseconds=${value.nanoseconds})`;
+    }
+    return value;
+  }, 2));
+
+  try {
     const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave);
     console.log("Transaction saved with ID:", docRef.id);
     return docRef.id;
   } catch (error) {
-    console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction to Firestore directly. Data attempted:", JSON.stringify({
-      ...transactionData,
-      userId,
-      date: "Timestamp.now() placeholder" // Timestamp.now() cannot be stringified easily here
-    }, null, 2), "Error:", error);
-    throw error; // Re-throw the error so calling functions can also catch it
+    console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction to Firestore. Data attempted:", JSON.stringify(dataToSave, null, 2), "Error:", error);
+    throw error;
   }
 };
 
@@ -320,13 +327,18 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   const newBalance = currentBalance + amount;
   batch.update(userRef, { balance: newBalance });
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef);
-  batch.set(transactionDocRef, {
-    userId, type: 'credit', amount,
+  const transactionDocRef = doc(transactionCollRef); // Create a new doc ref for transaction
+  const transactionPayload: TransactionData = { // Explicitly build the object
+    userId: userId,
+    type: 'credit',
+    amount: amount,
     description: `Balance added (Admin Approval Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed', date: Timestamp.now(),
-    balanceBefore: currentBalance, balanceAfter: newBalance
-  } as TransactionData);
+    status: 'completed',
+    date: Timestamp.now(),
+    balanceBefore: currentBalance,
+    balanceAfter: newBalance
+  };
+  batch.set(transactionDocRef, transactionPayload);
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
     status: "approved", approvedDate: Timestamp.now(), transactionId: transactionDocRef.id
@@ -345,13 +357,18 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const newBalance = currentBalance - amount;
   batch.update(userRef, { balance: newBalance });
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef);
-  batch.set(transactionDocRef, {
-    userId, type: 'debit', amount,
+  const transactionDocRef = doc(transactionCollRef); // Create a new doc ref for transaction
+  const transactionPayload: TransactionData = { // Explicitly build the object
+    userId: userId,
+    type: 'debit',
+    amount: amount,
     description: `Withdrawal: ${paymentMethodDetails} (Admin Approval Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed', date: Timestamp.now(),
-    balanceBefore: currentBalance, balanceAfter: newBalance
-  } as TransactionData);
+    status: 'completed',
+    date: Timestamp.now(),
+    balanceBefore: currentBalance,
+    balanceAfter: newBalance
+  };
+  batch.set(transactionDocRef, transactionPayload);
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
     status: "processed", processedDate: Timestamp.now(), transactionId: transactionDocRef.id
@@ -364,3 +381,5 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
   Timestamp, FirebaseUser
 };
+
+    
