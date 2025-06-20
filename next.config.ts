@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
   },
   // Add the allowed origin from the development server logs
   // The log message implies this configuration is needed for development (`dev` server).
-  allowedDevOrigins: ['https://9000-firebase-studio-1750317228730.cluster-6dx7corvpngoivimwvvljgokdw.cloudworkstations.dev'],
+  allowedDevOrigins: ['https://6000-firebase-studio-1750317228730.cluster-6dx7corvpngoivimwvvljgokdw.cloudworkstations.dev'],
 };
 
 export default nextConfig;
