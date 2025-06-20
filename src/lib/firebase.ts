@@ -70,8 +70,8 @@ export interface UserDocument {
   spinsAvailable: number;
   dailyPaidSpinsUsed: number;
   lastPaidSpinDate: string; // YYYY-MM-DD
-  totalWinnings?: number;
-  totalSpinsPlayed?: number;
+  totalWinnings: number;
+  totalSpinsPlayed: number;
   isAdmin?: boolean;
   lastLogin?: Timestamp;
   upiIdForWithdrawal?: string;
@@ -131,7 +131,6 @@ export const uploadProfilePhoto = async (userId: string, file: File): Promise<st
   if (!file.type.startsWith("image/")) {
     throw new Error("File is not an image.");
   }
-  // Use a consistent file name to overwrite previous photo
   const storageRef = ref(storage, `profile_photos/${userId}`);
   
   const snapshot = await uploadBytes(storageRef, file);
@@ -140,7 +139,6 @@ export const uploadProfilePhoto = async (userId: string, file: File): Promise<st
   return downloadURL;
 };
 
-// Admin function to get all users
 export const getAllUsers = async (count: number = 100): Promise<(UserDocument & {id: string})[]> => {
   const q = query(
     collection(db, USERS_COLLECTION),
@@ -151,9 +149,21 @@ export const getAllUsers = async (count: number = 100): Promise<(UserDocument & 
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (UserDocument & {id: string})));
 };
 
+export const getLeaderboardUsers = async (count: number = 20): Promise<UserDocument[]> => {
+  const q = query(
+    collection(db, USERS_COLLECTION),
+    orderBy("totalWinnings", "desc"),
+    limit(count)
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => doc.data() as UserDocument);
+};
+
+
 // --- Transaction Functions ---
 export interface TransactionData {
   userId: string;
+  userEmail: string | null;
   type: 'credit' | 'debit';
   amount: number;
   description: string;
@@ -164,8 +174,9 @@ export interface TransactionData {
 }
 
 export const addTransactionToFirestore = async (transactionDetails: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
-    const dataToSave: Partial<TransactionData> & { userId: string, date: Timestamp, type: any, amount: number, description: string, status: any } = {
+    const dataToSave: Partial<TransactionData> & { userId: string, date: Timestamp } = {
         userId: userId,
+        userEmail: transactionDetails.userEmail,
         type: transactionDetails.type,
         amount: transactionDetails.amount,
         description: transactionDetails.description,
@@ -179,15 +190,9 @@ export const addTransactionToFirestore = async (transactionDetails: Omit<Transac
     if (typeof transactionDetails.balanceAfter === 'number' && !isNaN(transactionDetails.balanceAfter)) {
         dataToSave.balanceAfter = transactionDetails.balanceAfter;
     }
-
-    console.log("Attempting to save transaction:", JSON.stringify(dataToSave, null, 2));
-    try {
-        const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave as TransactionData);
-        return docRef.id;
-    } catch (error) {
-        console.error("TRANSACTION_SAVE_ERROR: Failed to add transaction. Data:", JSON.stringify(dataToSave, null, 2), "Error:", error);
-        throw error;
-    }
+    
+    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), dataToSave as TransactionData);
+    return docRef.id;
 };
 
 export const getTransactionsFromFirestore = async (userId: string, count: number = 50): Promise<(TransactionData & {id: string})[]> => {
@@ -202,17 +207,22 @@ export const getTransactionsFromFirestore = async (userId: string, count: number
     return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (TransactionData & {id: string})));
   } catch(error: any) {
       if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error(
-          "TRANSACTIONS_PAGE_ERROR: Firestore query requires an index. " +
-          "This usually happens when filtering by one field (e.g., 'userId') and ordering by another (e.g., 'date'). " +
-          "Please check the Firebase console (Firestore > Indexes) for a link/button to create the missing composite index. " +
-          "The error message in the console might contain a direct link to create it."
-        );
+        console.error("TRANSACTIONS_PAGE_ERROR: Firestore query requires an index. Please check Firebase console.");
       } else {
         console.error("TRANSACTIONS_PAGE_ERROR: Error fetching transactions from Firestore:", error);
       }
-      return []; // Return empty array on error
+      return [];
   }
+};
+
+export const getAllTransactions = async (count: number = 100): Promise<(TransactionData & {id: string})[]> => {
+  const q = query(
+    collection(db, TRANSACTIONS_COLLECTION),
+    orderBy("date", "desc"),
+    limit(count)
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (TransactionData & {id: string})));
 };
 
 // --- App Configuration Functions ---
@@ -361,6 +371,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   const transactionDocRef = doc(transactionCollRef); 
   const transactionPayload: TransactionData = {
     userId: userId,
+    userEmail: userData.email,
     type: 'credit',
     amount: amount,
     description: `Balance added (Admin Approval Req ID: ${requestId.substring(0,6)})`,
@@ -391,6 +402,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const transactionDocRef = doc(transactionCollRef); 
   const transactionPayload: TransactionData = {
     userId: userId,
+    userEmail: userData.email,
     type: 'debit',
     amount: amount,
     description: `Withdrawal: ${paymentMethodDetails} (Admin Approval Req ID: ${requestId.substring(0,6)})`,

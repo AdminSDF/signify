@@ -12,7 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems } from '@/lib/appConfig';
 import {
@@ -28,6 +30,9 @@ import {
   approveWithdrawalAndUpdateBalance,
   getAllUsers,
   UserDocument,
+  getAllTransactions,
+  TransactionData,
+  getLeaderboardUsers,
   Timestamp
 } from '@/lib/firebase';
 
@@ -48,6 +53,9 @@ export default function AdminPage() {
   const [withdrawalRequests, setWithdrawalRequests] = useState<(WithdrawalRequestData & {id: string})[]>([]);
   const [addFundRequests, setAddFundRequests] = useState<(AddFundRequestData & {id:string})[]>([]);
   const [allUsers, setAllUsers] = useState<(UserDocument & {id: string})[]>([]);
+  const [allTransactions, setAllTransactions] = useState<(TransactionData & {id: string})[]>([]);
+  const [leaderboard, setLeaderboard] = useState<UserDocument[]>([]);
+  
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [isClient, setIsClient] = useState(false);
@@ -67,14 +75,18 @@ export default function AdminPage() {
     if (!isClient) return;
     setIsLoadingData(true);
     try {
-      const [withdrawals, adds, users] = await Promise.all([
+      const [withdrawals, adds, users, transactions, leaderboardUsers] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
-        getAllUsers()
+        getAllUsers(),
+        getAllTransactions(),
+        getLeaderboardUsers(20)
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
       setAllUsers(users);
+      setAllTransactions(transactions);
+      setLeaderboard(leaderboardUsers);
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
@@ -156,7 +168,7 @@ export default function AdminPage() {
     try {
       await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount);
       toast({ title: "Fund Request Approved", description: `₹${request.amount} added to user ${request.userEmail}.`});
-      fetchAdminData(); // Refresh list
+      fetchAdminData();
     } catch (error: any) {
       console.error("Error approving add fund request:", error);
       toast({ title: "Approval Failed", description: error.message || "Could not approve request.", variant: "destructive" });
@@ -179,7 +191,7 @@ export default function AdminPage() {
     try {
       await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, paymentMethodDetails);
       toast({ title: "Withdrawal Approved & Processed", description: `₹${request.amount} processed for ${request.userEmail}.`});
-      fetchAdminData(); // Refresh list
+      fetchAdminData();
     } catch (error: any) {
       console.error("Error approving withdrawal request:", error);
       toast({ title: "Approval Failed", description: error.message || "Could not approve withdrawal.", variant: "destructive" });
@@ -234,7 +246,7 @@ export default function AdminPage() {
 
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
-      <Card className="w-full max-w-6xl shadow-xl bg-card text-card-foreground rounded-lg">
+      <Card className="w-full max-w-7xl shadow-xl bg-card text-card-foreground rounded-lg">
         <CardHeader className="items-center text-center border-b pb-6">
           <ShieldCheck className="h-16 w-16 text-primary mb-3" />
           <CardTitle className="text-4xl font-bold font-headline text-primary">Admin Panel</CardTitle>
@@ -243,31 +255,44 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 h-auto flex-wrap">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund Req.</TabsTrigger>
               <TabsTrigger value="withdrawal-req"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal Req.</TabsTrigger>
+              <TabsTrigger value="transactions"><History className="mr-2 h-4 w-4" />All Transactions</TabsTrigger>
+              <TabsTrigger value="leaderboard"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
               <TabsTrigger value="game-settings"><Settings className="mr-2 h-4 w-4"/>Game Settings</TabsTrigger>
               <TabsTrigger value="news-ticker"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
-              <TabsTrigger value="leaderboard"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
             </TabsList>
 
              <TabsContent value="overview">
               <Card className="bg-muted/20">
-                <CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users.</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users. You can manage them from here.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>User ID</TableHead><TableHead>Display Name</TableHead><TableHead>Email</TableHead><TableHead>Balance (₹)</TableHead><TableHead>Joined On</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Balance (₹)</TableHead><TableHead>Spins</TableHead><TableHead>Total Winnings (₹)</TableHead><TableHead>Joined On</TableHead><TableHead>Is Admin</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData && <TableRow><TableCell colSpan={5} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>}
+                      {isLoadingData && <TableRow><TableCell colSpan={6} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>}
                       {!isLoadingData && allUsers.map((u) => (
                         <TableRow key={u.id}>
-                          <TableCell className="font-medium text-xs">{u.id.substring(0,10)}...</TableCell>
-                          <TableCell>{u.displayName}</TableCell>
-                          <TableCell>{u.email}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                               <Avatar className="w-8 h-8 border-2 border-border">
+                                <AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/>
+                                <AvatarFallback>{u.displayName?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-semibold">{u.displayName}</p>
+                                <p className="text-xs text-muted-foreground">{u.email}</p>
+                              </div>
+                            </div>
+                          </TableCell>
                           <TableCell>{u.balance.toFixed(2)}</TableCell>
+                          <TableCell>{u.spinsAvailable}</TableCell>
+                          <TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
                           <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
+                          <TableCell><Badge variant={u.isAdmin ? 'default' : 'secondary'}>{u.isAdmin ? 'Yes' : 'No'}</Badge></TableCell>
                         </TableRow>))}
-                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No users found.</TableCell></TableRow>)}
+                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table>
                 </CardContent>
               </Card>
@@ -320,58 +345,101 @@ export default function AdminPage() {
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
+                      {isLoadingData && <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
                       {!isLoadingData && addFundRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
                           <TableCell className="text-xs">{req.paymentReference}</TableCell>
                           <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
-                          <TableCell><span className={`px-2 py-1 text-xs rounded-full ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'approved' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{req.status}</span></TableCell>
+                          <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>
                             {req.status === 'pending' && (<div className="flex gap-1">
                               <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
                               <Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
                             </div>)}
                           </TableCell></TableRow>))}
-                      {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending add fund requests.</TableCell></TableRow>)}
+                      {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">No pending add fund requests.</TableCell></TableRow>)}
                     </TableBody></Table>
                 </CardContent>
               </Card>
             </TabsContent>
-
+            
             <TabsContent value="withdrawal-req">
               <Card className="bg-muted/20">
                 <CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></CardHeader>
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData && <TableRow><TableCell colSpan={7} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
+                      {isLoadingData && <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>}
                       {!isLoadingData && withdrawalRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
                           <TableCell className="text-xs">{req.paymentMethod === 'upi' ? `UPI: ${req.upiId}` : `Bank: ${req.bankDetails?.accountHolderName}, A/C ...${req.bankDetails?.accountNumber.slice(-4)}`}</TableCell>
                           <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
-                          <TableCell><span className={`px-2 py-1 text-xs rounded-full ${req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' : req.status === 'processed' || req.status === 'approved' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{req.status}</span></TableCell>
+                          <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>
                             {req.status === 'pending' && (<div className="flex gap-1">
                               <Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button>
                               <Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button>
                             </div>)}
                           </TableCell></TableRow>))}
-                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No pending withdrawal requests.</TableCell></TableRow>)}
+                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">No pending withdrawal requests.</TableCell></TableRow>)}
                     </TableBody></Table>
                 </CardContent>
               </Card>
             </TabsContent>
             
-            {/* Placeholder Tabs for Leaderboard */}
-            <TabsContent value="leaderboard"><Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard</CardTitle><CardDescription>View top players and their earnings.</CardDescription></CardHeader><CardContent><p>Leaderboard management coming soon.</p></CardContent></Card></TabsContent>
-            
+             <TabsContent value="transactions">
+              <Card className="bg-muted/20">
+                <CardHeader><CardTitle className="flex items-center gap-2"><History /> All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></CardHeader>
+                <CardContent>
+                   <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Type</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {isLoadingData && <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading transactions...</TableCell></TableRow>}
+                      {!isLoadingData && allTransactions.map((t) => (
+                        <TableRow key={t.id}>
+                            <TableCell className="font-medium">{t.userEmail}</TableCell>
+                            <TableCell>
+                                <span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                                    {t.type === 'credit' ? <ArrowUpRight className="h-4 w-4"/> : <ArrowDownLeft className="h-4 w-4"/>}
+                                    {t.type}
+                                </span>
+                            </TableCell>
+                            <TableCell className={`font-semibold ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</TableCell>
+                            <TableCell>{t.description}</TableCell>
+                            <TableCell>{t.date instanceof Timestamp ? t.date.toDate().toLocaleString() : new Date(t.date as any).toLocaleString()}</TableCell>
+                            <TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                      {!isLoadingData && allTransactions.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center text-muted-foreground h-24">No transactions found.</TableCell></TableRow>)}
+                    </TableBody></Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="leaderboard">
+              <Card className="bg-muted/20">
+                <CardHeader><CardTitle className="flex items-center gap-2"><Trophy /> Leaderboard</CardTitle><CardDescription>Top players by total winnings.</CardDescription></CardHeader>
+                <CardContent>
+                   <Table><TableHeader><TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead className="text-right">Total Winnings (₹)</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {isLoadingData && <TableRow><TableCell colSpan={3} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading leaderboard...</TableCell></TableRow>}
+                      {!isLoadingData && leaderboard.map((player, index) => (
+                        <TableRow key={player.uid}>
+                            <TableCell className="font-bold">{index + 1}</TableCell>
+                            <TableCell>{player.displayName || player.email}</TableCell>
+                            <TableCell className="text-right font-semibold text-primary">₹{player.totalWinnings.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {!isLoadingData && leaderboard.length === 0 && (<TableRow><TableCell colSpan={3} className="text-center text-muted-foreground h-24">Leaderboard is empty.</TableCell></TableRow>)}
+                    </TableBody></Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
           </Tabs>
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    

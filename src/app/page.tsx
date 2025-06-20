@@ -28,7 +28,6 @@ import {
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
 
-// Dynamically import components that are not critical for the initial render
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const TipModal = dynamic(() => import('@/components/TipModal'), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
@@ -82,17 +81,14 @@ export default function HomePage() {
     setIsClient(true);
   }, []);
 
-  // NEW: Refactored useEffect to be self-healing
   useEffect(() => {
     if (!isClient) return;
 
-    // Show loader while auth or app config is resolving
     if (authLoading || isAppConfigLoading) {
       if (!userDataLoading) setUserDataLoading(true);
       return;
     }
 
-    // If no user, reset to default guest state
     if (!user) {
       setUserDataLoading(false);
       setUserBalance(0);
@@ -102,37 +98,26 @@ export default function HomePage() {
       return;
     }
 
-    // This function will now handle fetching and self-healing
     const loadAndSyncUserData = async () => {
       if (!userDataLoading) setUserDataLoading(true);
       
       try {
         let data = await getUserData(user.uid);
         
-        // SELF-HEALING: If user document doesn't exist, create it
         if (!data) {
-          console.warn(`User document for ${user.uid} not found. Attempting to create it.`);
-          toast({ title: "Syncing Profile...", description: "Setting up your game profile for the first time." });
+          console.warn(`User document for ${user.uid} not found. Creating it.`);
+          toast({ title: "Syncing Profile...", description: "Setting up your game profile." });
           
-          await createUserData(
-            user.uid,
-            user.email,
-            user.displayName,
-            user.photoURL,
-            appSettings
-          );
+          await createUserData(user.uid, user.email, user.displayName, user.photoURL, appSettings);
           
-          // Re-fetch the data after creation to ensure we have the correct initial state
           data = await getUserData(user.uid);
 
           if (!data) {
-            // If it's still null, something is fundamentally wrong (e.g., Firestore permissions)
             throw new Error("Failed to create and then retrieve user document.");
           }
           toast({ title: "Profile Synced!", description: "Your game profile is ready. Welcome!" });
         }
 
-        // At this point, `data` is guaranteed to be valid user data.
         setUserBalance(data.balance ?? 0);
         setSpinsAvailable(data.spinsAvailable ?? 0);
 
@@ -140,7 +125,6 @@ export default function HomePage() {
         if (data.lastPaidSpinDate === todayStr) {
           setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed ?? 0);
         } else {
-          // Reset daily spin count if it's a new day
           setDailyPaidSpinsUsed(0);
           updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
             .catch(err => console.warn("Failed to reset daily spins on date change:", err));
@@ -155,8 +139,7 @@ export default function HomePage() {
 
       } catch (error) {
         console.error("Error during user data loading/syncing:", error);
-        toast({ title: "Data Sync Issue", description: "Could not load or sync game data. Defaults applied. Please re-login if issues persist.", variant: "destructive" });
-        // Fallback to defaults on any error during the process
+        toast({ title: "Data Sync Issue", description: "Could not load or sync game data. Defaults applied.", variant: "destructive" });
         setUserBalance(appSettings.initialBalanceForNewUsers);
         setSpinsAvailable(appSettings.maxSpinsInBundle);
         setShowAdminChoiceView(false);
@@ -173,6 +156,7 @@ export default function HomePage() {
     if (!user) return;
     try {
       await addTransactionToFirestore({
+        userEmail: user.email,
         type: details.type,
         amount: details.amount,
         description: details.description,
@@ -295,16 +279,14 @@ export default function HomePage() {
       addTransaction({ type: 'debit', amount: 0, description: `Spin Result: ${winningSegment.text}` });
       if (winningSegment.text === 'Try Again') playSound('tryAgain'); else playSound('win');
     }
-    setUserBalance(newBalance); // Update local balance state immediately
+    setUserBalance(newBalance);
 
-    // Update totalSpinsPlayed and totalWinnings in Firestore
-    // Fetch current values first to avoid overwriting if multiple spins happen quickly (though less likely with animation)
     try {
-        const currentData = await getUserData(user.uid); // Fetch fresh data
+        const currentData = await getUserData(user.uid);
         await updateUserData(user.uid, {
-            balance: newBalance, // Ensure balance is also updated here if it wasn't in a prior step by handleSpinClick for paid spins
-            totalSpinsPlayed: (currentData?.totalSpinsPlayed || 0) + 1,
-            totalWinnings: (currentData?.totalWinnings || 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
+            balance: newBalance,
+            totalSpinsPlayed: (currentData?.totalSpinsPlayed ?? 0) + 1,
+            totalWinnings: (currentData?.totalWinnings ?? 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
         });
     } catch (error) {
         console.error("Error updating total winnings/spins or balance after spin complete:", error);
@@ -408,7 +390,7 @@ export default function HomePage() {
               <span className="text-xs sm:text-sm font-medium text-primary-foreground/80 tracking-wider uppercase">Your Balance</span>
             </div>
             <span className="text-2xl sm:text-3xl font-bold text-primary-foreground glow">
-              ₹{userBalance.toFixed(2)}
+              ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
             </span>
           </Card>
         </div>

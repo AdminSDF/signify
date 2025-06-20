@@ -53,7 +53,6 @@ export default function ProfilePage() {
   const [showAddBalanceModal, setShowAddBalanceModal] = useState(false);
   const [currentAmountForModal, setCurrentAmountForModal] = useState<number>(0);
 
-  // New states for photo upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -78,7 +77,7 @@ export default function ProfilePage() {
           setIfscCode(userData.bankDetailsForWithdrawal.ifscCode || '');
         }
       } else {
-        setBalance(0); // Fallback if no data
+        setBalance(0);
       }
     } catch (error) {
       console.error("Error fetching user balance data:", error);
@@ -92,7 +91,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!authLoading && !user && isClient) {
       router.push('/login');
-    } else if (user && isClient && !isAppConfigLoading) { // Ensure appSettings are loaded too
+    } else if (user && isClient && !isAppConfigLoading) {
       fetchUserBalanceData();
     }
   }, [user, authLoading, router, isClient, isAppConfigLoading, fetchUserBalanceData]);
@@ -142,7 +141,7 @@ export default function ProfilePage() {
     } catch (error: any) {
       console.error("Error uploading profile photo:", error);
       toast({ title: 'Upload Failed', description: error.message || 'Could not upload your photo.', variant: 'destructive' });
-      setIsUploading(false); // Only set to false on error, success causes reload
+      setIsUploading(false);
     }
   };
 
@@ -166,7 +165,7 @@ export default function ProfilePage() {
     if (selectedPaymentMethod === "upi") {
       if (!upiIdInput.trim()) { toast({ title: 'UPI ID Required', variant: 'destructive' }); setIsWithdrawing(false); return; }
       paymentDetails.upiId = upiIdInput.trim();
-    } else { // bank
+    } else {
       if (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim()) { toast({ title: 'Bank Details Required', variant: 'destructive' }); setIsWithdrawing(false); return; }
       paymentDetails.bankDetails = { accountHolderName: accountHolderName.trim(), accountNumber: accountNumber.trim(), ifscCode: ifscCode.trim() };
     }
@@ -191,6 +190,7 @@ export default function ProfilePage() {
         status: 'pending',
         balanceBefore: balance,
         balanceAfter: balance - amount,
+        userEmail: user.email,
       }, user.uid);
 
       toast({ title: 'Withdrawal Request Submitted', description: `₹${amount.toFixed(2)} request is pending admin approval.` });
@@ -252,6 +252,7 @@ export default function ProfilePage() {
         status: 'pending',
         balanceBefore: balance ?? 0,
         balanceAfter: (balance ?? 0) + amount,
+        userEmail: user.email,
       }, user.uid);
 
       toast({ title: 'Add Balance Request Submitted', description: `Request to add ₹${amount.toFixed(2)} is pending.`, variant: 'default' });
@@ -411,4 +412,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-    
