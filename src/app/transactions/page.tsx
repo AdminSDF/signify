@@ -7,8 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { ArrowDownLeft, ArrowUpRight, ShoppingCart, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { getTransactionsFromFirestore, TransactionData as FirestoreTransactionData, Timestamp } from '@/lib/firebase';
-import { Button } from '@/components/ui/button'; // Added Button import
+import { getTransactionsFromFirestore, type TransactionData as FirestoreTransactionData, Timestamp } from '@/lib/firebase';
+import { Button } from '@/components/ui/button';
 
 interface TransactionDisplayItem extends Omit<FirestoreTransactionData, 'date'> {
   id: string; // Firestore document ID
@@ -19,44 +19,56 @@ export default function TransactionsPage() {
   const { user, loading: authLoading } = useAuth();
   const [transactions, setTransactions] = useState<TransactionDisplayItem[]>([]);
   const [isClient, setIsClient] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // For loading state of transactions
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   const fetchTransactions = useCallback(async () => {
-    if (!user || !isClient) {
+    if (!user || !user.uid || !isClient) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const firestoreTransactions = await getTransactionsFromFirestore(user.uid, 50); // Fetch more, e.g., 50
+      const firestoreTransactions = await getTransactionsFromFirestore(user.uid, 50);
       const displayableTransactions = firestoreTransactions.map(t => ({
-        ...t,
-        id: (t as any).id, // Ensure id is present
-        date: t.date instanceof Timestamp ? t.date.toDate().toISOString() : new Date(t.date).toISOString(), // Handle if date is already string or Timestamp
+        ...t, // Spreads all properties from t (TransactionData & {id: string})
+        date: t.date instanceof Timestamp ? t.date.toDate().toISOString() : new Date(t.date as any).toISOString(), // Overwrites date with string version
       }));
       setTransactions(displayableTransactions);
     } catch (error) {
-      console.error("Error fetching transactions from Firestore:", error);
-      setTransactions([]);
+      console.error("TRANSACTIONS_PAGE_ERROR: Error fetching transactions from Firestore:", error);
+      if (error instanceof Error && (error.message.includes("query requires an index") || error.message.includes("Query requires a composite index"))) {
+        console.warn(
+          "TRANSACTIONS_PAGE_WARN: Firestore query requires an index. " +
+          "This usually happens when filtering by one field (e.g., 'userId') and ordering by another (e.g., 'date'). " +
+          "Please check the Firebase console (Firestore > Indexes) for a link/button to create the missing composite index. " +
+          "The error message in the console might contain a direct link to create it."
+        );
+      }
+      setTransactions([]); // Clear transactions on error
     } finally {
       setIsLoading(false);
     }
   }, [user, isClient]);
 
   useEffect(() => {
-    if (isClient && user && !authLoading) {
-      fetchTransactions();
-    } else if (!user && !authLoading) {
-      setIsLoading(false); // No user, so not loading
-      setTransactions([]); // Clear transactions if user logs out
+    if (isClient) {
+      if (user && user.uid && !authLoading) {
+        fetchTransactions();
+      } else if (!user && !authLoading) {
+        // User is definitely logged out and auth state is resolved
+        setTransactions([]);
+        setIsLoading(false);
+      }
+      // If user is null but authLoading is true, we wait.
+      // If user is present but authLoading is true, we wait.
     }
   }, [isClient, user, authLoading, fetchTransactions]);
 
-  if (!isClient || authLoading) {
+  if (!isClient || authLoading && isLoading) { // Show loader if client isn't ready or if auth is loading AND we are in initial loading state for transactions
     return (
        <div className="container mx-auto py-8">
         <Card className="w-full max-w-2xl mx-auto shadow-xl">
@@ -67,7 +79,7 @@ export default function TransactionsPage() {
     );
   }
   
-  if (!user && isClient && !authLoading) {
+  if (!user && isClient && !authLoading) { // User is confirmed to be logged out
      return (
        <div className="container mx-auto py-8">
         <Card className="w-full max-w-2xl mx-auto shadow-xl">
@@ -96,7 +108,7 @@ export default function TransactionsPage() {
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[400px] pr-4">
-            {isLoading ? (
+            {isLoading ? ( // This isLoading is for the fetchTransactions operation itself
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
               </div>
@@ -147,3 +159,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
