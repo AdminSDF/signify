@@ -19,24 +19,25 @@ import { ConfettiRain } from '@/components/ConfettiRain';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  getUserData, 
-  updateUserData, 
+import {
+  getUserData,
+  updateUserData,
   addTransactionToFirestore,
-  UserDocument,
+  // UserDocument, // Not directly used here, type comes via getUserData
   Timestamp
 } from '@/lib/firebase';
-import { AppSettings } from '@/lib/appConfig'; // Keep for type
+// import { AppSettings } from '@/lib/appConfig'; // AppSettings type is now primarily from AuthContext
 
 // Define TransactionEvent locally or import if centralized
-export interface TransactionEvent {
-  id?: string; // Firestore ID will be added when fetched
-  type: 'credit' | 'debit';
-  amount: number;
-  description: string;
-  date: string; // ISO string for display, Firestore stores Timestamp
-  status: 'completed' | 'pending' | 'failed';
-}
+// This was for localStorage, Firestore transactions are handled by addTransactionToFirestore
+// export interface TransactionEvent {
+//   id?: string;
+//   type: 'credit' | 'debit';
+//   amount: number;
+//   description: string;
+//   date: string;
+//   status: 'completed' | 'pending' | 'failed';
+// }
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
 
@@ -56,24 +57,24 @@ const wheelSegments: WheelSegmentWithProbability[] = [
 ];
 
 export default function HomePage() {
-  const { user, loading: authLoading, appSettings, isAppConfigLoading } = useAuth();
+  const { user, authLoading, appSettings, isAppConfigLoading } = useAuth(); // Use specific loading flags
   const router = useRouter();
 
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
   const [currentPrize, setCurrentPrize] = useState<Segment | null>(null);
   const [spinHistory, setSpinHistory] = useState<SpinHistory>([]);
-  
+
   const [showTipModal, setShowTipModal] = useState(false);
   const [generatedTip, setGeneratedTip] = useState<string | null>(null);
   const [tipLoading, setTipLoading] = useState(false);
   const [tipError, setTipError] = useState<string | null>(null);
 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinsAvailable, setSpinsAvailable] = useState<number>(0); // Default to 0, fetch from Firestore
-  const [userBalance, setUserBalance] = useState<number>(0); // Default to 0, fetch from Firestore
+  const [spinsAvailable, setSpinsAvailable] = useState<number>(0);
+  const [userBalance, setUserBalance] = useState<number>(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  
+
   const [dailyPaidSpinsUsed, setDailyPaidSpinsUsed] = useState<number>(0);
   const [lastPaidSpinDate, setLastPaidSpinDate] = useState<string>(new Date().toLocaleDateString('en-CA'));
 
@@ -89,63 +90,79 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!isClient || authLoading || isAppConfigLoading || !user) {
-      if (!user && !authLoading) setUserDataLoading(false); // No user, no data to load
+    if (!isClient) return;
+
+    if (authLoading || isAppConfigLoading) {
+      // Ensure userDataLoading remains true if context is still loading
+      if (!userDataLoading) setUserDataLoading(true);
       return;
     }
 
+    if (!user) {
+      setUserDataLoading(false); // No user, so no user data to load.
+      // Clear any stale user-specific state if necessary
+      setUserBalance(0);
+      setSpinsAvailable(0);
+      setDailyPaidSpinsUsed(0);
+      return;
+    }
+
+    // User is present, and context is loaded. Fetch user data.
     setUserDataLoading(true);
-    getUserData(user.uid).then(data => {
-      if (data) {
-        setUserBalance(data.balance);
-        setSpinsAvailable(data.spinsAvailable);
-
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        if (data.lastPaidSpinDate === todayStr) {
-          setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
+    getUserData(user.uid)
+      .then(data => {
+        if (data) {
+          setUserBalance(data.balance);
+          setSpinsAvailable(data.spinsAvailable);
+          const todayStr = new Date().toLocaleDateString('en-CA');
+          if (data.lastPaidSpinDate === todayStr) {
+            setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed);
+          } else {
+            setDailyPaidSpinsUsed(0);
+            updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr });
+          }
+          setLastPaidSpinDate(data.lastPaidSpinDate || todayStr);
+          if (data.isAdmin && user.email === ADMIN_EMAIL) {
+            setShowAdminChoiceView(true);
+          }
         } else {
+          console.error("User document not found in Firestore for UID:", user.uid, "This can happen if document creation failed during signup.");
+          // Fallback using appSettings (might not be ideal if user doc should exist)
+          setUserBalance(appSettings.initialBalanceForNewUsers);
+          setSpinsAvailable(appSettings.maxSpinsInBundle);
           setDailyPaidSpinsUsed(0);
-          // Reset in Firestore if date changed (optional, can also be done on first paid spin)
-          updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr });
+          toast({ title: "Data Sync Issue", description: "Could not fully load game data. Defaults applied. Re-login if issues persist.", variant: "destructive" });
         }
-        setLastPaidSpinDate(data.lastPaidSpinDate || todayStr);
-        
-        if (data.isAdmin && user.email === ADMIN_EMAIL) {
-          setShowAdminChoiceView(true);
-        }
-      } else {
-        // This case should ideally be handled by user creation in AuthContext
-        // If user doc doesn't exist, it means an issue in user creation flow
-        console.error("User document not found in Firestore for UID:", user.uid);
-        // Fallback: use initial settings, but this indicates a problem
-        setUserBalance(appSettings.initialBalanceForNewUsers);
-        setSpinsAvailable(appSettings.maxSpinsInBundle);
-        setDailyPaidSpinsUsed(0);
-      }
-      setUserDataLoading(false);
-    }).catch(error => {
-      console.error("Error fetching user data:", error);
-      toast({ title: "Error", description: "Could not load your game data.", variant: "destructive" });
-      setUserDataLoading(false);
-    });
-
-  }, [isClient, user, authLoading, isAppConfigLoading, toast, appSettings]);
+      })
+      .catch(error => {
+        console.error("Error fetching user data:", error);
+        toast({ title: "Error Loading User Data", description: "Could not load your game progress. Try refreshing.", variant: "destructive" });
+        // Set some safe defaults or error state display
+        setUserBalance(0);
+        setSpinsAvailable(0);
+      })
+      .finally(() => {
+        setUserDataLoading(false);
+      });
+  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast]);
 
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
     if (!user) return;
+    const currentBal = userBalance; // Capture balance before potential update in the same tick
     try {
       await addTransactionToFirestore({
-        type: details.type,
-        amount: details.amount,
-        description: details.description,
-        status: details.status || 'completed',
+        ...details, // spread the details passed
+        // userId: user.uid, // addTransactionToFirestore adds this
+        // date: Timestamp.now(), // addTransactionToFirestore adds this
+        balanceBefore: currentBal,
+        balanceAfter: details.type === 'credit' ? currentBal + details.amount : currentBal - details.amount,
       }, user.uid);
     } catch (error) {
       console.error("Error adding transaction to Firestore:", error);
       toast({ title: "Transaction Error", description: "Could not save transaction.", variant: "destructive" });
     }
-  }, [user, toast]);
+  }, [user, toast, userBalance]);
 
   const selectWinningSegmentByProbability = useCallback((segments: WheelSegmentWithProbability[]): number => {
     const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
@@ -176,9 +193,9 @@ export default function HomePage() {
   }, [appSettings]);
 
   const handleSpinClick = useCallback(async () => {
-    if (!isClient || isSpinning || !user) {
-      if (!user && isClient) {
-          toast({ title: "Login Required", description: "Please log in to spin.", variant: "destructive", action: <Button onClick={() => router.push('/login')}>Login</Button> });
+    if (!isClient || isSpinning || !user || authLoading || isAppConfigLoading || userDataLoading) {
+      if (!user && isClient && !authLoading && !isAppConfigLoading) {
+        toast({ title: "Login Required", description: "Please log in to spin.", variant: "destructive", action: <Button onClick={() => router.push('/login')}>Login</Button> });
       }
       return;
     }
@@ -188,7 +205,6 @@ export default function HomePage() {
 
     if (lastPaidSpinDate !== today) {
       currentDailySpins = 0;
-      // Update state and Firestore for new day
       setDailyPaidSpinsUsed(0);
       setLastPaidSpinDate(today);
       await updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: today });
@@ -203,18 +219,19 @@ export default function HomePage() {
       const costForThisSpin = getCurrentPaidSpinCost(currentDailySpins);
       if (userBalance >= costForThisSpin) {
         const newBalance = userBalance - costForThisSpin;
-        setUserBalance(newBalance);
+        
         addTransaction({ type: 'debit', amount: costForThisSpin, description: `Spin Cost (Paid Tier ${costForThisSpin === appSettings.tier1Cost ? 1 : costForThisSpin === appSettings.tier2Cost ? 2 : 3})` });
+        setUserBalance(newBalance); // Optimistic UI update for balance
         
         const newDailySpinsUsed = currentDailySpins + 1;
         setDailyPaidSpinsUsed(newDailySpinsUsed);
-        
-        await updateUserData(user.uid, { 
-          balance: newBalance, 
+
+        await updateUserData(user.uid, {
+          balance: newBalance,
           dailyPaidSpinsUsed: newDailySpinsUsed,
-          lastPaidSpinDate: today // ensure date is current
+          lastPaidSpinDate: today
         });
-        
+
         startSpinProcess();
         toast({ title: `Spin Cost: -₹${costForThisSpin.toFixed(2)}`, description: `Paid spins today: ${newDailySpinsUsed}.` });
       } else {
@@ -223,7 +240,8 @@ export default function HomePage() {
     }
   }, [
     isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction,
-    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router, appSettings
+    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router, appSettings,
+    authLoading, isAppConfigLoading, userDataLoading // Include all loading flags
   ]);
 
   const handleSpinComplete = useCallback(async (winningSegment: Segment) => {
@@ -237,19 +255,22 @@ export default function HomePage() {
     let newBalance = userBalance;
     if (winningSegment.amount && winningSegment.amount > 0) {
       newBalance += (winningSegment.amount || 0);
-      setUserBalance(newBalance);
       addTransaction({ type: 'credit', amount: winningSegment.amount, description: `Prize: ${winningSegment.text}` });
       toast({ title: "You Won!", description: `₹${winningSegment.amount.toFixed(2)} added.`, variant: "default" });
       playSound('win');
       if (winningSegment.amount >= 10) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 4000); }
-    } else { 
-      addTransaction({ type: 'debit', amount: 0, description: `Spin Result: ${winningSegment.text}`});
-      if (winningSegment.text === 'Try Again') playSound('tryAgain'); else playSound('win'); 
+    } else {
+      addTransaction({ type: 'debit', amount: 0, description: `Spin Result: ${winningSegment.text}` });
+      if (winningSegment.text === 'Try Again') playSound('tryAgain'); else playSound('win');
     }
-    await updateUserData(user.uid, { balance: newBalance, totalSpinsPlayed: (await getUserData(user.uid))?.totalSpinsPlayed || 0 + 1 });
-    if(winningSegment.amount && winningSegment.amount > 0) {
-       await updateUserData(user.uid, { totalWinnings: (await getUserData(user.uid))?.totalWinnings || 0 + winningSegment.amount });
-    }
+    setUserBalance(newBalance); // Optimistic UI update
+
+    const userData = await getUserData(user.uid);
+    await updateUserData(user.uid, { 
+        balance: newBalance, 
+        totalSpinsPlayed: (userData?.totalSpinsPlayed || 0) + 1,
+        totalWinnings: (userData?.totalWinnings || 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
+    });
 
   }, [playSound, spinHistory.length, toast, addTransaction, user, userBalance]);
 
@@ -262,38 +283,51 @@ export default function HomePage() {
     setTipLoading(false);
   }, [spinHistory, toast, user]);
 
-  const handlePaymentConfirm = useCallback(async () => {
-    if (!user) return; 
+  const handlePaymentConfirm = useCallback(async () => { // For spin bundle purchase
+    if (!user) return;
     setShowPaymentModal(false);
-    // This is a simulated purchase. Actual balance update should be after admin confirms payment.
-    // For now, we log a pending transaction or directly give spins for demo.
-    // Let's assume for this step, admin approves and then spins/balance are added.
-    // Here, we are directly adding spins for bundle purchase, which implies payment is assumed successful.
-    // This should ideally be a "request" that admin approves.
-    
-    // Simulating adding spins directly for now, as addFundRequests is more for general balance.
-    // This could be changed to create an AddFundRequest for the bundle price.
-    const newSpins = appSettings.maxSpinsInBundle;
-    setSpinsAvailable(newSpins); 
-    await updateUserData(user.uid, { spinsAvailable: newSpins });
 
-    // Log a transaction for the purchase for user's record, even if balance isn't deducted yet.
-    // Or, if balance is deducted:
-    // const newBalance = userBalance - appSettings.spinRefillPrice;
-    // setUserBalance(newBalance);
-    // await updateUserData(user.uid, { balance: newBalance, spinsAvailable: newSpins });
-    // addTransaction({ type: 'debit', amount: appSettings.spinRefillPrice, description: `Purchased ${appSettings.maxSpinsInBundle} Spins` });
-    
-    addTransaction({ type: 'debit', amount: appSettings.spinRefillPrice, description: `Purchased ${appSettings.maxSpinsInBundle} Spins Bundle`, status: 'completed' });
+    // For spin bundle purchase, we assume payment reference is handled by the modal/user.
+    // This directly gives spins and debits from balance if price is non-zero.
+    // Ideally, this would create an "addFundRequest" for the bundle price
+    // and admin approval would grant spins + update balance.
+    // For now, simplified: if spinRefillPrice > 0, it costs balance.
 
-    toast({ title: "Spins Purchased!", description: `You now have ${newSpins} spins.`, variant: "default" });
-  }, [toast, addTransaction, user, appSettings]);
+    const costOfBundle = appSettings.spinRefillPrice;
+    const spinsInBundle = appSettings.maxSpinsInBundle;
+
+    if (costOfBundle > 0 && userBalance < costOfBundle) {
+        toast({ title: "Insufficient Balance", description: `You need ₹${costOfBundle.toFixed(2)} to buy the spin bundle.`, variant: "destructive" });
+        return;
+    }
+
+    const newSpins = (spinsAvailable < 0 ? 0 : spinsAvailable) + spinsInBundle; // Ensure spinsAvailable isn't negative
+    let newBalance = userBalance;
+
+    if (costOfBundle > 0) {
+        newBalance -= costOfBundle;
+        addTransaction({ type: 'debit', amount: costOfBundle, description: `Purchased ${spinsInBundle} Spins Bundle`});
+    } else {
+        // If price is 0, it's like a free refill, still log it if desired.
+        addTransaction({ type: 'credit', amount: 0, description: `Claimed free ${spinsInBundle} Spins Bundle`});
+    }
+    
+    setUserBalance(newBalance); // Optimistic update
+    setSpinsAvailable(newSpins); // Optimistic update
+
+    await updateUserData(user.uid, { balance: newBalance, spinsAvailable: newSpins });
+    
+    toast({ title: "Spins Acquired!", description: `You now have ${newSpins} spins.`, variant: "default" });
+  }, [toast, addTransaction, user, appSettings, userBalance, spinsAvailable]);
+
 
   if (!isClient || authLoading || isAppConfigLoading || userDataLoading) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
-          <CardHeader className="text-center"><CardTitle className="text-3xl font-bold text-primary">Loading Spinify...</CardTitle></CardHeader>
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-bold text-primary">Loading Spinify...</CardTitle>
+          </CardHeader>
           <CardContent className="flex flex-col items-center gap-4 mt-4">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           </CardContent>
@@ -327,33 +361,33 @@ export default function HomePage() {
       <SpinifyGameHeader />
 
       <div className="my-4 w-full max-w-3xl text-center">
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
-     crossOrigin="anonymous"></script>
+        {/* AdSense Ad Unit 1: 728x90 */}
         <ins className="adsbygoogle"
-          style={{display:'inline-block',width:'728px',height:'90px'}}
-          data-ad-client="ca-pub-1425274923062587"
-          data-ad-slot="9499288281"></ins>
+             style={{display:"inline-block",width:"728px",height:"90px"}}
+             data-ad-client="ca-pub-1425274923062587"
+             data-ad-slot="9499288281"></ins>
         <script dangerouslySetInnerHTML={{ __html: `(adsbygoogle = window.adsbygoogle || []).push({});` }} />
       </div>
-      
+
       {isClient && user && (
         <div className="w-full max-w-md flex justify-center my-6">
-          <Card className="py-4 px-8 inline-flex flex-col items-center gap-2 shadow-lg bg-gradient-to-br from-primary-foreground/30 to-secondary/30 border-2 border-primary/50 rounded-xl backdrop-blur-md">
+          <Card className="py-4 px-6 sm:px-8 inline-flex flex-col items-center gap-2 shadow-lg bg-gradient-to-br from-primary-foreground/20 via-background/30 to-secondary/20 border-2 border-primary/50 rounded-xl backdrop-blur-sm">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-8 w-8 text-primary" />
-              <span className="text-sm font-medium text-primary-foreground/80 tracking-wider uppercase">Your Balance</span>
+              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+              <span className="text-xs sm:text-sm font-medium text-primary-foreground/80 tracking-wider uppercase">Your Balance</span>
             </div>
-            <span className="text-3xl font-bold text-primary-foreground glow">
+            <span className="text-2xl sm:text-3xl font-bold text-primary-foreground glow">
               ₹{userBalance.toFixed(2)}
             </span>
           </Card>
         </div>
       )}
 
-      <div className="my-4 p-4 w-full max-w-md bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
-         Place for a 300x250 Ad Unit
+      {/* AdSense Placeholder 2: 300x250 (Below Balance Card) */}
+      <div className="my-4 p-4 w-full max-w-xs bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
+         300x250 Ad Unit
       </div>
-      
+
       {!user && isClient && (
          <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center my-8">
             <ShieldAlert className="h-12 w-12 text-primary mx-auto mb-3" />
@@ -362,7 +396,7 @@ export default function HomePage() {
             <Button onClick={() => router.push('/login')} className="mt-6">Login to Play</Button>
           </Card>
       )}
-      
+
       <main className="flex flex-col items-center w-full max-w-2xl">
         <SpinWheel
           segments={wheelSegments}
@@ -372,21 +406,22 @@ export default function HomePage() {
           onClick={user && !isSpinning ? handleSpinClick : undefined}
         />
 
+        {/* AdSense Ad Unit 3: Fluid (Below Spin Wheel) */}
         <div className="my-4 w-full max-w-lg">
            <ins className="adsbygoogle"
                style={{display:"block"}}
                data-ad-format="fluid"
                data-ad-layout-key="-6t+ed+2i-1n-4w"
                data-ad-client="ca-pub-1425274923062587"
-               data-ad-slot="7236071118"></ins>
+               data-ad-slot="2603795181"></ins> {/* Corrected from 7236071118 if this is the intended responsive */}
           <script dangerouslySetInnerHTML={{ __html: `(adsbygoogle = window.adsbygoogle || []).push({});` }}/>
         </div>
-        
+
         <div className="my-8 w-full flex flex-col items-center gap-4">
         {user && (
             <>
                 <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
-                    {spinsAvailable > 0 
+                    {spinsAvailable > 0
                     ? <>Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle} (Free/Bundled)</>
                     : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span>. Paid today: {dailyPaidSpinsUsed}</>
                     }
