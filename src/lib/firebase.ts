@@ -6,6 +6,7 @@ import {
   signInWithPopup, 
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  updateProfile, // Added import for updateProfile
   signOut as firebaseSignOut 
 } from "firebase/auth";
 import { 
@@ -166,20 +167,19 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
   try {
     const docSnap = await getDoc(configRef);
     if (docSnap.exists()) {
-      // Validate if fetched data conforms to AppConfiguration, merge with defaults if necessary
       const fetchedData = docSnap.data();
-      const settings = { ...defaultAppSettings, ...fetchedData.settings };
-      const newsItems = fetchedData.newsItems || DEFAULT_NEWS_ITEMS;
-      return { settings, newsItems } as AppConfiguration;
+      const settings = { ...defaultAppSettings, ...(fetchedData.settings || {}) };
+      const newsItems = fetchedData.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0 
+                        ? fetchedData.newsItems 
+                        : DEFAULT_NEWS_ITEMS;
+      return { settings, newsItems };
     }
     
-    // If not exists, create with defaults
     console.log(`App configuration document ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID} not found. Creating with defaults.`);
     await setDoc(configRef, defaults);
     return defaults;
   } catch (error) {
     console.error(`Error in getAppConfiguration (fetching or creating ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID}):`, error);
-    // Explicitly return defaults from here if any error occurs within this function
     return defaults;
   }
 };
@@ -367,6 +367,8 @@ export {
   firebaseSignOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  updateProfile, // Added updateProfile to exports
   Timestamp
 };
 export type { User as FirebaseUser } from "firebase/auth";
+

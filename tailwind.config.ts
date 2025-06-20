@@ -97,16 +97,23 @@ export default {
           '0%, 100%': { textShadow: '0 0 5px hsl(var(--primary)), 0 0 10px hsl(var(--primary)), 0 0 15px hsl(var(--primary))' },
           '50%': { textShadow: '0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary)), 0 0 30px hsl(var(--primary) / 0.7)' },
         },
-        // wheelSpin keyframes are removed as animation is now JS-driven
+        'card-spin-multiple': {
+          '0%': { transform: 'rotate(0deg) scale(1)' },
+          '20%': { transform: 'rotate(360deg) scale(1.05)' },
+          '40%': { transform: 'rotate(720deg) scale(1)' },
+          '60%': { transform: 'rotate(1080deg) scale(1.05)' },
+          '80%': { transform: 'rotate(1440deg) scale(1)' },
+          '100%': { transform: 'rotate(1800deg) scale(1)' },
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
+        'card-spin-multiple': 'card-spin-multiple 2.5s ease-in-out forwards',
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
-
