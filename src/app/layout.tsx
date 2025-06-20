@@ -27,16 +27,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script
-          async
-          custom-element="amp-auto-ads"
-          src="https://cdn.ampproject.org/v0/amp-auto-ads-0.1.js"
-        />
+        {/* Removed amp-auto-ads script as this is not an AMP page */}
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
-        <amp-auto-ads type="adsense"
-            data-ad-client="ca-pub-1425274923062587">
-        </amp-auto-ads>
+        {/* Removed amp-auto-ads tag */}
         <AuthProvider> {/* Wrap with AuthProvider */}
           <SiteHeader />
           <NewsTicker />
@@ -50,4 +44,3 @@ export default function RootLayout({
     </html>
   );
 }
-

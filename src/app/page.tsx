@@ -431,7 +431,7 @@ export default function HomePage() {
         />
 
         <div className="my-4 w-full max-w-lg">
-          <script async={true} src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587" crossOrigin="anonymous"></script>
+          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587" crossOrigin="anonymous"></script>
           <ins className="adsbygoogle"
                style={{display:'block'}}
                data-ad-client="ca-pub-1425274923062587"
