@@ -430,8 +430,18 @@ export default function HomePage() {
           onClick={user && !isSpinning ? handleSpinClick : undefined} // Pass handleSpinClick if user logged in & not spinning
         />
 
-        <div className="my-4 p-4 w-full max-w-lg bg-muted/30 border border-dashed border-border text-center text-muted-foreground rounded-lg">
-          Google AdSense Placeholder (e.g., Responsive Ad Unit)
+        <div className="my-4 w-full max-w-lg">
+          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
+               crossOrigin="anonymous"></script>
+          <ins className="adsbygoogle"
+               style={{display:"block"}}
+               data-ad-format="fluid"
+               data-ad-layout-key="-6t+ed+2i-1n-4w"
+               data-ad-client="ca-pub-1425274923062587"
+               data-ad-slot="7236071118"></ins>
+          <script>
+               (adsbygoogle = window.adsbygoogle || []).push({});
+          </script>
         </div>
         
         <div className="my-8 w-full flex flex-col items-center gap-4">
@@ -471,9 +481,6 @@ export default function HomePage() {
     </div>
   );
 }
-
     
-
     
-
-
+    
