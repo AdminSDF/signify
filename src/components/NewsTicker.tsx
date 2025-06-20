@@ -61,3 +61,4 @@ const NewsTicker: React.FC = () => {
 };
 
 export default NewsTicker;
+

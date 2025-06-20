@@ -96,3 +96,4 @@ export const saveNewsItems = (items: string[]) => {
   localStorage.setItem(NEWS_ITEMS_STORAGE_KEY, JSON.stringify(items));
   window.dispatchEvent(new CustomEvent('news-items-changed'));
 };
+
