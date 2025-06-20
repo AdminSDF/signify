@@ -3,11 +3,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -21,14 +22,15 @@ import {
   createAddFundRequest,
   Timestamp,
   type UserDocument,
-  uploadProfilePhoto, // Import the new function
-  auth,               // Import auth for current user
-  updateProfile       // Import updateProfile for auth user
+  uploadProfilePhoto,
+  auth,
+  updateProfile
 } from '@/lib/firebase';
 // AppSettings type is now sourced from AuthContext
 
 type PaymentMethod = "upi" | "bank";
 const presetAddBalanceAmounts = [100, 200, 500, 1000];
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
 
 export default function ProfilePage() {
   const { user, loading: authLoading, appSettings, isAppConfigLoading } = useAuth();
@@ -281,6 +283,8 @@ export default function ProfilePage() {
 
   if (!user) return <div className="flex items-center justify-center min-h-screen">Redirecting...</div>;
 
+  const isUserAdmin = user?.email === ADMIN_EMAIL;
+
   return (
     <div className="container mx-auto py-8">
       <Card className="w-full max-w-lg mx-auto shadow-xl">
@@ -377,7 +381,20 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
         </CardContent>
-        <CardFooter className="flex justify-center pt-6"><Button variant="outline" className="w-full max-w-xs" disabled><Edit3 className="mr-2 h-4 w-4" />Edit Profile (Coming Soon)</Button></CardFooter>
+        <CardFooter className="flex flex-col items-center gap-4 pt-6">
+            {isUserAdmin && (
+              <Link href="/admin" passHref className="w-full max-w-xs">
+                <Button variant="secondary" className="w-full">
+                  <Shield className="mr-2 h-4 w-4" />
+                  Admin Panel
+                </Button>
+              </Link>
+            )}
+            <Button variant="outline" className="w-full max-w-xs" disabled>
+              <Edit3 className="mr-2 h-4 w-4" />
+              Edit Profile (Coming Soon)
+            </Button>
+        </CardFooter>
       </Card>
       {isClient && (
         <PaymentModal
@@ -392,3 +409,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    
