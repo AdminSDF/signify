@@ -11,8 +11,8 @@ import {
   signInWithEmailAndPassword,
   type FirebaseUser,
   createUserData as createFirestoreUser,
-  getAppConfiguration, // Updated: Now a direct import for AppConfiguration type
-  AppConfiguration as AppConfigType, // Use a distinct name for the type if needed
+  getAppConfiguration, 
+  AppConfiguration as AppConfigType, 
   updateUserData,
   Timestamp
 } from '@/lib/firebase';
@@ -46,12 +46,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const fetchAppConfig = useCallback(async () => {
     setIsAppConfigLoading(true);
     try {
-      const config = await getAppConfiguration(); // This now handles its own errors and returns defaults
+      const config = await getAppConfiguration(); 
       setAppSettings(config.settings);
       setNewsItems(config.newsItems);
     } catch (error) {
-      // This catch block might be less likely to be hit if getAppConfiguration handles its own errors
-      // and returns defaults, but kept for safety for other unforeseen issues.
       console.error("Critical error in fetchAppConfig within AuthContext:", error);
       setAppSettings(defaultAppSettings); 
       setNewsItems(DEFAULT_NEWS_ITEMS);
@@ -66,34 +64,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [toast]);
 
   useEffect(() => {
-    // Auth state listener
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+        // Ensure lastLogin is updated, but avoid errors if user doc doesn't exist yet
+        // (e.g., immediately after signup before createFirestoreUser fully completes, though unlikely)
+        try {
+          await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+        } catch (updateError) {
+          console.warn("Could not update lastLogin on auth state change:", updateError);
+        }
       }
-      setLoading(false); // Auth loading finished
+      setLoading(false); 
     });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    // Only fetch app config once the initial authentication state has been determined.
-    // This helps if Firestore rules for app configuration depend on `request.auth`.
-    if (!loading) { // `loading` is the auth loading state
+    if (!loading) { 
       fetchAppConfig();
     }
-  }, [loading, fetchAppConfig]); // Add `loading` to the dependency array
+  }, [loading, fetchAppConfig]); 
 
   const signUpWithEmailPassword = async ({email, password}: AuthCredentials) => {
-    // setLoading(true); // Handled by component if needed, context loading is for auth state
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
-        // Fetch the latest app settings to pass for new user creation
-        // Ensure appConfig is loaded or use defaults if critical path
         let currentAppSettings = appSettings;
-        if (isAppConfigLoading) { // If still loading, get fresh or use defaults
+        if (isAppConfigLoading) { 
             const freshConfig = await getAppConfiguration();
             currentAppSettings = freshConfig.settings;
         }
@@ -109,19 +107,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
       router.push('/'); 
     } catch (error: any) {
-      console.error("Error during email/password sign up:", error);
+      console.error("Error during email/password sign up (Code:", error.code, "):", error.message);
       let description = error.message && String(error.message).trim() !== "" ? String(error.message) : "An unexpected error occurred.";
       if (error.code === 'auth/email-already-in-use') description = 'This email is already registered. Try logging in.';
       else if (error.code === 'auth/weak-password') description = 'Password is too weak. It should be at least 6 characters long.';
       else if (error.code === 'auth/invalid-email') description = 'The email address is not valid.';
       toast({ variant: "destructive", title: "Sign Up Failed", description });
-    } finally {
-      // setLoading(false);
     }
   };
 
   const loginWithEmailPassword = async ({email, password}: AuthCredentials) => {
-    // setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       if (userCredential.user) {
@@ -130,7 +125,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/'); 
     } catch (error: any) {
-      console.error("Error during email/password login:", error);
+      console.error("Error during email/password login (Code:", error.code, "):", error.message);
       let description = error.message && String(error.message).trim() !== "" ? String(error.message) : "An unexpected error occurred.";
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         description = 'Invalid email or password. Please try again.';
@@ -140,31 +135,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         description = 'This user account has been disabled.';
       }
       toast({ variant: "destructive", title: "Login Failed", description });
-    } finally {
-      // setLoading(false);
     }
   };
 
   const logout = async () => {
-    // setLoading(true);
     try {
       await firebaseSignOut(auth);
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login'); 
     } catch (error: any) {
-      console.error("Error during logout:", error);
+      console.error("Error during logout (Code:", error.code, "):", error.message);
       toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
-    } finally {
-      // setLoading(false);
     }
   };
 
   const contextValue = {
     user,
-    loading, // Auth loading
+    loading, 
     appSettings,
     newsItems,
-    isAppConfigLoading, // App config loading
+    isAppConfigLoading, 
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,
@@ -185,3 +175,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
