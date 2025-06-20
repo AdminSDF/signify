@@ -15,8 +15,8 @@ import {
   getAppConfiguration,
   updateUserData,
   Timestamp,
-  getDoc, // Added for checking user doc existence
-  doc // Added for creating doc reference
+  getDoc, 
+  doc 
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
@@ -24,11 +24,11 @@ import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS 
 
 interface AuthContextType {
   user: FirebaseUser | null;
-  loading: boolean; // Combined loading state
-  authLoading: boolean; // Specifically for Firebase Auth processing
+  loading: boolean; 
+  authLoading: boolean; 
   appSettings: AppSettings;
   newsItems: string[];
-  isAppConfigLoading: boolean; // Specifically for app config loading from Firestore
+  isAppConfigLoading: boolean; 
   refreshAppConfig: () => Promise<void>;
   signUpWithEmailPassword: (credentials: SignUpCredentials) => Promise<void>;
   loginWithEmailPassword: (credentials: LoginCredentials) => Promise<void>;
@@ -39,10 +39,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [fbAuthLoading, setFbAuthLoading] = useState(true); // Firebase Auth specific loading
+  const [fbAuthLoading, setFbAuthLoading] = useState(true); 
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [newsItems, setNewsItems] = useState<string[]>(DEFAULT_NEWS_ITEMS);
-  const [fbAppConfigLoading, setFbAppConfigLoading] = useState(true); // Firestore App Config specific loading
+  const [fbAppConfigLoading, setFbAppConfigLoading] = useState(true); 
   const router = useRouter();
   const { toast } = useToast();
 
@@ -54,8 +54,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setNewsItems(config.newsItems);
     } catch (error) {
       console.error("AuthContext: Error in fetchAppConfig:", error);
-      setAppSettings(defaultAppSettings); // Fallback to defaults
-      setNewsItems(DEFAULT_NEWS_ITEMS);  // Fallback to defaults
+      setAppSettings(defaultAppSettings); 
+      setNewsItems(DEFAULT_NEWS_ITEMS);  
       toast({
         title: "App Config Load Issue",
         description: "Could not load app settings. Using defaults.",
@@ -64,36 +64,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setFbAppConfigLoading(false);
     }
-  }, [fbAppConfigLoading, toast]); // Added fbAppConfigLoading to dependency array
+  }, [fbAppConfigLoading, toast]); 
 
   useEffect(() => {
-    fetchAppConfig();
+    // Fetch app config only after initial auth state is known or if explicitly needed early
+    if (!fbAuthLoading) { // Or some other condition if you need config before auth is fully resolved
+      fetchAppConfig();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Fetch config once on mount
+  }, [fbAuthLoading]); // Rerun if auth loading state changes, to fetch config once auth is done
 
-  useEffect(() => {
+   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
         const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
         const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
-        const isTrulyNewSession = creationTime === lastSignInTime && (Date.now() - creationTime < 10000);
+        
+        // Check if it's a truly new user session (creation time and last sign-in are same and recent)
+        // Only update lastLogin if it's not the immediate moment of account creation.
+        // This is to avoid potential race conditions with the createUserData function.
+        const isTrulyNewSession = creationTime === lastSignInTime && (Date.now() - creationTime < 15000); // 15-second window
 
         if (!isTrulyNewSession) {
           try {
              const userDocRef = doc(auth.firestore, 'users', firebaseUser.uid);
              const userDoc = await getDoc(userDocRef);
-             if (userDoc.exists()) {
+             if (userDoc.exists()) { // Only update if document exists
                 await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
              } else {
+                // This can happen if the user document creation is still pending or failed earlier
                 console.warn("User document not found for lastLogin update, possibly very new user or document creation is pending/failed:", firebaseUser.uid);
              }
           } catch (updateError) {
+            // Catch errors during the update, e.g., permission issues or network problems
             console.warn("Could not update lastLogin on auth state change:", updateError);
           }
         }
       }
-      setFbAuthLoading(false); // Firebase Auth state is now determined
+      setFbAuthLoading(false); 
     });
     return () => unsubscribe();
   }, []);
@@ -103,75 +112,71 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setFbAuthLoading(true);
     let currentAppSettings = appSettings;
 
-    // Ensure we have the latest app settings if they were still loading
     if (fbAppConfigLoading) {
+        console.log("App config was loading during signup, attempting to fetch fresh config...");
         try {
-            console.log("App config was loading during signup, fetching fresh config...");
             const freshConfig = await getAppConfiguration();
             currentAppSettings = freshConfig.settings;
-            setAppSettings(freshConfig.settings); // Update context state as well
+            setAppSettings(freshConfig.settings); 
             setNewsItems(freshConfig.newsItems);
-            if(fbAppConfigLoading) setFbAppConfigLoading(false); // Mark as loaded if it was still true
+            if(fbAppConfigLoading) setFbAppConfigLoading(false); 
         } catch (e) {
-            console.error("Using default app settings for new user due to fetch error during signup:", e);
-            currentAppSettings = defaultAppSettings; // Fallback
+            console.error("SignUp: Using default app settings for new user due to fetch error during signup:", e);
+            currentAppSettings = defaultAppSettings; 
         }
     }
 
+    let userCredential;
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // If this point is reached, Firebase Auth user is created.
-      if (userCredential.user) {
-        // Now try to update profile and create Firestore document
-        try {
-          await updateProfile(userCredential.user, { displayName });
-          const photoURL = userCredential.user.photoURL; 
-          await createFirestoreUser(
-            userCredential.user.uid,
-            userCredential.user.email,
-            displayName,
-            photoURL,
-            currentAppSettings // Use potentially refreshed appSettings
-          );
-          toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
-          router.push('/');
-        } catch (profileOrDbError: any) {
-            // This block executes if Auth user was created, but profile update or Firestore doc creation failed.
-            console.error("Error during profile update or Firestore user creation for new user:", userCredential.user.uid, profileOrDbError);
-            toast({
-                variant: "destructive",
-                title: "Account Created, Setup Incomplete",
-                description: `Your account was made, but initial data setup failed (Error: ${profileOrDbError.message || 'Unknown error'}). Please try logging in. If issues persist, contact support.`
-            });
-            // Even with this error, the user is technically signed up in Firebase Auth.
-            // The onAuthStateChanged listener will pick them up.
-            // We might want to redirect them or let the natural flow take them to home page.
-        }
-      } else {
-        // This case should not be reached if createUserWithEmailAndPassword resolves successfully without an error.
-        // If it does, it's an unexpected state from Firebase.
-        console.error("Firebase Auth: createUserWithEmailAndPassword succeeded but userCredential.user is null.");
-        throw new Error("User credential was created but the user object is unexpectedly null.");
-      }
-    } catch (error: any) { // This catch block is for errors from createUserWithEmailAndPassword itself
-      console.error("Firebase Auth: Error during email/password sign up (Code:", error.code, "):", error.message);
-      let description = error.message && String(error.message).trim() !== "" ? String(error.message) : "An unexpected error occurred during sign up.";
-      if (error.code === 'auth/email-already-in-use') description = 'This email is already registered. Please try logging in.';
-      else if (error.code === 'auth/weak-password') description = 'Password is too weak. It should be at least 6 characters long.';
-      else if (error.code === 'auth/invalid-email') description = 'The email address is not valid.';
-      // Note: 'auth/invalid-credential' is typically for login, not signup.
+      userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (authError: any) {
+      console.error("Firebase Auth: Error during email/password sign up (Code:", authError.code, "):", authError.message);
+      let description = authError.message && String(authError.message).trim() !== "" ? String(authError.message) : "An unexpected error occurred during sign up.";
+      if (authError.code === 'auth/email-already-in-use') description = 'This email is already registered. Please try logging in.';
+      else if (authError.code === 'auth/weak-password') description = 'Password is too weak. It should be at least 6 characters long.';
+      else if (authError.code === 'auth/invalid-email') description = 'The email address is not valid.';
       toast({ variant: "destructive", title: "Sign Up Failed", description });
-    } finally {
-      // setFbAuthLoading(false); // This is handled by onAuthStateChanged
+      setFbAuthLoading(false); // Ensure loading is false if auth itself fails
+      return; // Exit if auth creation fails
     }
+
+    // If Firebase Auth user was created successfully
+    if (userCredential && userCredential.user) {
+      let profileUpdated = false;
+      try {
+        await updateProfile(userCredential.user, { displayName });
+        profileUpdated = true;
+        const photoURL = userCredential.user.photoURL; 
+        await createFirestoreUser(
+          userCredential.user.uid,
+          userCredential.user.email,
+          displayName,
+          photoURL,
+          currentAppSettings 
+        );
+        toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
+        router.push('/');
+      } catch (setupError: any) {
+          console.error(`Error during post-auth setup for ${userCredential.user.uid}:`, setupError);
+          const errorSource = profileUpdated ? "Firestore document creation" : "Firebase profile update";
+          toast({
+              variant: "destructive",
+              title: "Account Created, Setup Incomplete",
+              description: `Your account was made, but ${errorSource} failed (Error: ${setupError.message || 'Unknown error'}). Please try logging in. If issues persist, check console or contact support.`
+          });
+          // User is technically signed up in Firebase Auth. onAuthStateChanged will handle them.
+      }
+    } else {
+      console.error("Firebase Auth: createUserWithEmailAndPassword succeeded but userCredential.user is null.");
+      toast({ variant: "destructive", title: "Sign Up Failed", description: "User creation succeeded but user data is missing." });
+    }
+    // fbAuthLoading will be set to false by onAuthStateChanged
   };
 
   const loginWithEmailPassword = async ({ email, password }: LoginCredentials) => {
     setFbAuthLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will handle setting user state and fbAuthLoading to false.
-      // It also handles lastLogin update.
       toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/');
     } catch (error: any) {
@@ -185,32 +190,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         description = 'This user account has been disabled.';
       }
       toast({ variant: "destructive", title: "Login Failed", description });
-      setFbAuthLoading(false); // Set loading to false here on login failure.
+      setFbAuthLoading(false); 
     }
   };
 
   const logout = async () => {
-    setFbAuthLoading(true); // Indicate loading during logout process
+    setFbAuthLoading(true); 
     try {
       await firebaseSignOut(auth);
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login');
-      setUser(null); // Explicitly set user to null
+      setUser(null); 
     } catch (error: any) {
       console.error("Firebase Auth: Error during logout (Code:", error.code, "):", error.message);
       toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
     } finally {
-      setFbAuthLoading(false); // Reset loading state after logout attempt
+      setFbAuthLoading(false); 
     }
   };
 
   const contextValue = {
     user,
-    loading: fbAuthLoading || fbAppConfigLoading, // Combined global loading state
-    authLoading: fbAuthLoading, // Firebase Auth specific loading
+    loading: fbAuthLoading || fbAppConfigLoading, 
+    authLoading: fbAuthLoading, 
     appSettings,
     newsItems,
-    isAppConfigLoading: fbAppConfigLoading, // App config specific loading
+    isAppConfigLoading: fbAppConfigLoading, 
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,
@@ -231,5 +236,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-    
