@@ -149,13 +149,12 @@ export default function HomePage() {
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
     if (!user) return;
-    // const currentBal = userBalance; // Not strictly needed here if not setting balanceBefore/After from this function
     try {
       await addTransactionToFirestore({
         type: details.type,
         amount: details.amount,
         description: details.description,
-        status: details.status || 'completed', // Ensure status is always sent
+        status: details.status || 'completed', 
       }, user.uid);
     } catch (error) {
       console.error("Error adding transaction to Firestore:", error);
@@ -200,47 +199,59 @@ export default function HomePage() {
     }
 
     let currentDailySpins = dailyPaidSpinsUsed;
-    const today = new Date().toLocaleDateString('en-CA');
+    const todayString = new Date().toLocaleDateString('en-CA');
 
-    if (lastPaidSpinDate !== today) {
+    if (lastPaidSpinDate !== todayString) {
       currentDailySpins = 0;
       setDailyPaidSpinsUsed(0);
-      setLastPaidSpinDate(today);
-      await updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: today });
+      setLastPaidSpinDate(todayString);
+      updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayString })
+        .catch(err => console.warn("Failed to reset daily spins on date change (background):", err));
     }
 
     if (spinsAvailable > 0) {
       startSpinProcess();
       const newSpins = spinsAvailable - 1;
       setSpinsAvailable(newSpins);
-      await updateUserData(user.uid, { spinsAvailable: newSpins });
+      updateUserData(user.uid, { spinsAvailable: newSpins })
+        .catch(err => console.warn("Free Spin: Failed to update spins in Firestore:", err));
     } else {
       const costForThisSpin = getCurrentPaidSpinCost(currentDailySpins);
       if (userBalance >= costForThisSpin) {
         const newBalance = userBalance - costForThisSpin;
-
-        addTransaction({ type: 'debit', amount: costForThisSpin, description: `Spin Cost (Paid Tier ${costForThisSpin === appSettings.tier1Cost ? 1 : costForThisSpin === appSettings.tier2Cost ? 2 : 3})` });
-        setUserBalance(newBalance);
-
         const newDailySpinsUsed = currentDailySpins + 1;
-        setDailyPaidSpinsUsed(newDailySpinsUsed);
 
-        await updateUserData(user.uid, {
+        setUserBalance(newBalance);
+        setDailyPaidSpinsUsed(newDailySpinsUsed);
+        if (lastPaidSpinDate !== todayString) {
+            setLastPaidSpinDate(todayString);
+        }
+        
+        startSpinProcess();
+
+        toast({ title: `Spin Cost: -₹${costForThisSpin.toFixed(2)}`, description: `Paid spins today: ${newDailySpinsUsed}.` });
+        
+        addTransaction({ type: 'debit', amount: costForThisSpin, description: `Spin Cost (Paid Tier ${costForThisSpin === appSettings.tier1Cost ? 1 : costForThisSpin === appSettings.tier2Cost ? 2 : 3})` });
+        
+        updateUserData(user.uid, {
           balance: newBalance,
           dailyPaidSpinsUsed: newDailySpinsUsed,
-          lastPaidSpinDate: today
+          lastPaidSpinDate: todayString
+        }).catch(err => {
+            console.error("Paid Spin: Failed to update user data in Firestore:", err);
+            toast({variant: "destructive", title: "Sync Error", description: "Could not save paid spin data. Balance might be out of sync."});
         });
 
-        startSpinProcess();
-        toast({ title: `Spin Cost: -₹${costForThisSpin.toFixed(2)}`, description: `Paid spins today: ${newDailySpinsUsed}.` });
       } else {
         setShowPaymentModal(true);
       }
     }
   }, [
-    isClient, isSpinning, startSpinProcess, spinsAvailable, userBalance, toast, addTransaction,
-    dailyPaidSpinsUsed, lastPaidSpinDate, getCurrentPaidSpinCost, user, router, appSettings,
-    authLoading, isAppConfigLoading, userDataLoading
+    isClient, isSpinning, user, authLoading, isAppConfigLoading, userDataLoading,
+    spinsAvailable, userBalance, dailyPaidSpinsUsed, lastPaidSpinDate,
+    appSettings, 
+    startSpinProcess, addTransaction, getCurrentPaidSpinCost, 
+    toast, router
   ]);
 
   const handleSpinComplete = useCallback(async (winningSegment: Segment) => {
@@ -262,16 +273,23 @@ export default function HomePage() {
       addTransaction({ type: 'debit', amount: 0, description: `Spin Result: ${winningSegment.text}` });
       if (winningSegment.text === 'Try Again') playSound('tryAgain'); else playSound('win');
     }
-    setUserBalance(newBalance);
+    setUserBalance(newBalance); // Update local balance state immediately
 
-    const userData = await getUserData(user.uid);
-    await updateUserData(user.uid, {
-        balance: newBalance,
-        totalSpinsPlayed: (userData?.totalSpinsPlayed || 0) + 1,
-        totalWinnings: (userData?.totalWinnings || 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
-    });
+    // Update totalSpinsPlayed and totalWinnings in Firestore
+    // Fetch current values first to avoid overwriting if multiple spins happen quickly (though less likely with animation)
+    try {
+        const currentData = await getUserData(user.uid); // Fetch fresh data
+        await updateUserData(user.uid, {
+            balance: newBalance, // Ensure balance is also updated here if it wasn't in a prior step by handleSpinClick for paid spins
+            totalSpinsPlayed: (currentData?.totalSpinsPlayed || 0) + 1,
+            totalWinnings: (currentData?.totalWinnings || 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
+        });
+    } catch (error) {
+        console.error("Error updating total winnings/spins or balance after spin complete:", error);
+        toast({variant: "destructive", title: "Sync Error", description: "Could not save spin summary to server."});
+    }
 
-  }, [playSound, spinHistory.length, toast, addTransaction, user, userBalance]);
+  }, [playSound, spinHistory.length, toast, addTransaction, user, userBalance]); // Added userBalance to dep array
 
   const handleGenerateTip = useCallback(async () => {
     if (!user) { toast({ title: "Login Required", description: "Please log in." }); return; }
@@ -424,4 +442,4 @@ export default function HomePage() {
     </div>
   );
 }
-
+    
