@@ -6,13 +6,13 @@ import {
   signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile, // Already correctly imported
+  updateProfile, // Correctly imported
   signOut as firebaseSignOut,
   type User as FirebaseUser // Renamed to avoid conflict
 } from "firebase/auth";
 import {
   getFirestore,
-  doc,
+  doc, // Imported here
   setDoc,
   getDoc,
   updateDoc,
@@ -182,8 +182,10 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
       return { settings, newsItems };
     }
 
-    console.log(`App configuration document ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID} not found. Creating with defaults.`);
-    await setDoc(configRef, defaults); // Attempt to create if not exists
+    console.log(`App configuration document ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID} not found. Creating with defaults if possible (check rules).`);
+    // Try to create only if it doesn't exist. This might fail based on security rules.
+    // If it fails, the defaults are returned in the catch block anyway.
+    await setDoc(configRef, defaults);
     return defaults;
   } catch (error) {
     console.error(`Error in getAppConfiguration (fetching or creating ${APP_CONFIG_COLLECTION}/${APP_CONFIG_DOC_ID}). Using defaults. Error:`, error);
@@ -306,7 +308,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   batch.update(userRef, { balance: newBalance });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef);
+  const transactionDocRef = doc(transactionCollRef); // Create a new doc reference
   batch.set(transactionDocRef, {
     userId,
     type: 'credit',
@@ -322,7 +324,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   batch.update(requestRef, {
     status: "approved",
     approvedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id
+    transactionId: transactionDocRef.id // Store the new transaction's ID
   } as Partial<AddFundRequestData>);
 
   await batch.commit();
@@ -342,7 +344,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   batch.update(userRef, { balance: newBalance });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef);
+  const transactionDocRef = doc(transactionCollRef); // Create a new doc reference
   batch.set(transactionDocRef, {
     userId,
     type: 'debit',
@@ -356,9 +358,9 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
 
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
-    status: "processed",
+    status: "processed", // Changed from "approved" to "processed" as per previous logic
     processedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id
+    transactionId: transactionDocRef.id // Store the new transaction's ID
   } as Partial<WithdrawalRequestData>);
 
   await batch.commit();
@@ -368,7 +370,9 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
 export {
   app,
   auth,
-  db,
+  db, // db is already exported
+  doc, // Added doc to exports
+  getDoc, // Added getDoc to exports
   googleProvider,
   signInWithPopup,
   firebaseSignOut,
@@ -379,4 +383,5 @@ export {
   FirebaseUser // Export FirebaseUser type
 };
 // Removed 'type { User as FirebaseUser } from "firebase/auth";' as FirebaseUser is now directly imported and exported.
-
+// Explicitly re-exporting getDoc and doc for clarity and to ensure they are available.
+// db was already exported.
