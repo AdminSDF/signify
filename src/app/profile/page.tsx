@@ -26,7 +26,7 @@ import {
   auth,
   updateProfile
 } from '@/lib/firebase';
-// AppSettings type is now sourced from AuthContext
+import { initialSettings } from '@/lib/appConfig';
 
 type PaymentMethod = "upi" | "bank";
 const presetAddBalanceAmounts = [100, 200, 500, 1000];
@@ -146,6 +146,8 @@ export default function ProfilePage() {
     }
   };
 
+  const minSafeWithdrawalAmount = appSettings.minWithdrawalAmount ?? initialSettings.minWithdrawalAmount;
+  const minSafeAddBalanceAmount = appSettings.minAddBalanceAmount ?? initialSettings.minAddBalanceAmount;
 
   const handlePaymentMethodChange = (value: string) => {
     setSelectedPaymentMethod(value as PaymentMethod);
@@ -157,7 +159,7 @@ export default function ProfilePage() {
     const amount = parseFloat(withdrawalAmount);
 
     if (isNaN(amount) || amount <= 0) { toast({ title: 'Invalid Amount', variant: 'destructive' }); setIsWithdrawing(false); return; }
-    if (amount < appSettings.minWithdrawalAmount) { toast({ title: 'Minimum Withdrawal', description: `Min is ₹${appSettings.minWithdrawalAmount.toFixed(2)}.`, variant: 'destructive' }); setIsWithdrawing(false); return; }
+    if (amount < minSafeWithdrawalAmount) { toast({ title: 'Minimum Withdrawal', description: `Min is ₹${minSafeWithdrawalAmount.toFixed(2)}.`, variant: 'destructive' }); setIsWithdrawing(false); return; }
     if (balance === null || amount > balance) { toast({ title: 'Insufficient Balance', variant: 'destructive' }); setIsWithdrawing(false); return; }
 
     let paymentDetails: any = { paymentMethod: selectedPaymentMethod };
@@ -204,7 +206,7 @@ export default function ProfilePage() {
   const isWithdrawalButtonDisabled = () => {
     if (!isClient || isWithdrawing || !withdrawalAmount) return true;
     const amount = parseFloat(withdrawalAmount);
-    if (isNaN(amount) || amount <= 0 || amount < appSettings.minWithdrawalAmount) return true;
+    if (isNaN(amount) || amount <= 0 || amount < minSafeWithdrawalAmount) return true;
     if (balance !== null && amount > balance) return true;
     if (selectedPaymentMethod === "upi" && !upiIdInput.trim()) return true;
     if (selectedPaymentMethod === "bank" && (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim())) return true;
@@ -213,8 +215,8 @@ export default function ProfilePage() {
 
   const handleOpenAddBalanceModal = (amountValue: number) => {
     if (!isClient) return;
-    if (isNaN(amountValue) || amountValue < appSettings.minAddBalanceAmount) {
-      toast({ title: 'Invalid Amount', description: `Min to add is ₹${appSettings.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
+    if (isNaN(amountValue) || amountValue < minSafeAddBalanceAmount) {
+      toast({ title: 'Invalid Amount', description: `Min to add is ₹${minSafeAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
       return;
     }
     setCurrentAmountForModal(amountValue);
@@ -223,10 +225,10 @@ export default function ProfilePage() {
 
   const handlePresetAddBalanceClick = (amount: number) => {
     setAddBalanceAmount(amount.toString());
-    if (amount >= appSettings.minAddBalanceAmount && isClient) {
+    if (amount >= minSafeAddBalanceAmount && isClient) {
       handleOpenAddBalanceModal(amount);
     } else if (isClient) {
-      toast({ title: 'Invalid Amount', description: `Min to add is ₹${appSettings.minAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
+      toast({ title: 'Invalid Amount', description: `Min to add is ₹${minSafeAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
     }
   };
 
@@ -240,7 +242,7 @@ export default function ProfilePage() {
         userId: user.uid,
         userEmail: user.email || 'N/A',
         amount,
-        paymentReference: paymentRef || "User Confirmed Payment",
+        paymentReference: paymentRef || "User Confirmed Payment In Modal",
       });
 
       await addTransactionToFirestore({
@@ -338,12 +340,12 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Label htmlFor="addBalanceAmount" className="text-sm font-medium text-muted-foreground">Or Enter Amount (₹)</Label>
-                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${appSettings.minAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
-                {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < appSettings.minAddBalanceAmount && (<p className="text-xs text-destructive text-center mt-1">Min amount to add is ₹{appSettings.minAddBalanceAmount.toFixed(2)}.</p>)}
+                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${minSafeAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
+                {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < minSafeAddBalanceAmount && (<p className="text-xs text-destructive text-center mt-1">Min amount to add is ₹{minSafeAddBalanceAmount.toFixed(2)}.</p>)}
               </div>
               <Button
                 onClick={() => handleOpenAddBalanceModal(parseFloat(addBalanceAmount))}
-                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < appSettings.minAddBalanceAmount || !isClient}
+                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < minSafeAddBalanceAmount || !isClient}
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 <QrCode className="mr-2 h-5 w-5" />
@@ -357,8 +359,8 @@ export default function ProfilePage() {
             <CardContent className="space-y-4 p-2">
               <div>
                 <Label htmlFor="withdrawalAmount" className="text-sm font-medium text-muted-foreground">Amount to Withdraw (₹)</Label>
-                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${appSettings.minWithdrawalAmount.toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
-                {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < appSettings.minWithdrawalAmount && (<p className="text-xs text-destructive text-center mt-1">Min withdrawal is ₹{appSettings.minWithdrawalAmount.toFixed(2)}.</p>)}
+                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${minSafeWithdrawalAmount.toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
+                {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < minSafeWithdrawalAmount && (<p className="text-xs text-destructive text-center mt-1">Min withdrawal is ₹{minSafeWithdrawalAmount.toFixed(2)}.</p>)}
               </div>
               <div>
                 <Label htmlFor="paymentMethod" className="text-sm font-medium text-muted-foreground">Payment Method</Label>
@@ -409,5 +411,6 @@ export default function ProfilePage() {
     </div>
   );
 }
+    
 
     
