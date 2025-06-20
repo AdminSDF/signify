@@ -146,8 +146,8 @@ export default function ProfilePage() {
     }
   };
 
-  const minSafeWithdrawalAmount = appSettings.minWithdrawalAmount ?? initialSettings.minWithdrawalAmount;
-  const minSafeAddBalanceAmount = appSettings.minAddBalanceAmount ?? initialSettings.minAddBalanceAmount;
+  const minSafeWithdrawalAmount = appSettings?.minWithdrawalAmount ?? initialSettings.minWithdrawalAmount;
+  const minSafeAddBalanceAmount = appSettings?.minAddBalanceAmount ?? initialSettings.minAddBalanceAmount;
 
   const handlePaymentMethodChange = (value: string) => {
     setSelectedPaymentMethod(value as PaymentMethod);
@@ -340,7 +340,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Label htmlFor="addBalanceAmount" className="text-sm font-medium text-muted-foreground">Or Enter Amount (₹)</Label>
-                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${minSafeAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
+                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${(minSafeAddBalanceAmount || 0).toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < minSafeAddBalanceAmount && (<p className="text-xs text-destructive text-center mt-1">Min amount to add is ₹{minSafeAddBalanceAmount.toFixed(2)}.</p>)}
               </div>
               <Button
@@ -359,7 +359,7 @@ export default function ProfilePage() {
             <CardContent className="space-y-4 p-2">
               <div>
                 <Label htmlFor="withdrawalAmount" className="text-sm font-medium text-muted-foreground">Amount to Withdraw (₹)</Label>
-                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${minSafeWithdrawalAmount.toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
+                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${(minSafeWithdrawalAmount || 0).toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
                 {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < minSafeWithdrawalAmount && (<p className="text-xs text-destructive text-center mt-1">Min withdrawal is ₹{minSafeWithdrawalAmount.toFixed(2)}.</p>)}
               </div>
               <div>
@@ -411,6 +411,4 @@ export default function ProfilePage() {
     </div>
   );
 }
-    
-
     
