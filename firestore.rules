@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -14,163 +15,134 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // IMPORTANT: Replace with your actual admin email if needed elsewhere,
-    // but the primary check is the `isAdmin` field in the user's document.
-    function isAdminByEmail(email) {
-      return email == "jameafaizanrasool@gmail.com";
-    }
-
-    function getIncomingData() {
-      return request.resource.data;
-    }
-
-    function getExistingData() {
-      return resource.data;
-    }
-
+    // Helper to check if user has isAdmin flag in their Firestore doc
     function isUserAdmin(userId) {
       return isAuthenticated() &&
-             userId != null && userId != "" && // Ensure userId is valid before get()
+             userId != null && userId != "" &&
              exists(/databases/$(database)/documents/users/$(userId)) &&
              get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
     }
+    
+    // Helper to check admin by verified email. This acts as a fallback/super-admin check.
+    function isSuperAdminByEmail() {
+        return isAuthenticated() &&
+               request.auth.token.email_verified == true &&
+               request.auth.token.email == "jameafaizanrasool@gmail.com";
+    }
+
+    // Combined admin check: true if user has the flag OR has the admin email.
+    function isAdmin() {
+        return isUserAdmin(request.auth.uid) || isSuperAdminByEmail();
+    }
+
 
     // ---------------------------------------------------------------------
     // USERS Collection
     // ---------------------------------------------------------------------
     match /users/{userId} {
-      // Admins can get any user doc. Users can get their own.
-      allow get: if isOwner(userId) || isUserAdmin(request.auth.uid);
-      // Only admins can list all users.
-      allow list: if isUserAdmin(request.auth.uid);
+      allow read: if isOwner(userId) || isAdmin();
 
       allow create: if isOwner(userId) &&
-        getIncomingData().uid == userId &&
-        getIncomingData().email == request.auth.token.email &&
-        getIncomingData().createdAt == request.time &&
-        getIncomingData().balance is number &&
-        getIncomingData().spinsAvailable is number &&
-        getIncomingData().dailyPaidSpinsUsed == 0 &&
-        getIncomingData().lastPaidSpinDate is string &&
-        (getIncomingData().isAdmin == false || isAdminByEmail(getIncomingData().email)) &&
-        getIncomingData().totalWinnings == 0 &&
-        getIncomingData().totalSpinsPlayed == 0 &&
-        (!('lastLogin' in getIncomingData()) || getIncomingData().lastLogin == request.time) &&
-        getIncomingData().keys().hasOnly([
-          'uid', 'email', 'displayName', 'photoURL', 'createdAt', 'balance',
-          'spinsAvailable', 'dailyPaidSpinsUsed', 'lastPaidSpinDate', 'isAdmin',
-          'lastLogin', 'totalWinnings', 'totalSpinsPlayed',
-          'upiIdForWithdrawal', 'bankDetailsForWithdrawal'
-        ]);
+        request.resource.data.uid == userId &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.balance is number &&
+        request.resource.data.spinsAvailable is number &&
+        request.resource.data.dailyPaidSpinsUsed == 0 &&
+        request.resource.data.lastPaidSpinDate is string &&
+        // On creation, set isAdmin based on email
+        (request.resource.data.isAdmin == (request.auth.token.email == "jameafaizanrasool@gmail.com"));
 
-       allow update: if (isOwner(userId) &&
-        // Immutable fields check
-        getIncomingData().uid == getExistingData().uid &&
-        getIncomingData().email == getExistingData().email &&
-        getIncomingData().createdAt == getExistingData().createdAt &&
-        // Admin status cannot be changed by non-admin user
-        (getIncomingData().isAdmin == getExistingData().isAdmin || isUserAdmin(request.auth.uid)) &&
-        // Allowed fields for update by owner
-        getIncomingData().keys().hasOnly([
-          'displayName', 'photoURL', 'lastLogin', 
-          'upiIdForWithdrawal', 'bankDetailsForWithdrawal',
-          'dailyPaidSpinsUsed', 'lastPaidSpinDate',
-          'totalWinnings', 'totalSpinsPlayed',
-          'balance', 'spinsAvailable',
-          'uid', 'email', 'createdAt', 'isAdmin'
-        ]) &&
-        // Type checks for updatable fields if they are present in the request
-        (!('displayName' in getIncomingData()) || getIncomingData().displayName is string || getIncomingData().displayName == null) &&
-        (!('photoURL' in getIncomingData()) || getIncomingData().photoURL is string || getIncomingData().photoURL == null) &&
-        (!('lastLogin' in getIncomingData()) || getIncomingData().lastLogin is timestamp) &&
-        (!('balance' in getIncomingData()) || getIncomingData().balance is number) &&
-        (!('spinsAvailable' in getIncomingData()) || getIncomingData().spinsAvailable is number)
-      ) || isUserAdmin(request.auth.uid);
+      allow update: if (isOwner(userId) &&
+        // Immutable fields can't be changed by owner
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        // Owner can't make themselves an admin
+        request.resource.data.isAdmin == resource.data.isAdmin
+      ) || isAdmin(); // Admin can update anything
 
-      allow delete: if isUserAdmin(request.auth.uid);
+      allow delete: if isAdmin();
     }
 
     // ---------------------------------------------------------------------
     // TRANSACTIONS Collection
     // ---------------------------------------------------------------------
     match /transactions/{transactionId} {
-      // A user can get their own transactions. An admin can get any.
-      allow get: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
-      // A user can query for their own transactions. An admin can query all.
-      allow list: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
 
       allow create: if isAuthenticated() &&
-        getIncomingData().userId == request.auth.uid &&
-        getIncomingData().type in ['credit', 'debit'] &&
-        getIncomingData().amount is number &&
-        getIncomingData().description is string &&
-        getIncomingData().status in ['completed', 'pending', 'failed'] &&
-        getIncomingData().date is timestamp &&
-        // Optional fields check
-        (!('balanceBefore' in getIncomingData()) || getIncomingData().balanceBefore is number) &&
-        (!('balanceAfter' in getIncomingData()) || getIncomingData().balanceAfter is number) &&
-        // Ensure only allowed fields are present
-        getIncomingData().keys().hasOnly([
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.type in ['credit', 'debit'] &&
+        request.resource.data.amount is number &&
+        request.resource.data.description is string &&
+        request.resource.data.status in ['completed', 'pending', 'failed'] &&
+        request.resource.data.date is timestamp &&
+        (!('balanceBefore' in request.resource.data) || request.resource.data.balanceBefore is number) &&
+        (!('balanceAfter' in request.resource.data) || request.resource.data.balanceAfter is number) &&
+        request.resource.data.keys().hasOnly([
           'userId', 'type', 'amount', 'description', 'status', 'date',
           'balanceBefore', 'balanceAfter'
         ]);
 
-      allow update, delete: if isUserAdmin(request.auth.uid);
+      allow update, delete: if isAdmin();
     }
 
     // ---------------------------------------------------------------------
-    // WITHDRAWAL REQUESTS Collection
+    // WITHDRAWAL REQUESTS
     // ---------------------------------------------------------------------
     match /withdrawalRequests/{requestId} {
-      allow get: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
-      allow list: if isUserAdmin(request.auth.uid);
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
 
       allow create: if isAuthenticated() &&
-        getIncomingData().userId == request.auth.uid &&
-        getIncomingData().userEmail == request.auth.token.email &&
-        getIncomingData().amount is number && getIncomingData().amount > 0 &&
-        getIncomingData().paymentMethod in ['upi', 'bank'] &&
-        getIncomingData().requestDate is timestamp &&
-        getIncomingData().status == "pending" &&
-        getIncomingData().keys().hasOnly([
-          'userId', 'userEmail', 'amount', 'paymentMethod', 'upiId',
-          'bankDetails', 'requestDate', 'status'
-        ]);
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userEmail == request.auth.token.email &&
+        request.resource.data.amount is number && request.resource.data.amount > 0 &&
+        request.resource.data.paymentMethod in ['upi', 'bank'] &&
+        (request.resource.data.paymentMethod == 'upi' ? request.resource.data.upiId is string : true) &&
+        (request.resource.data.paymentMethod == 'bank' ?
+            request.resource.data.bankDetails.accountHolderName is string &&
+            request.resource.data.bankDetails.accountNumber is string &&
+            request.resource.data.bankDetails.ifscCode is string
+            : true) &&
+        request.resource.data.requestDate is timestamp &&
+        request.resource.data.status == "pending";
 
-       allow update: if isUserAdmin(request.auth.uid);
-
-      allow delete: if isUserAdmin(request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // ---------------------------------------------------------------------
-    // ADD FUND REQUESTS Collection
+    // ADD FUND REQUESTS
     // ---------------------------------------------------------------------
     match /addFundRequests/{requestId} {
-      allow get: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
-      allow list: if isUserAdmin(request.auth.uid);
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
 
       allow create: if isAuthenticated() &&
-        getIncomingData().userId == request.auth.uid &&
-        getIncomingData().userEmail == request.auth.token.email &&
-        getIncomingData().amount is number && getIncomingData().amount > 0 &&
-        getIncomingData().paymentReference is string &&
-        getIncomingData().requestDate is timestamp &&
-        getIncomingData().status == "pending" &&
-        getIncomingData().keys().hasOnly([
-          'userId', 'userEmail', 'amount', 'paymentReference', 'requestDate', 'status'
-        ]);
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userEmail == request.auth.token.email &&
+        request.resource.data.amount is number && request.resource.data.amount > 0 &&
+        request.resource.data.paymentReference is string &&
+        request.resource.data.requestDate is timestamp &&
+        request.resource.data.status == "pending";
 
-      allow update: if isUserAdmin(request.auth.uid);
-
-      allow delete: if isUserAdmin(request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // ---------------------------------------------------------------------
-    // APP CONFIGURATION Collection
+    // APP CONFIGURATION
     // ---------------------------------------------------------------------
     match /appConfiguration/{docId} {
       allow read: if true;
-      allow write: if isUserAdmin(request.auth.uid);
+      allow write: if isAdmin();
     }
+
   }
 }
