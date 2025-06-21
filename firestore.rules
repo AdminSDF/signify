@@ -3,103 +3,50 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ---------------------------------------------------------------------
-    // Helper Functions
-    // ---------------------------------------------------------------------
-    function isAuthenticated() {
-      return request.auth != null && request.auth.uid != null;
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isUserAdmin(userId) {
+    
+    // Function to check if the requesting user is an admin
+    function isAdmin() {
       // Check if the user document exists and has the isAdmin flag set to true.
-      return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
-    }
-    
-    function isAdminByEmail() {
-      return isAuthenticated() && request.auth.token.email == "jameafaizanrasool@gmail.com";
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    function getIncomingData() {
-      return request.resource.data;
-    }
-
-    function getExistingData() {
-      return resource.data;
-    }
-
-    // ---------------------------------------------------------------------
-    // USERS Collection
-    // ---------------------------------------------------------------------
+    // Rules for the 'users' collection
     match /users/{userId} {
-      allow read: if isOwner(userId) || isUserAdmin(request.auth.uid);
-
-      allow create: if isOwner(userId); // Simplified: Any authenticated user can create their own doc. Fine-tuning can be done in client/functions.
-
-      allow update: if isOwner(userId) || isUserAdmin(request.auth.uid); // Admins can update anything. Owners can update their own data.
-
-      allow delete: if isUserAdmin(request.auth.uid);
+      // A user can read and write to their own document.
+      allow read, write: if request.auth.uid == userId;
+      // An admin can get any single user's document.
+      allow get: if isAdmin();
+      // An admin can list all user documents (for the user overview table).
+      allow list: if isAdmin();
     }
-    
-    // ---------------------------------------------------------------------
-    // TRANSACTIONS Collection
-    // ---------------------------------------------------------------------
+
+    // Rules for the 'transactions' collection
     match /transactions/{transactionId} {
-      allow read: if isAuthenticated() && (
-        getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid)
-      );
-
-      // FIX: Allow transaction creation if the user is creating it for themselves OR if an admin is creating it.
-      // This is crucial for the admin panel approval process.
-      allow create: if isAuthenticated() && (
-        (getIncomingData().userId == request.auth.uid) || isUserAdmin(request.auth.uid)
-      );
-
-      // Only admins can update or delete transactions to maintain integrity
-      allow update, delete: if isUserAdmin(request.auth.uid);
+      // A user can read their own transactions and create new ones for themselves.
+      allow read, create: if request.auth.uid == request.resource.data.userId || (resource != null && request.auth.uid == resource.data.userId);
+      // An admin can read any transaction and create transactions on behalf of users (for approvals).
+      allow read, create: if isAdmin();
+      // An admin can list all transactions.
+      allow list: if isAdmin();
     }
 
-    // ---------------------------------------------------------------------
-    // WITHDRAWAL & ADD FUND REQUESTS Collections
-    // ---------------------------------------------------------------------
-    match /withdrawalRequests/{requestId} {
-      allow read: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
-      
-      allow list: if isUserAdmin(request.auth.uid); // Admin can list all requests.
-      
-      allow create: if isAuthenticated() && getIncomingData().userId == request.auth.uid;
-      
-      allow update: if isUserAdmin(request.auth.uid);
-      
-      allow delete: if isUserAdmin(request.auth.uid);
+    // Rules for both 'withdrawalRequests' and 'addFundRequests' collections
+    match /{collectionId}/{requestId} where collectionId in ['withdrawalRequests', 'addFundRequests'] {
+      // A user can create their own request and read their own requests.
+      allow create: if request.auth.uid == request.resource.data.userId;
+      allow read: if resource != null && request.auth.uid == resource.data.userId;
+
+      // An admin can read, update, and list all requests in these collections.
+      allow read, update, list: if isAdmin();
     }
 
-    match /addFundRequests/{requestId} {
-       allow read: if isAuthenticated() && (getExistingData().userId == request.auth.uid || isUserAdmin(request.auth.uid));
-       
-       allow list: if isUserAdmin(request.auth.uid); // Admin can list all requests.
-
-       allow create: if isAuthenticated() && getIncomingData().userId == request.auth.uid;
-       
-       allow update: if isUserAdmin(request.auth.uid);
-       
-       allow delete: if isUserAdmin(request.auth.uid);
-    }
-    
-
-    // ---------------------------------------------------------------------
-    // APP CONFIGURATION Collection
-    // ---------------------------------------------------------------------
+    // Rules for the 'appConfiguration' collection
     match /appConfiguration/{docId} {
+      // Anyone can read the app configuration (settings, news ticker).
       allow read: if true;
-      // Allow write if user has isAdmin flag OR if their email is the designated admin email.
-      allow write: if isUserAdmin(request.auth.uid) || isAdminByEmail();
+      // Only an admin can write to the app configuration.
+      allow write: if isAdmin();
     }
   }
 }
