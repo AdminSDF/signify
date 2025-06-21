@@ -3,7 +3,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if a user is an admin
+    // Helper function to check if a user is an admin.
+    // It checks for the `isAdmin` flag on the user's own document.
     function isAdmin() {
       return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
@@ -11,17 +12,17 @@ service cloud.firestore {
 
     // -- Users Collection Rules --
     match /users/{userId} {
-      // CREATE: Any authenticated user can create their own user document.
+      // CREATE: Any authenticated user can create their own user document upon sign-up.
       allow create: if request.auth != null && request.auth.uid == userId;
 
       // GET (read one): A user can read their own data. An admin can read any user's data.
-      allow get: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow get: if request.auth != null && (isAdmin() || request.auth.uid == userId);
 
-      // LIST (read many): Any authenticated user can list users (for Leaderboard).
+      // LIST (read many): Any authenticated user can list users. This is needed for the public Leaderboard.
       allow list: if request.auth != null;
 
       // UPDATE: A user can update their own data. An admin can update any user's data.
-      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow update: if request.auth != null && (isAdmin() || request.auth.uid == userId);
     }
 
     // -- Transactions Collection Rules --
@@ -29,32 +30,36 @@ service cloud.firestore {
       // CREATE: An authenticated user can create a transaction for themselves.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       
-      // READ (get and list): A user can read a transaction if they are the owner. An admin can read any transaction.
-      // This rule works for both fetching a single document and a list of documents (with a `where` clause).
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      // READ (get and list):
+      // The `isAdmin()` check is placed first. If it's true, the rule is satisfied without checking resource.data.
+      // This structure allows an admin to list the whole collection without filters.
+      // If `isAdmin()` is false, the second condition is checked, which requires a user's query to have `where('userId', '==', auth.uid)`.
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.userId);
     }
 
     // -- Withdrawal Request Rules --
     match /withdrawalRequests/{requestId} {
-      // CREATE: User can create their own request.
+      // CREATE: A user can create their own request.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // READ/WRITE: ONLY Admin can manage these requests.
+      
+      // READ/WRITE: ONLY an Admin can manage (read, update, delete) all withdrawal requests.
       allow read, write, delete: if isAdmin();
     }
     
     // -- Add Fund Request Rules --
     match /addFundRequests/{requestId} {
-      // CREATE: User can create their own request.
+      // CREATE: A user can create their own request.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // READ/WRITE: ONLY Admin can manage these requests.
+
+      // READ/WRITE: ONLY an Admin can manage all add fund requests.
       allow read, write, delete: if isAdmin();
     }
 
     // -- App Configuration Rules --
     match /appConfiguration/{docId} {
-      // READ: Any authenticated user can read app settings.
+      // READ: Any authenticated user can read the app settings.
       allow read: if request.auth != null;
-      // WRITE: ONLY Admin can change app settings.
+      // WRITE: ONLY an Admin can change the app settings.
       allow write: if isAdmin();
     }
   }
