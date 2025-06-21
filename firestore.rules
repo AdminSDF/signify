@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -5,67 +6,52 @@ service cloud.firestore {
 
     // --- Helper Functions ---
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return request.auth != null && request.auth.uid == userId;
     }
 
     function isAdmin() {
-      // Checks if user is authenticated and their user document has isAdmin: true
-      return request.auth != null && 
+      // Robust check: ensures user document exists and isAdmin field is explicitly true.
+      return request.auth != null &&
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
 
-    // --- Collection Rules ---
+    // --- Global Admin Rule ---
+    // This rule gives admins full read/write access to the entire database.
+    // If a user is an admin, no other rules are needed for them.
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
 
-    // Users Collection: For profiles and leaderboard
+    // --- User-Specific Rules ---
+    // These rules apply ONLY if the user is NOT an admin.
+
     match /users/{userId} {
-      // Any authenticated user can read user lists (for leaderboard) and individual profiles.
-      allow read: if request.auth != null;
-      // A user can update their own profile, or an admin can update any profile.
-      allow update: if isOwner(userId) || isAdmin();
-      // A user can only create their own profile document.
+      allow get, list: if request.auth != null;
       allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
     }
-
-    // Transactions Collection
+    
     match /transactions/{transactionId} {
-      // Admin can do anything (read, write, list).
-      allow read, write: if isAdmin();
-      
-      // User-specific rules below
-      allow create: if isOwner(request.resource.data.userId); // User can create for themselves.
-      allow get: if isOwner(resource.data.userId); // User can get their own document.
-      
-      // Allow a user to LIST their own transactions.
-      // This rule is permissive for any logged-in user to ATTEMPT a list query.
-      // The query will then be secured by the 'get' rule on a per-document basis.
-      // If a user tries to list all transactions, the query will fail because they
-      // don't have 'get' permission on documents that are not theirs.
-      allow list: if request.auth.uid != null;
+      // User can create their own transactions.
+      allow create: if isOwner(request.resource.data.userId);
+      // User can read their own transactions (get and list with where clause).
+      allow read: if isOwner(resource.data.userId);
     }
 
-    // Withdrawal Requests Collection
     match /withdrawalRequests/{requestId} {
-      // Only an admin can read or write these requests.
-      allow read, write: if isAdmin();
-      // A user can only create a request for themselves.
+      // Users can only create their own requests. Admins handle the rest via the global rule.
       allow create: if isOwner(request.resource.data.userId);
     }
     
-    // Add Fund Requests Collection
     match /addFundRequests/{requestId} {
-      // Only an admin can read or write these requests.
-      allow read, write: if isAdmin();
-      // A user can only create a request for themselves.
+      // Users can only create their own requests. Admins handle the rest via the global rule.
       allow create: if isOwner(request.resource.data.userId);
     }
 
-    // App Configuration: For game settings and news ticker
     match /appConfiguration/{docId} {
-      // Any authenticated user can read the settings.
+      // Any authenticated non-admin user can read the configuration.
       allow read: if request.auth != null;
-      // Only an admin can change the settings.
-      allow write: if isAdmin();
     }
   }
 }
