@@ -307,7 +307,7 @@ export default function GamePage() {
                 <div className="flex justify-between items-center">
                     <div>
                         <p className="text-sm font-medium text-foreground/90 tracking-wider uppercase">{wheelConfig.name} Balance</p>
-                        <p className="text-4xl sm:text-5xl font-bold text-primary glow mt-1">
+                        <p className="text-4xl sm:text-5xl font-bold text-white glow mt-1">
                             ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
                         </p>
                     </div>
