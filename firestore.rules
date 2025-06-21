@@ -1,62 +1,64 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if a user is an admin.
-    // It checks for the existence of the user document and the 'isAdmin' flag.
-    function isAdmin() {
-      return request.auth != null && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    // Helper function to check if a user is an admin by checking the 'isAdmin' field in their user document.
+    function isAdmin(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.isAdmin == true;
     }
 
-    // Users Collection
+    // --- USERS ---
     match /users/{userId} {
-      // GET: An admin can get any user doc. A user can get their own.
-      // LIST: Any authenticated user can list users (for the leaderboard).
-      allow get: if request.auth.uid == userId || isAdmin();
-      allow list: if request.auth != null;
-
-      // WRITE: A user can create/update their own doc. An admin can update any doc.
+      // CREATE: A user can create their own document when they sign up.
       allow create: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId || isAdmin();
+
+      // GET: A user can get their own document. An admin can get any user's document.
+      allow get: if request.auth.uid == userId || isAdmin(request.auth.uid);
+      
+      // UPDATE: A user can update their own document. An admin can also update any user document.
+      allow update: if request.auth.uid == userId || isAdmin(request.auth.uid);
+
+      // LIST: An admin can list all users (for the admin panel). Authenticated users can list for the leaderboard.
+      allow list: if request.auth != null;
     }
 
-    // Transactions Collection
+    // --- TRANSACTIONS ---
     match /transactions/{transactionId} {
-      // READ (get/list): An admin can read any transaction. 
-      // A normal user can only read their own transactions (this is enforced by the query in the app).
-      allow read: if isAdmin() || (request.auth != null && resource.data.userId == request.auth.uid);
-      
-      // WRITE: A user can create their own transaction.
+      // CREATE: A user can create a transaction for themselves.
       allow create: if request.auth.uid == request.resource.data.userId;
+      
+      // READ (get/list): Admins can read all transactions. Users can only query and read their own.
+      allow read: if isAdmin(request.auth.uid) || (request.auth.uid == resource.data.userId);
     }
     
-    // WithdrawalRequests Collection
+    // --- WITHDRAWAL REQUESTS ---
     match /withdrawalRequests/{requestId} {
-      // WRITE: A user can create their own request.
+      // CREATE: A user can create their own withdrawal request.
       allow create: if request.auth.uid == request.resource.data.userId;
       
-      // Admin Access: Admins can read/write all requests. Regular users cannot access the list.
-      allow read, write, list: if isAdmin();
+      // Admins can manage all requests. Users cannot see requests after creation.
+      allow read, write, delete: if isAdmin(request.auth.uid);
     }
     
-    // AddFundRequests Collection
+    // --- ADD FUND REQUESTS ---
     match /addFundRequests/{requestId} {
-      // WRITE: A user can create their own request.
+      // CREATE: A user can create their own add fund request.
       allow create: if request.auth.uid == request.resource.data.userId;
       
-      // Admin Access: Admins can read/write all requests. Regular users cannot access the list.
-      allow read, write, list: if isAdmin();
+      // Admins can manage all requests. Users cannot see requests after creation.
+      allow read, write, delete: if isAdmin(request.auth.uid);
     }
-
-    // App Configuration
+    
+    // --- APP CONFIGURATION ---
     match /appConfiguration/{docId} {
-      // READ: Any authenticated user can read the app config.
-      allow read: if request.auth != null;
-      // WRITE: Only admins can write to the app config.
-      allow write: if isAdmin();
+      // GET: Any authenticated user can read the app configuration.
+      allow get: if request.auth != null;
+      
+      // WRITE: Only admins can write/update the app configuration.
+      allow write: if isAdmin(request.auth.uid);
     }
   }
 }
