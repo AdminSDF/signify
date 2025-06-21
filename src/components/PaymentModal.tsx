@@ -138,7 +138,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button type="button" variant="default" onClick={onConfirm} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white">
+          <Button type="button" variant="default" onClick={onConfirm} className="w-full sm:w-auto">
             I have made the payment (₹{amount.toFixed(2)})
           </Button>
         </DialogFooter>

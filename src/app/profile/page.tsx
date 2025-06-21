@@ -379,7 +379,9 @@ export default function ProfilePage() {
                 <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isWithdrawing || !isClient} /></div>
                 <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isWithdrawing || !isClient} /></div>
               </div>)}
-              <Button onClick={handleWithdrawal} disabled={isWithdrawalButtonDisabled() || !isClient} className="w-full bg-green-600 hover:bg-green-700 text-white">{isWithdrawing ? 'Processing...' : 'Request Withdrawal'}</Button>
+              <Button onClick={handleWithdrawal} disabled={isWithdrawalButtonDisabled() || !isClient} className="w-full" variant="default">
+                {isWithdrawing ? 'Processing...' : 'Request Withdrawal'}
+              </Button>
               {balance !== null && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) > balance && (<p className="text-xs text-destructive text-center mt-1">Amount exceeds balance.</p>)}
             </CardContent>
           </Card>

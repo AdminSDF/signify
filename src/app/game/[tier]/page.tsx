@@ -83,10 +83,20 @@ export default function GamePage() {
     if (config) {
       setWheelConfig(config);
     } else {
-      // Redirect if tier is invalid
       router.push('/');
     }
   }, [tier, router]);
+
+  useEffect(() => {
+    if (wheelConfig?.themeClass) {
+      document.documentElement.classList.add(wheelConfig.themeClass);
+    }
+    return () => {
+      if (wheelConfig?.themeClass) {
+        document.documentElement.classList.remove(wheelConfig.themeClass);
+      }
+    };
+  }, [wheelConfig]);
 
   useEffect(() => {
     if (!isClient || !wheelConfig) return;
@@ -307,7 +317,7 @@ export default function GamePage() {
   const costOfNextPaidSpin = tier === 'little' ? getLittleTierSpinCost(dailyPaidSpinsUsed) : wheelConfig.baseCost;
 
   return (
-    <div className={`flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden ${wheelConfig.themeClass}`}>
+    <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
       {showConfetti && <ConfettiRain />}
       
       <div className="w-full max-w-4xl flex items-center justify-between">
@@ -320,12 +330,12 @@ export default function GamePage() {
       
       {isClient && user && (
         <div className="w-full max-w-md flex justify-center my-6">
-          <Card className="py-4 px-6 sm:px-8 inline-flex flex-col items-center gap-2 shadow-lg bg-gradient-to-br from-primary-foreground/20 via-background/30 to-secondary/20 border-2 border-primary/50 rounded-xl backdrop-blur-sm">
+          <Card className="py-4 px-6 sm:px-8 inline-flex flex-col items-center gap-2 shadow-xl bg-card/60 dark:bg-card/40 backdrop-blur-sm border-2 border-primary/40 rounded-2xl">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
-              <span className="text-xs sm:text-sm font-medium text-primary-foreground/80 tracking-wider uppercase">Your Balance</span>
+              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-primary/80" />
+              <span className="text-xs sm:text-sm font-medium text-foreground/80 tracking-wider uppercase">Your Balance</span>
             </div>
-            <span className="text-2xl sm:text-3xl font-bold text-primary-foreground glow">
+            <span className="text-3xl sm:text-4xl font-bold text-primary glow">
               ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
             </span>
           </Card>
