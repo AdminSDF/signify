@@ -25,7 +25,6 @@ interface PaymentModalProps {
   upiId: string;
   appName: string; // Added for Payee Name in UPI link
   amount: number;
-  spinsToGet?: number; 
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -35,7 +34,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   upiId,
   appName,
   amount,
-  spinsToGet,
 }) => {
   const { toast } = useToast();
   const [upiPaymentLink, setUpiPaymentLink] = useState('');
@@ -51,11 +49,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       // upi://pay?pa={upi_id}&pn={payee_name}&am={amount}&cu=INR&tn={transaction_note}
       // Ensure appName is URL encoded if it can contain special characters
       const payeeName = encodeURIComponent(appName);
-      const transactionNote = encodeURIComponent(spinsToGet ? `Buy ${spinsToGet} Spins for ${appName}` : `Add Balance to ${appName}`);
+      const transactionNote = encodeURIComponent(`Add ₹${amount} to ${appName}`);
       const link = `upi://pay?pa=${upiId}&pn=${payeeName}&am=${amount.toFixed(2)}&cu=INR&tn=${transactionNote}`;
       setUpiPaymentLink(link);
     }
-  }, [isOpen, upiId, amount, appName, spinsToGet]);
+  }, [isOpen, upiId, amount, appName]);
 
   const handleCopyUpiId = async () => {
     try {
@@ -73,11 +71,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  const descriptionText = spinsToGet && spinsToGet > 0 
-    ? <>Get <span className="font-bold text-primary">{spinsToGet} spins</span> for just <span className="font-bold text-primary">₹{amount.toFixed(2)}</span>!</>
-    : <>You are about to add <span className="font-bold text-primary">₹{amount.toFixed(2)}</span> to your balance.</>;
+  const descriptionText = <>To continue playing, you need to add at least <span className="font-bold text-primary">₹{amount.toFixed(2)}</span> to your balance.</>;
   
-  const modalTitle = spinsToGet && spinsToGet > 0 ? "Purchase More Spins" : "Add Balance";
+  const modalTitle = "Insufficient Balance";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

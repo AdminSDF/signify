@@ -8,7 +8,7 @@ body {
 }
 
 @layer base {
-  :root {
+  :root, .theme-little {
     --background: 336 67% 87%; /* Light Pink */
     --foreground: 283 63% 22%; /* Darker Violet for text on light pink */
 
@@ -56,7 +56,7 @@ body {
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
-  .dark {
+  .dark:root, .dark .theme-little {
     /* Keeping dark mode similar to default, can be customized later */
     --background: 283 30% 10%; /* Dark Violet */
     --foreground: 336 67% 87%; /* Light Pink text */
@@ -92,6 +92,93 @@ body {
     --chart-4: 30 80% 75%;
     --chart-5: 345 75% 65%;
   }
+
+  .theme-big {
+    --background: 220 15% 15%; /* Dark Blue-Gray */
+    --foreground: 45 100% 85%; /* Light Gold */
+    --card: 220 15% 20%;
+    --card-foreground: 45 100% 85%;
+    --popover: 220 15% 15%;
+    --popover-foreground: 45 100% 85%;
+    --primary: 45 100% 55%; /* Gold */
+    --primary-foreground: 220 20% 10%; /* Dark text on gold */
+    --secondary: 220 15% 25%; /* Lighter Blue-Gray */
+    --secondary-foreground: 45 100% 70%;
+    --muted: 220 15% 12%;
+    --muted-foreground: 220 10% 60%;
+    --accent: 50 100% 65%; /* Bright Yellow-Gold */
+    --accent-foreground: 220 20% 10%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 30%;
+    --input: 220 15% 18%;
+    --ring: 45 100% 55%;
+  }
+
+  .dark .theme-big { /* Same as light for this theme */
+    --background: 220 15% 15%; 
+    --foreground: 45 100% 85%;
+    --card: 220 15% 20%;
+    --card-foreground: 45 100% 85%;
+    --popover: 220 15% 15%;
+    --popover-foreground: 45 100% 85%;
+    --primary: 45 100% 55%; 
+    --primary-foreground: 220 20% 10%;
+    --secondary: 220 15% 25%;
+    --secondary-foreground: 45 100% 70%;
+    --muted: 220 15% 12%;
+    --muted-foreground: 220 10% 60%;
+    --accent: 50 100% 65%;
+    --accent-foreground: 220 20% 10%;
+    --border: 220 15% 30%;
+    --input: 220 15% 18%;
+    --ring: 45 100% 55%;
+  }
+  
+  .theme-more-big {
+    --background: 210 50% 12%; /* Deep Space Blue */
+    --foreground: 180 80% 90%; /* Cyan/Diamond text */
+    --card: 210 50% 18%;
+    --card-foreground: 180 80% 90%;
+    --popover: 210 50% 12%;
+    --popover-foreground: 180 80% 90%;
+    --primary: 190 100% 50%; /* Bright Cyan */
+    --primary-foreground: 210 50% 5%; /* Dark Blue text on Cyan */
+    --secondary: 210 50% 25%;
+    --secondary-foreground: 180 80% 80%;
+    --muted: 0 0% 100%; /* White */
+    --muted-foreground: 210 30% 70%;
+    --accent: 280 100% 70%; /* Electric Purple */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 350 90% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 50% 30%;
+    --input: 210 50% 15%;
+    --ring: 190 100% 50%;
+  }
+
+  .dark .theme-more-big { /* Same as light for this theme */
+    --background: 210 50% 12%;
+    --foreground: 180 80% 90%;
+    --card: 210 50% 18%;
+    --card-foreground: 180 80% 90%;
+    --popover: 210 50% 12%;
+    --popover-foreground: 180 80% 90%;
+    --primary: 190 100% 50%;
+    --primary-foreground: 210 50% 5%;
+    --secondary: 210 50% 25%;
+    --secondary-foreground: 180 80% 80%;
+    --muted: 0 0% 100%;
+    --muted-foreground: 210 30% 70%;
+    --accent: 280 100% 70%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 350 90% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 50% 30%;
+    --input: 210 50% 15%;
+    --ring: 190 100% 50%;
+  }
+
 }
 
 @layer base {
@@ -144,4 +231,3 @@ body {
   white-space: nowrap;
   display: inline-block;
 }
-
