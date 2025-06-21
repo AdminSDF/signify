@@ -1,52 +1,52 @@
-
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Helper function to check for admin status by reading the user's document in Firestore.
-    // This function can be called from other rules to verify if the requesting user is an admin.
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check ownership
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function to check if the user is an admin
     function isAdmin() {
-      // Check if the user is authenticated, their user document exists in Firestore,
-      // and the 'isAdmin' field in that document is set to true.
-      return request.auth != null &&
+      return isAuthenticated() &&
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    // Rules for user profile photos stored in the 'profile_photos' directory.
+    // Profile Photos: /profile_photos/{userId}
     match /profile_photos/{userId} {
-      // Allow any authenticated user to read profile photos. This is needed for features
-      // like leaderboards or viewing other user profiles.
-      allow read: if request.auth != null;
+      // Any authenticated user can read profile photos (for leaderboards, etc.)
+      allow read: if isAuthenticated();
 
-      // Allow a user to write (create, update, delete) to their own profile photo path.
-      // The user's UID must match the {userId} in the path.
-      // We also enforce that the uploaded file must be an image and its size is less than 2MB.
-      allow write: if request.auth.uid == userId
-                   && request.resource.size < 2 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+      // Only the owner of the profile can upload or update their photo.
+      // The file must be an image and under 2MB.
+      allow write: if isOwner(userId) &&
+                      request.resource.size < 2 * 1024 * 1024 &&
+                      request.resource.contentType.matches('image/.*');
     }
 
-    // Rules for screenshots attached to support tickets.
-    // These are stored in a directory structure like 'support_tickets/{ticketId}/{fileName}'.
+    // Support Tickets: /support_tickets/{ticketId}/{fileName}
     match /support_tickets/{ticketId}/{fileName} {
-      // Only an admin can read the screenshots submitted with support tickets.
-      // This protects user privacy and sensitive information.
+      // Only admins can read the screenshots submitted by users.
       allow read: if isAdmin();
-
-      // Allow a user to create a file (upload a screenshot) only for a support ticket
-      // that they have created. This is verified by checking the 'userId' field in the
-      // corresponding support ticket document in Firestore.
-      // We also enforce that the file is an image and its size is less than 5MB.
-      allow create: if request.auth != null
-                    && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
-                    && request.resource.size < 5 * 1024 * 1024
-                    && request.resource.contentType.matches('image/.*');
       
-      // Explicitly deny updates and deletes from the client-side to prevent tampering.
-      // These actions should be handled by server-side logic or an admin if needed.
-      allow update, delete: if false;
+      // A user can only upload a screenshot for a ticket they created.
+      // The file must be an image and under 5MB.
+      function isTicketOwner() {
+        let ticket = get(/databases/$(database)/documents/supportTickets/$(ticketId));
+        return isOwner(ticket.data.userId);
+      }
+      
+      allow create: if isTicketOwner() &&
+                       request.resource.size < 5 * 1024 * 1024 &&
+                       request.resource.contentType.matches('image/.*');
     }
+
   }
 }
