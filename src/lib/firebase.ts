@@ -99,6 +99,15 @@ export const createUserData = async (
     initialBalances[tierId] = tierId === 'little' ? initialAppSettings.initialBalanceForNewUsers : 0;
   });
 
+  // Check against a comma-separated list of admin emails, case-insensitively.
+  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL)
+    .toLowerCase()
+    .split(',')
+    .map(e => e.trim())
+    .filter(e => e); // Remove any empty strings from trailing commas
+
+  const userEmail = email ? email.toLowerCase().trim() : '';
+
   const userData: UserDocument = {
     uid: userId,
     email,
@@ -109,7 +118,7 @@ export const createUserData = async (
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
-    isAdmin: email === (process.env.NEXT_PUBLIC_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL),
+    isAdmin: adminEmails.includes(userEmail),
     lastLogin: Timestamp.now(),
     totalWinnings: 0,
     totalSpinsPlayed: 0,
