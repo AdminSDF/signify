@@ -303,15 +303,17 @@ export default function GamePage() {
       
       {isClient && user && (
         <div className="w-full max-w-md flex justify-center my-6">
-          <Card className="py-4 px-6 sm:px-8 inline-flex flex-col items-center gap-2 shadow-xl bg-card/60 dark:bg-card/40 backdrop-blur-sm border-2 border-primary/40 rounded-2xl">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-primary/80" />
-              <span className="text-xs sm:text-sm font-medium text-foreground/80 tracking-wider uppercase">{wheelConfig.name} Balance</span>
-            </div>
-            <span className="text-3xl sm:text-4xl font-bold text-primary glow">
-              ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
-            </span>
-          </Card>
+            <Card className="p-4 sm:p-6 w-full shadow-xl bg-card/70 dark:bg-card/50 backdrop-blur-md border-2 border-primary/50 rounded-2xl">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <p className="text-sm font-medium text-foreground/90 tracking-wider uppercase">{wheelConfig.name} Balance</p>
+                        <p className="text-4xl sm:text-5xl font-bold text-primary glow mt-1">
+                            ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
+                        </p>
+                    </div>
+                    <DollarSign className="h-12 w-12 sm:h-16 sm:w-16 text-primary/70" />
+                </div>
+            </Card>
         </div>
       )}
       
