@@ -16,7 +16,8 @@ import {
   updateUserData,
   Timestamp,
   getDoc, 
-  doc 
+  doc,
+  db
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
@@ -64,15 +65,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setFbAppConfigLoading(false);
     }
-  }, [fbAppConfigLoading, toast]); 
+  }, [toast]); // Removed fbAppConfigLoading from deps to prevent loops
 
   useEffect(() => {
-    // Fetch app config only after initial auth state is known or if explicitly needed early
-    if (!fbAuthLoading) { // Or some other condition if you need config before auth is fully resolved
-      fetchAppConfig();
-    }
+    fetchAppConfig();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fbAuthLoading]); // Rerun if auth loading state changes, to fetch config once auth is done
+  }, []); // Fetch config once on mount
 
    useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
@@ -81,23 +79,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
         const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
         
-        // Check if it's a truly new user session (creation time and last sign-in are same and recent)
-        // Only update lastLogin if it's not the immediate moment of account creation.
-        // This is to avoid potential race conditions with the createUserData function.
-        const isTrulyNewSession = creationTime === lastSignInTime && (Date.now() - creationTime < 15000); // 15-second window
+        const isTrulyNewSession = Math.abs(creationTime - lastSignInTime) < 2000;
 
         if (!isTrulyNewSession) {
           try {
              const userDocRef = doc(db, 'users', firebaseUser.uid);
              const userDoc = await getDoc(userDocRef);
-             if (userDoc.exists()) { // Only update if document exists
+             if (userDoc.exists()) {
                 await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
              } else {
-                // This can happen if the user document creation is still pending or failed earlier
                 console.warn("User document not found for lastLogin update, possibly very new user or document creation is pending/failed:", firebaseUser.uid);
              }
           } catch (updateError) {
-            // Catch errors during the update, e.g., permission issues or network problems
             console.warn("Could not update lastLogin on auth state change:", updateError);
           }
         }
@@ -136,11 +129,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       else if (authError.code === 'auth/weak-password') description = 'Password is too weak. It should be at least 6 characters long.';
       else if (authError.code === 'auth/invalid-email') description = 'The email address is not valid.';
       toast({ variant: "destructive", title: "Sign Up Failed", description });
-      setFbAuthLoading(false); // Ensure loading is false if auth itself fails
-      return; // Exit if auth creation fails
+      setFbAuthLoading(false); 
+      return;
     }
 
-    // If Firebase Auth user was created successfully
     if (userCredential && userCredential.user) {
       let profileUpdated = false;
       try {
@@ -164,13 +156,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               title: "Account Created, Setup Incomplete",
               description: `Your account was made, but ${errorSource} failed (Error: ${setupError.message || 'Unknown error'}). Please try logging in. If issues persist, check console or contact support.`
           });
-          // User is technically signed up in Firebase Auth. onAuthStateChanged will handle them.
       }
     } else {
       console.error("Firebase Auth: createUserWithEmailAndPassword succeeded but userCredential.user is null.");
       toast({ variant: "destructive", title: "Sign Up Failed", description: "User creation succeeded but user data is missing." });
     }
-    // fbAuthLoading will be set to false by onAuthStateChanged
   };
 
   const loginWithEmailPassword = async ({ email, password }: LoginCredentials) => {

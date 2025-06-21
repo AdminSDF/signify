@@ -287,7 +287,6 @@ export default function GamePage() {
 
   const handlePaymentConfirm = useCallback(async () => {
     setShowPaymentModal(false);
-    // This is simplified. In a real app, you would submit an add fund request.
     toast({ title: "Action Required", description: `Please go to your profile to add balance.` });
     router.push('/profile');
   }, [router, toast]);
@@ -319,14 +318,6 @@ export default function GamePage() {
         <div className="w-28"></div> {/* Spacer */}
       </div>
       
-      <div className="my-4 w-full max-w-3xl text-center">
-        <ins className="adsbygoogle"
-             style={{display:"inline-block",width:"728px",height:"90px"}}
-             data-ad-client="ca-pub-1425274923062587"
-             data-ad-slot="9499288281"></ins>
-        <script dangerouslySetInnerHTML={{ __html: `(adsbygoogle = window.adsbygoogle || []).push({});` }} />
-      </div>
-
       {isClient && user && (
         <div className="w-full max-w-md flex justify-center my-6">
           <Card className="py-4 px-6 sm:px-8 inline-flex flex-col items-center gap-2 shadow-lg bg-gradient-to-br from-primary-foreground/20 via-background/30 to-secondary/20 border-2 border-primary/50 rounded-xl backdrop-blur-sm">
@@ -341,17 +332,6 @@ export default function GamePage() {
         </div>
       )}
       
-       <div className="my-4 w-full max-w-lg">
-           <ins className="adsbygoogle"
-               style={{display:"block"}}
-               data-ad-format="auto"
-               data-full-width-responsive={true}
-               data-ad-client="ca-pub-1425274923062587"
-               data-ad-slot="2603795181"></ins>
-          <script dangerouslySetInnerHTML={{ __html: `(adsbygoogle = window.adsbygoogle || []).push({});` }}/>
-        </div>
-
-
       <main className="flex flex-col items-center w-full max-w-2xl">
         <SpinWheel
           segments={wheelConfig.segments}
