@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+      },
     ],
   },
   // Add the allowed origin from the development server logs to prevent cross-origin errors.

@@ -6,62 +6,61 @@ service cloud.firestore {
 
     // --- Helper Functions ---
     function isOwner(userId) {
-      // Checks if the requesting user's UID matches the given userId.
       return request.auth != null && request.auth.uid == userId;
     }
 
     function isAdmin() {
-      // Checks if the requesting user's document has the `isAdmin` flag set to true.
-      // exists() check is crucial to prevent errors if the user doc doesn't exist.
+      // Robust check: ensures user document exists and isAdmin field is explicitly true.
       return request.auth != null &&
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
+    
+    // --- Global Admin Rule ---
+    // This rule gives admins full read/write access to the entire database.
+    // If a user is an admin, no other rules are needed for them.
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
 
-    // --- Collection-Specific Rules ---
+    // --- User-Specific Rules ---
+    // These rules apply ONLY if the user is NOT an admin.
 
-    // Rules for user profiles
     match /users/{userId} {
-      // CREATE: A user can only create their own document.
-      allow create: if isOwner(userId);
-      // READ: Any authenticated user can read any profile (for leaderboards, etc.).
-      // Admins are authenticated, so this covers them too.
+      // Any authenticated user can read user lists (for leaderboard) and individual profiles.
       allow get, list: if request.auth != null;
-      // UPDATE: A user can update their own profile, or an admin can update anyone's.
-      allow update: if isOwner(userId) || isAdmin();
-    }
-
-    // Rules for user-specific data that admins also need to see in bulk.
-    match /transactions/{docId} {
-      // CREATE: A user can only create their own transaction.
-      allow create: if isOwner(request.resource.data.userId);
-      // READ (get, list): An admin can read any transaction. A user can only read their own.
-      // For an admin's list query, `isAdmin()` is true, so the query is allowed.
-      // For a user's query, `isOwner` secures the document reads.
-      allow read: if isAdmin() || isOwner(resource.data.userId);
+      // A user can update their own profile
+      allow update: if isOwner(userId);
+      // A user can only create their own profile document.
+      allow create: if isOwner(userId);
     }
     
-    // Rules for admin-managed data that users can create.
-    match /withdrawalRequests/{docId} {
-      // CREATE: User can create their own request.
+    match /transactions/{transactionId} {
+      // User can create their own transactions.
       allow create: if isOwner(request.resource.data.userId);
-      // ADMINS ONLY: Only admins can read or write (update/delete) these.
-      allow read, write: if isAdmin();
-    }
-    
-    match /addFundRequests/{docId} {
-      // CREATE: User can create their own request.
-      allow create: if isOwner(request.resource.data.userId);
-      // ADMINS ONLY: Only admins can read or write (update/delete) these.
-      allow read, write: if isAdmin();
+      // User can read their own transactions (get and list with where clause).
+      allow read: if isOwner(resource.data.userId);
     }
 
-    // Rules for app configuration
+    match /withdrawalRequests/{requestId} {
+      // Users can only create their own requests. Admins handle the rest via the global rule.
+      allow create: if isOwner(request.resource.data.userId);
+    }
+    
+    match /addFundRequests/{requestId} {
+      // Users can only create their own requests. Admins handle the rest via the global rule.
+      allow create: if isOwner(request.resource.data.userId);
+    }
+    
+    match /supportTickets/{ticketId} {
+      // Users can only create their own tickets. Admins handle the rest.
+      allow create: if isOwner(request.resource.data.userId);
+    }
+
     match /appConfiguration/{docId} {
-      // READ: Anyone can read the app configuration.
+      // Any user (authenticated or not) can read the configuration.
+      // This is necessary for the app to load its theme and settings before login.
       allow read: if true;
-      // WRITE: Only admins can change the configuration.
-      allow write: if isAdmin();
     }
   }
 }

@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, initialWheelConfigs } from '@/lib/appConfig';
 import {
@@ -34,7 +36,10 @@ import {
   TransactionData,
   getLeaderboardUsers,
   Timestamp,
-  AppConfiguration
+  AppConfiguration,
+  getSupportTickets,
+  SupportTicketData,
+  updateSupportTicketStatus
 } from '@/lib/firebase';
 
 export default function AdminPage() {
@@ -55,6 +60,8 @@ export default function AdminPage() {
   const [allUsers, setAllUsers] = useState<(UserDocument & {id: string})[]>([]);
   const [allTransactions, setAllTransactions] = useState<(TransactionData & {id: string})[]>([]);
   const [leaderboard, setLeaderboard] = useState<UserDocument[]>([]);
+  const [supportTickets, setSupportTickets] = useState<(SupportTicketData & {id: string})[]>([]);
+
   
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -69,18 +76,20 @@ export default function AdminPage() {
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const [withdrawals, adds, users, transactions, leaderboardUsers] = await Promise.all([
+      const [withdrawals, adds, users, transactions, leaderboardUsers, tickets] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
         getAllUsers(),
         getAllTransactions(),
-        getLeaderboardUsers(20)
+        getLeaderboardUsers(20),
+        getSupportTickets()
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
       setAllUsers(users);
       setAllTransactions(transactions);
       setLeaderboard(leaderboardUsers);
+      setSupportTickets(tickets);
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
@@ -250,6 +259,17 @@ export default function AdminPage() {
     }
   };
 
+  const handleResolveTicket = async (ticketId: string) => {
+    try {
+        await updateSupportTicketStatus(ticketId, 'resolved');
+        toast({ title: "Ticket Resolved", description: "The support ticket has been marked as resolved."});
+        fetchAdminData();
+    } catch (error) {
+        console.error("Error resolving ticket:", error);
+        toast({ title: "Error", description: "Could not resolve the ticket.", variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
@@ -287,7 +307,7 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-6 h-auto flex-wrap">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund</TabsTrigger>
               <TabsTrigger value="withdrawal-req"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal</TabsTrigger>
@@ -296,6 +316,7 @@ export default function AdminPage() {
               <TabsTrigger value="wheel-settings"><Wand2 className="mr-2 h-4 w-4"/>Wheel Settings</TabsTrigger>
               <TabsTrigger value="game-settings"><Settings className="mr-2 h-4 w-4"/>App Settings</TabsTrigger>
               <TabsTrigger value="news-ticker"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
+              <TabsTrigger value="support"><LifeBuoy className="mr-2 h-4 w-4"/>Support</TabsTrigger>
             </TabsList>
 
              <TabsContent value="overview">
@@ -494,6 +515,48 @@ export default function AdminPage() {
                       {!isLoadingData && leaderboard.length === 0 && (<TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-10">Leaderboard is empty.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
+            
+            <TabsContent value="support">
+              <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><LifeBuoy /> Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></CardHeader>
+                <CardContent>
+                  <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Description</TableHead><TableHead>Screenshot</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading tickets...</TableCell></TableRow>
+                      : supportTickets.map((ticket) => (
+                        <TableRow key={ticket.id}>
+                          <TableCell>{ticket.userEmail}</TableCell>
+                          <TableCell className="max-w-sm whitespace-pre-wrap">{ticket.description}</TableCell>
+                          <TableCell>
+                            {ticket.screenshotURL ? (
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm">View Image</Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-3xl">
+                                  <DialogHeader><DialogTitle>Screenshot from {ticket.userEmail}</DialogTitle></DialogHeader>
+                                  <div className="flex justify-center p-4">
+                                    <Image src={ticket.screenshotURL} alt={`Screenshot for ticket ${ticket.id}`} width={800} height={600} className="rounded-md object-contain max-h-[70vh]"/>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            ) : "N/A"}
+                          </TableCell>
+                          <TableCell>{ticket.createdAt instanceof Timestamp ? ticket.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
+                          <TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell>
+                          <TableCell>
+                            {ticket.status === 'open' && (
+                              <Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {!isLoadingData && supportTickets.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center text-muted-foreground h-24">No support tickets found.</TableCell></TableRow>)}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
           </Tabs>
         </CardContent>
       </Card>

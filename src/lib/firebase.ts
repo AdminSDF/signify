@@ -58,6 +58,7 @@ const WITHDRAWAL_REQUESTS_COLLECTION = 'withdrawalRequests';
 const ADD_FUND_REQUESTS_COLLECTION = 'addFundRequests';
 const APP_CONFIG_COLLECTION = 'appConfiguration';
 const APP_CONFIG_DOC_ID = 'main';
+const SUPPORT_TICKETS_COLLECTION = 'supportTickets';
 
 
 // --- User Functions ---
@@ -408,7 +409,7 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
 };
 
 export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string) => {
-  const effectiveTierId = tierId || 'little'; // Default to 'little' for old requests without a tierId
+  const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
 
@@ -420,7 +421,6 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const userData = userSnap.data() as UserDocument;
   
-  // Safely access balances
   const userBalances = userData.balances || {};
   const currentBalance = userBalances[effectiveTierId] || 0;
   const newBalance = currentBalance + amount;
@@ -455,7 +455,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
 };
 
 export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string, paymentMethodDetails: string) => {
-  const effectiveTierId = tierId || 'little'; // Default to 'little' for old requests without a tierId
+  const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
 
@@ -501,6 +501,69 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
 
   await batch.commit();
 };
+
+// --- Support Ticket Functions ---
+export interface SupportTicketData {
+  id?: string;
+  userId: string;
+  userEmail: string;
+  description: string;
+  screenshotURL?: string;
+  status: 'open' | 'resolved';
+  createdAt: Timestamp;
+  resolvedAt?: Timestamp;
+}
+
+export const uploadSupportScreenshot = async (ticketId: string, file: File): Promise<string> => {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("File is not an image.");
+    }
+    const storageRef = ref(storage, `support_tickets/${ticketId}/${file.name}`);
+    
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    return downloadURL;
+};
+
+export const createSupportTicket = async (data: { userId: string; userEmail: string; description: string; screenshotFile: File | null; }): Promise<void> => {
+    const ticketRef = doc(collection(db, SUPPORT_TICKETS_COLLECTION));
+    const newTicketData: Omit<SupportTicketData, 'id'> = {
+        userId: data.userId,
+        userEmail: data.userEmail,
+        description: data.description,
+        status: 'open',
+        createdAt: Timestamp.now(),
+    };
+    
+    await setDoc(ticketRef, newTicketData);
+
+    if (data.screenshotFile) {
+        const screenshotURL = await uploadSupportScreenshot(ticketRef.id, data.screenshotFile);
+        await updateDoc(ticketRef, { screenshotURL: screenshotURL });
+    }
+};
+
+export const getSupportTickets = async (statusFilter?: SupportTicketData['status']): Promise<(SupportTicketData & {id: string})[]> => {
+    let q;
+    if (statusFilter) {
+      q = query(collection(db, SUPPORT_TICKETS_COLLECTION), where("status", "==", statusFilter), orderBy("createdAt", "desc"));
+    } else {
+      q = query(collection(db, SUPPORT_TICKETS_COLLECTION), orderBy("createdAt", "desc"));
+    }
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (SupportTicketData & {id: string})));
+};
+
+export const updateSupportTicketStatus = async (ticketId: string, status: SupportTicketData['status']): Promise<void> => {
+    const ticketRef = doc(db, SUPPORT_TICKETS_COLLECTION, ticketId);
+    const updateData: Partial<SupportTicketData> = { status };
+    if (status === "resolved") {
+        updateData.resolvedAt = Timestamp.now();
+    }
+    await updateDoc(ticketRef, updateData);
+};
+
 
 export {
   app, auth, db, storage, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,

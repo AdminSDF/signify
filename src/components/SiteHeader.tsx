@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield } from 'lucide-react';
+import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -45,6 +45,11 @@ const SiteHeader: React.FC = () => {
             <Link href="/leaderboard" passHref>
               <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
                 <Trophy className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Leaderboard</span>
+              </Button>
+            </Link>
+             <Link href="/help" passHref>
+              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+                <HelpCircle className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Help</span>
               </Button>
             </Link>
           </nav>
