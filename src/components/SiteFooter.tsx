@@ -6,7 +6,7 @@ const SiteFooter: React.FC = () => {
       <div className="container flex flex-col items-center justify-center gap-2 py-4 md:h-24 md:flex-row md:py-0">
         <div className="text-center">
           <p className="text-balance text-sm leading-loose text-muted-foreground">
-            © {new Date().getFullYear()} Spinify App. Powered by Firebase Studio & Genkit AI.
+            Copyright © {new Date().getFullYear()} Spinify. All Rights Reserved.
           </p>
           <p className="text-balance text-xs leading-loose text-muted-foreground">
             Disclaimer: This game is for entertainment purposes only and does not involve real money. All currency and transactions are virtual.
