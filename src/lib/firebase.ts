@@ -410,10 +410,15 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
 export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-  const userSnap = await getDoc(userRef);
+
+  const [userSnap, appConfig] = await Promise.all([
+    getDoc(userRef),
+    getAppConfiguration()
+  ]);
+
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const userData = userSnap.data() as UserDocument;
-  const currentBalance = userData.balances[tierId] || 0;
+  const currentBalance = (userData.balances || {})[tierId] || 0;
   const newBalance = currentBalance + amount;
   
   batch.update(userRef, { [`balances.${tierId}`]: newBalance });
@@ -421,7 +426,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
 
-  const tierName = initialWheelConfigs[tierId]?.name || 'Unknown Tier';
+  const tierName = appConfig.settings.wheelConfigs[tierId]?.name || 'Unknown Tier';
   
   const transactionPayload: TransactionData = {
     userId: userId,
@@ -448,11 +453,16 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
 export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string, paymentMethodDetails: string) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-  const userSnap = await getDoc(userRef);
+
+  const [userSnap, appConfig] = await Promise.all([
+    getDoc(userRef),
+    getAppConfiguration()
+  ]);
+
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   
   const userData = userSnap.data() as UserDocument;
-  const currentBalance = userData.balances[tierId] || 0;
+  const currentBalance = (userData.balances || {})[tierId] || 0;
   if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
   
   const newBalance = currentBalance - amount;
@@ -461,7 +471,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
 
-  const tierName = initialWheelConfigs[tierId]?.name || 'Unknown Tier';
+  const tierName = appConfig.settings.wheelConfigs[tierId]?.name || 'Unknown Tier';
   
   const transactionPayload: TransactionData = {
     userId: userId,
