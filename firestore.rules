@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -12,9 +11,13 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      // Allow user to read/update their own document.
-      // Admins can read any user document.
-      allow read, update: if request.auth != null && (request.auth.uid == userId || isAdmin(request.auth.uid));
+      // Allow user to GET their own document.
+      // Admins can GET any user document.
+      allow get, update: if request.auth != null && (request.auth.uid == userId || isAdmin(request.auth.uid));
+
+      // Allow any authenticated user to LIST the users collection for the leaderboard.
+      // This is what allows the leaderboard query to work.
+      allow list: if request.auth != null;
       
       // Allow anyone to create their own user document during sign-up.
       allow create: if request.auth != null && request.auth.uid == userId;
