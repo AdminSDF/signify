@@ -39,6 +39,16 @@
         }
       ]
     },
+     {
+      "collectionGroup": "withdrawalRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "requestDate",
+          "order": "DESCENDING"
+        }
+      ]
+    },
     {
       "collectionGroup": "addFundRequests",
       "queryScope": "COLLECTION",
@@ -47,6 +57,16 @@
           "fieldPath": "status",
           "order": "ASCENDING"
         },
+        {
+          "fieldPath": "requestDate",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "addFundRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
         {
           "fieldPath": "requestDate",
           "order": "DESCENDING"
