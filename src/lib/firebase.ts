@@ -29,7 +29,7 @@ import {
   writeBatch
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { AppSettings } from '@/lib/appConfig';
+import type { AppSettings, AppConfiguration as AppConfigData } from '@/lib/appConfig'; // Renamed to avoid conflict
 import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMIN_EMAIL } from '@/lib/appConfig';
 
 
@@ -242,13 +242,28 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
     const docSnap = await getDoc(configRef);
     if (docSnap.exists()) {
       const fetchedData = docSnap.data();
-      const settings = { ...defaultAppSettings, ...(fetchedData?.settings || {}) };
+      
+      // Deep merge settings and wheelConfigs to ensure no missing properties
+      const settings = { 
+        ...defaultAppSettings, 
+        ...(fetchedData?.settings || {}),
+        wheelConfigs: {
+          ...defaultAppSettings.wheelConfigs,
+          ...(fetchedData?.settings?.wheelConfigs || {})
+        }
+      };
+
       const newsItems = fetchedData?.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0
                         ? fetchedData.newsItems
                         : DEFAULT_NEWS_ITEMS;
+
       return { settings, newsItems };
     }
-    await setDoc(configRef, defaults);
+    // If config doc doesn't exist, create it with the default values
+    await setDoc(configRef, {
+      settings: defaultAppSettings,
+      newsItems: DEFAULT_NEWS_ITEMS
+    });
     return defaults;
   } catch (error) {
     console.error(`Error in getAppConfiguration. Using defaults. Error:`, error);
@@ -256,14 +271,9 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
   }
 };
 
-export const saveAppSettingsToFirestore = async (settings: AppSettings): Promise<void> => {
+export const saveAppConfigurationToFirestore = async (config: AppConfiguration): Promise<void> => {
   const configRef = doc(db, APP_CONFIG_COLLECTION, APP_CONFIG_DOC_ID);
-  await updateDoc(configRef, { settings });
-};
-
-export const saveNewsItemsToFirestore = async (newsItems: string[]): Promise<void> => {
-  const configRef = doc(db, APP_CONFIG_COLLECTION, APP_CONFIG_DOC_ID);
-  await updateDoc(configRef, { newsItems });
+  await setDoc(configRef, config, { merge: true }); // Use set with merge to be safe
 };
 
 

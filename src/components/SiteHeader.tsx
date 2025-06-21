@@ -53,7 +53,6 @@ const SiteHeader: React.FC = () => {
             {loading ? (
               <div className="animate-pulse flex items-center gap-2">
                  <div className="h-8 w-8 rounded-full bg-muted"></div>
-                 <div className="h-4 w-20 rounded bg-muted"></div>
               </div>
             ) : user ? (
               <DropdownMenu>

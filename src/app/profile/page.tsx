@@ -32,7 +32,7 @@ type PaymentMethod = "upi" | "bank";
 const presetAddBalanceAmounts = [100, 200, 500, 1000];
 
 export default function ProfilePage() {
-  const { user, userData, loading: authContextLoading, appSettings } = useAuth();
+  const { user, userData, loading, appSettings } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -53,14 +53,8 @@ export default function ProfilePage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [isClient, setIsClient] = useState(false);
-
   useEffect(() => {
-    setIsClient(true);
-  }, []);
-  
-  useEffect(() => {
-    if (isClient && userData) {
+    if (userData) {
         setUpiIdInput(userData.upiIdForWithdrawal || '');
         if (userData.bankDetailsForWithdrawal) {
           setAccountHolderName(userData.bankDetailsForWithdrawal.accountHolderName || '');
@@ -68,7 +62,7 @@ export default function ProfilePage() {
           setIfscCode(userData.bankDetailsForWithdrawal.ifscCode || '');
         }
     }
-  }, [isClient, userData]);
+  }, [userData]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -127,7 +121,7 @@ export default function ProfilePage() {
   };
 
   const handleWithdrawal = async () => {
-    if (!isClient || !user || balance === undefined || balance === null) return;
+    if (!user || balance === undefined || balance === null) return;
     setIsWithdrawing(true);
     const amount = parseFloat(withdrawalAmount);
 
@@ -178,7 +172,7 @@ export default function ProfilePage() {
   };
 
   const isWithdrawalButtonDisabled = () => {
-    if (!isClient || isWithdrawing || !withdrawalAmount) return true;
+    if (isWithdrawing || !withdrawalAmount) return true;
     const amount = parseFloat(withdrawalAmount);
     if (isNaN(amount) || amount <= 0 || amount < minSafeWithdrawalAmount) return true;
     if (balance !== undefined && balance !== null && amount > balance) return true;
@@ -188,7 +182,6 @@ export default function ProfilePage() {
   };
 
   const handleOpenAddBalanceModal = (amountValue: number) => {
-    if (!isClient) return;
     if (isNaN(amountValue) || amountValue < minSafeAddBalanceAmount) {
       toast({ title: 'Invalid Amount', description: `Min to add is ₹${minSafeAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
       return;
@@ -199,15 +192,15 @@ export default function ProfilePage() {
 
   const handlePresetAddBalanceClick = (amount: number) => {
     setAddBalanceAmount(amount.toString());
-    if (amount >= minSafeAddBalanceAmount && isClient) {
+    if (amount >= minSafeAddBalanceAmount) {
       handleOpenAddBalanceModal(amount);
-    } else if (isClient) {
+    } else {
       toast({ title: 'Invalid Amount', description: `Min to add is ₹${minSafeAddBalanceAmount.toFixed(2)}.`, variant: 'destructive' });
     }
   };
 
   const handleConfirmAddBalance = async (paymentRef?: string) => {
-    if (!isClient || !user || balance === undefined || balance === null) return;
+    if (!user || balance === undefined || balance === null) return;
     setIsAddingBalance(true);
     const amount = currentAmountForModal;
 
@@ -225,7 +218,7 @@ export default function ProfilePage() {
         description: `Add balance request (₹${amount.toFixed(2)}) - Pending`,
         status: 'pending',
         balanceBefore: balance,
-        balanceAfter: balance + amount,
+        balanceAfter: balance, // Balance doesn't change until approved
         userEmail: user.email,
       }, user.uid);
 
@@ -240,8 +233,7 @@ export default function ProfilePage() {
     }
   };
 
-
-  if (authContextLoading || !isClient) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -249,7 +241,7 @@ export default function ProfilePage() {
     );
   }
   
-  if (!user && isClient) {
+  if (!user) {
      return (
         <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
@@ -262,9 +254,7 @@ export default function ProfilePage() {
      )
   }
 
-  if (!user || !userData) return <div className="flex items-center justify-center min-h-screen">Loading Profile...</div>;
-
-  const isUserAdmin = userData?.isAdmin;
+  if (!userData) return <div className="flex items-center justify-center min-h-screen">Loading Profile...</div>;
 
   return (
     <div className="container mx-auto py-8">
@@ -315,16 +305,16 @@ export default function ProfilePage() {
             <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><ArrowUpCircle className="mr-2 h-6 w-6" />Add Balance</CardTitle></CardHeader>
             <CardContent className="space-y-4 p-2">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                {presetAddBalanceAmounts.map((amount) => (<Button key={amount} variant="outline" onClick={() => handlePresetAddBalanceClick(amount)} disabled={isAddingBalance || showAddBalanceModal || !isClient}>₹{amount}</Button>))}
+                {presetAddBalanceAmounts.map((amount) => (<Button key={amount} variant="outline" onClick={() => handlePresetAddBalanceClick(amount)} disabled={isAddingBalance || showAddBalanceModal}>₹{amount}</Button>))}
               </div>
               <div>
                 <Label htmlFor="addBalanceAmount" className="text-sm font-medium text-muted-foreground">Or Enter Amount (₹)</Label>
-                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${minSafeAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal || !isClient} />
+                <Input id="addBalanceAmount" type="number" value={addBalanceAmount} onChange={(e) => setAddBalanceAmount(e.target.value)} placeholder={`Min. ₹${minSafeAddBalanceAmount.toFixed(2)}`} className="mt-1" disabled={isAddingBalance || showAddBalanceModal} />
                 {addBalanceAmount && parseFloat(addBalanceAmount) > 0 && parseFloat(addBalanceAmount) < minSafeAddBalanceAmount && (<p className="text-xs text-destructive text-center mt-1">Min amount to add is ₹{minSafeAddBalanceAmount.toFixed(2)}.</p>)}
               </div>
               <Button
                 onClick={() => handleOpenAddBalanceModal(parseFloat(addBalanceAmount))}
-                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < minSafeAddBalanceAmount || !isClient}
+                disabled={isAddingBalance || showAddBalanceModal || !addBalanceAmount || parseFloat(addBalanceAmount) < minSafeAddBalanceAmount}
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 <QrCode className="mr-2 h-5 w-5" />
@@ -338,12 +328,12 @@ export default function ProfilePage() {
             <CardContent className="space-y-4 p-2">
               <div>
                 <Label htmlFor="withdrawalAmount" className="text-sm font-medium text-muted-foreground">Amount to Withdraw (₹)</Label>
-                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${minSafeWithdrawalAmount.toFixed(2)}`} className="mt-1" disabled={isWithdrawing || !isClient} />
+                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`Min. ₹${minSafeWithdrawalAmount.toFixed(2)}`} className="mt-1" disabled={isWithdrawing} />
                 {withdrawalAmount && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) < minSafeWithdrawalAmount && (<p className="text-xs text-destructive text-center mt-1">Min withdrawal is ₹{minSafeWithdrawalAmount.toFixed(2)}.</p>)}
               </div>
               <div>
                 <Label htmlFor="paymentMethod" className="text-sm font-medium text-muted-foreground">Payment Method</Label>
-                <Select value={selectedPaymentMethod} onValueChange={handlePaymentMethodChange} disabled={isWithdrawing || !isClient}>
+                <Select value={selectedPaymentMethod} onValueChange={handlePaymentMethodChange} disabled={isWithdrawing}>
                   <SelectTrigger id="paymentMethod" className="mt-1"><SelectValue placeholder="Select method" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="upi"><div className="flex items-center"><Smartphone className="mr-2 h-4 w-4" />UPI</div></SelectItem>
@@ -351,13 +341,13 @@ export default function ProfilePage() {
                   </SelectContent>
                 </Select>
               </div>
-              {selectedPaymentMethod === "upi" && (<div><Label htmlFor="upiIdInput">UPI ID</Label><Input id="upiIdInput" type="text" value={upiIdInput} onChange={(e) => setUpiIdInput(e.target.value)} placeholder="yourname@upi" className="mt-1" disabled={isWithdrawing || !isClient} /></div>)}
+              {selectedPaymentMethod === "upi" && (<div><Label htmlFor="upiIdInput">UPI ID</Label><Input id="upiIdInput" type="text" value={upiIdInput} onChange={(e) => setUpiIdInput(e.target.value)} placeholder="yourname@upi" className="mt-1" disabled={isWithdrawing} /></div>)}
               {selectedPaymentMethod === "bank" && (<div className="space-y-3">
-                <div><Label htmlFor="accountHolderName">Account Holder Name</Label><Input id="accountHolderName" type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="e.g., John Doe" className="mt-1" disabled={isWithdrawing || !isClient} /></div>
-                <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isWithdrawing || !isClient} /></div>
-                <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isWithdrawing || !isClient} /></div>
+                <div><Label htmlFor="accountHolderName">Account Holder Name</Label><Input id="accountHolderName" type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="e.g., John Doe" className="mt-1" disabled={isWithdrawing} /></div>
+                <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isWithdrawing} /></div>
+                <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isWithdrawing} /></div>
               </div>)}
-              <Button onClick={handleWithdrawal} disabled={isWithdrawalButtonDisabled() || !isClient} className="w-full" variant="default">
+              <Button onClick={handleWithdrawal} disabled={isWithdrawalButtonDisabled()} className="w-full" variant="default">
                 {isWithdrawing ? 'Processing...' : 'Request Withdrawal'}
               </Button>
               {balance !== undefined && balance !== null && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) > balance && (<p className="text-xs text-destructive text-center mt-1">Amount exceeds balance.</p>)}
@@ -365,7 +355,7 @@ export default function ProfilePage() {
           </Card>
         </CardContent>
         <CardFooter className="flex flex-col items-center gap-4 pt-6">
-            {isUserAdmin && (
+            {!loading && userData?.isAdmin && (
               <Link href="/admin" passHref className="w-full max-w-xs">
                 <Button variant="secondary" className="w-full">
                   <Shield className="mr-2 h-4 w-4" />
@@ -379,7 +369,6 @@ export default function ProfilePage() {
             </Button>
         </CardFooter>
       </Card>
-      {isClient && (
         <PaymentModal
           isOpen={showAddBalanceModal}
           onClose={() => setShowAddBalanceModal(false)}
@@ -388,7 +377,6 @@ export default function ProfilePage() {
           appName={appSettings.appName}
           amount={currentAmountForModal}
         />
-      )}
     </div>
   );
 }

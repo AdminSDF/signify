@@ -13,6 +13,7 @@ import {
   type FirebaseUser,
   createUserData as createFirestoreUser,
   getAppConfiguration,
+  AppConfiguration,
   updateUserData,
   Timestamp,
   getDoc, 
@@ -28,12 +29,9 @@ import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS 
 interface AuthContextType {
   user: FirebaseUser | null;
   userData: UserDocument | null;
-  loading: boolean; 
-  authLoading: boolean; 
-  userDataLoading: boolean;
+  loading: boolean; // Combined loading state
   appSettings: AppSettings;
   newsItems: string[];
-  isAppConfigLoading: boolean; 
   refreshAppConfig: () => Promise<void>;
   signUpWithEmailPassword: (credentials: SignUpCredentials) => Promise<void>;
   loginWithEmailPassword: (credentials: LoginCredentials) => Promise<void>;
@@ -47,22 +45,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userData, setUserData] = useState<UserDocument | null>(null);
   const [fbAuthLoading, setFbAuthLoading] = useState(true); 
   const [userDataLoading, setUserDataLoading] = useState(true);
-  const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
-  const [newsItems, setNewsItems] = useState<string[]>(DEFAULT_NEWS_ITEMS);
+  const [appConfig, setAppConfig] = useState<AppConfiguration>({ settings: defaultAppSettings, newsItems: DEFAULT_NEWS_ITEMS });
   const [fbAppConfigLoading, setFbAppConfigLoading] = useState(true); 
   const router = useRouter();
   const { toast } = useToast();
 
   const fetchAppConfig = useCallback(async () => {
-    if (!fbAppConfigLoading) setFbAppConfigLoading(true);
+    setFbAppConfigLoading(true);
     try {
       const config = await getAppConfiguration();
-      setAppSettings(config.settings);
-      setNewsItems(config.newsItems);
+      setAppConfig(config);
     } catch (error) {
       console.error("AuthContext: Error in fetchAppConfig:", error);
-      setAppSettings(defaultAppSettings); 
-      setNewsItems(DEFAULT_NEWS_ITEMS);  
+      setAppConfig({ settings: defaultAppSettings, newsItems: DEFAULT_NEWS_ITEMS });
       toast({
         title: "App Config Load Issue",
         description: "Could not load app settings. Using defaults.",
@@ -71,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setFbAppConfigLoading(false);
     }
-  }, [toast]); // Removed fbAppConfigLoading from deps to prevent loops
+  }, [toast]);
 
   useEffect(() => {
     fetchAppConfig();
@@ -83,20 +78,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUserDataLoading(true);
       setUser(firebaseUser);
       if (firebaseUser) {
-        const docData = await getUserData(firebaseUser.uid);
-        setUserData(docData);
+        try {
+            const docData = await getUserData(firebaseUser.uid);
+            setUserData(docData);
 
-        const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
-        const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
-        
-        const isTrulyNewSession = Math.abs(creationTime - lastSignInTime) < 2000;
+            const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
+            const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
+            
+            const isTrulyNewSession = Math.abs(creationTime - lastSignInTime) < 2000;
 
-        if (!isTrulyNewSession && docData) {
-          try {
-             await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
-          } catch (updateError) {
-            console.warn("Could not update lastLogin on auth state change:", updateError);
-          }
+            if (!isTrulyNewSession && docData) {
+                await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+            }
+        } catch(err) {
+            console.error("Error fetching or updating user data on auth change:", err);
+            setUserData(null); // Ensure userData is cleared on error
         }
       } else {
         setUserData(null);
@@ -110,16 +106,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signUpWithEmailPassword = async ({ email, password, displayName }: SignUpCredentials) => {
     setFbAuthLoading(true);
-    let currentAppSettings = appSettings;
+    let currentAppSettings = appConfig.settings;
 
     if (fbAppConfigLoading) {
         console.log("App config was loading during signup, attempting to fetch fresh config...");
         try {
             const freshConfig = await getAppConfiguration();
             currentAppSettings = freshConfig.settings;
-            setAppSettings(freshConfig.settings); 
-            setNewsItems(freshConfig.newsItems);
-            if(fbAppConfigLoading) setFbAppConfigLoading(false); 
+            setAppConfig(freshConfig);
         } catch (e) {
             console.error("SignUp: Using default app settings for new user due to fetch error during signup:", e);
             currentAppSettings = defaultAppSettings; 
@@ -187,7 +181,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         description = 'This user account has been disabled.';
       }
       toast({ variant: "destructive", title: "Login Failed", description });
-      setFbAuthLoading(false); 
+    } finally {
+        setFbAuthLoading(false);
     }
   };
 
@@ -211,11 +206,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     user,
     userData,
     loading: fbAuthLoading || fbAppConfigLoading || userDataLoading, 
-    authLoading: fbAuthLoading, 
-    userDataLoading,
-    appSettings,
-    newsItems,
-    isAppConfigLoading: fbAppConfigLoading, 
+    appSettings: appConfig.settings,
+    newsItems: appConfig.newsItems,
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,

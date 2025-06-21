@@ -17,7 +17,7 @@ import { getAiTipAction, type TipGenerationResult } from '@/app/actions/generate
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { wheelConfigs, type WheelTier } from '@/lib/wheelConfig';
+import { WheelTierConfig } from '@/lib/appConfig';
 import {
   getUserData,
   updateUserData,
@@ -33,24 +33,29 @@ const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: f
 // Helper to select winning segment
 const selectWinningSegmentByProbability = (segments: (Segment & { probability: number })[]): number => {
     const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
+    // Handle case where total probability is 0
+    if (totalProbability <= 0) {
+        console.warn("Total probability of segments is 0. Returning random segment.");
+        return Math.floor(Math.random() * segments.length);
+    }
     let random = Math.random() * totalProbability;
+
     for (let i = 0; i < segments.length; i++) {
         const segmentProbability = segments[i].probability || 0;
-        if (segmentProbability === 0 && totalProbability > 0) continue;
         if (random < segmentProbability) return i;
         random -= segmentProbability;
     }
-    const fallbackIndex = segments.findIndex(s => (s.probability || 0) > 0);
-    return fallbackIndex !== -1 ? fallbackIndex : segments.length - 1;
+    // Fallback in case of floating point inaccuracies
+    return segments.length - 1;
 };
 
 export default function GamePage() {
-  const { user, authLoading, appSettings, isAppConfigLoading } = useAuth();
+  const { user, loading: authLoading, appSettings } = useAuth();
   const router = useRouter();
   const params = useParams();
   const tier = params.tier as string;
 
-  const [wheelConfig, setWheelConfig] = useState<WheelTier | null>(null);
+  const [wheelConfig, setWheelConfig] = useState<WheelTierConfig | null>(null);
   
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
@@ -79,13 +84,13 @@ export default function GamePage() {
 
   useEffect(() => {
     setIsClient(true);
-    const config = wheelConfigs[tier];
+    const config = appSettings.wheelConfigs ? appSettings.wheelConfigs[tier] : null;
     if (config) {
       setWheelConfig(config);
-    } else {
+    } else if (!authLoading) { // Only redirect if configs are loaded but tier is invalid
       router.push('/');
     }
-  }, [tier, router]);
+  }, [tier, router, appSettings, authLoading]);
 
   useEffect(() => {
     if (wheelConfig?.themeClass) {
@@ -101,7 +106,7 @@ export default function GamePage() {
   useEffect(() => {
     if (!isClient || !wheelConfig) return;
 
-    if (authLoading || isAppConfigLoading) {
+    if (authLoading) {
       if (!userDataLoading) setUserDataLoading(true);
       return;
     }
@@ -115,7 +120,7 @@ export default function GamePage() {
     }
 
     const loadAndSyncUserData = async () => {
-      if (!userDataLoading) setUserDataLoading(true);
+      setUserDataLoading(true);
       
       try {
         let data = await getUserData(user.uid);
@@ -153,7 +158,7 @@ export default function GamePage() {
     };
 
     loadAndSyncUserData();
-  }, [isClient, user, authLoading, isAppConfigLoading, appSettings, toast, wheelConfig]);
+  }, [isClient, user, authLoading, appSettings, toast, wheelConfig]);
 
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
@@ -173,7 +178,7 @@ export default function GamePage() {
   }, [user, toast]);
 
   const startSpinProcess = useCallback(() => {
-    if (!wheelConfig) return;
+    if (!wheelConfig || !wheelConfig.segments || wheelConfig.segments.length === 0) return;
     setIsSpinning(true);
     setCurrentPrize(null);
     setShowConfetti(false);
@@ -183,14 +188,17 @@ export default function GamePage() {
   }, [playSound, wheelConfig]);
 
   const getLittleTierSpinCost = useCallback((spinsUsedToday: number): number => {
-    if (spinsUsedToday < appSettings.tier1Limit) return appSettings.tier1Cost;
-    if (spinsUsedToday < appSettings.tier2Limit) return appSettings.tier2Cost;
-    return appSettings.tier3Cost;
-  }, [appSettings]);
+    const costSettings = wheelConfig?.costSettings;
+    if (costSettings?.type !== 'tiered') return costSettings?.baseCost || 0;
+    
+    if (spinsUsedToday < (costSettings.tier1Limit || 0)) return costSettings.tier1Cost || 0;
+    if (spinsUsedToday < (costSettings.tier2Limit || 0)) return costSettings.tier2Cost || 0;
+    return costSettings.tier3Cost || 0;
+  }, [wheelConfig]);
 
   const handleSpinClick = useCallback(async () => {
-    if (!isClient || isSpinning || !user || authLoading || isAppConfigLoading || userDataLoading || !wheelConfig) {
-      if (!user && isClient && !authLoading && !isAppConfigLoading) {
+    if (!isClient || isSpinning || !user || authLoading || userDataLoading || !wheelConfig) {
+      if (!user && isClient && !authLoading) {
         toast({ title: "Login Required", description: "Please log in to spin.", variant: "destructive", action: <Button onClick={() => router.push('/login')}>Login</Button> });
       }
       return;
@@ -216,10 +224,16 @@ export default function GamePage() {
                 updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayString }).catch(err => console.warn("Failed to reset daily spins:", err));
             }
             spinCost = getLittleTierSpinCost(currentDailySpins);
-            costDescription = `Spin Cost (Tier ${spinCost === appSettings.tier1Cost ? 1 : spinCost === appSettings.tier2Cost ? 2 : 3})`;
+            const costSettings = wheelConfig.costSettings;
+            let tierNum = 1;
+            if (costSettings.type === 'tiered') {
+              if (spinCost === costSettings.tier2Cost) tierNum = 2;
+              else if (spinCost === costSettings.tier3Cost) tierNum = 3;
+            }
+            costDescription = `Spin Cost (Tier ${tierNum})`;
         }
     } else {
-        spinCost = wheelConfig.baseCost;
+        spinCost = wheelConfig.costSettings.baseCost || 0;
         costDescription = `Spin Cost (${wheelConfig.name})`;
     }
 
@@ -247,7 +261,7 @@ export default function GamePage() {
         setShowPaymentModal(true);
     }
   }, [
-    isClient, isSpinning, user, authLoading, isAppConfigLoading, userDataLoading, wheelConfig, tier,
+    isClient, isSpinning, user, authLoading, userDataLoading, wheelConfig, tier,
     spinsAvailable, userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, 
     startSpinProcess, addTransaction, getLittleTierSpinCost, toast, router
   ]);
@@ -301,7 +315,7 @@ export default function GamePage() {
     router.push('/profile');
   }, [router, toast]);
 
-  if (!isClient || authLoading || isAppConfigLoading || userDataLoading || !wheelConfig) {
+  if (!isClient || authLoading || userDataLoading || !wheelConfig) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
@@ -314,7 +328,7 @@ export default function GamePage() {
     );
   }
 
-  const costOfNextPaidSpin = tier === 'little' ? getLittleTierSpinCost(dailyPaidSpinsUsed) : wheelConfig.baseCost;
+  const costOfNextPaidSpin = tier === 'little' ? getLittleTierSpinCost(dailyPaidSpinsUsed) : wheelConfig.costSettings.baseCost || 0;
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
@@ -325,7 +339,7 @@ export default function GamePage() {
             <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Selection</Button>
         </Link>
         <SpinifyGameHeader />
-        <div className="w-28"></div> {/* Spacer */}
+        <div style={{width: '112px'}}></div> {/* Spacer */}
       </div>
       
       {isClient && user && (

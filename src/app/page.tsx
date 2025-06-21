@@ -8,10 +8,10 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Gem, Crown, Rocket, ShieldAlert } from 'lucide-react';
-import { wheelConfigs } from '@/lib/wheelConfig';
+import type { WheelTierConfig } from '@/lib/appConfig';
 
 export default function GameSelectionPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, appSettings } = useAuth();
   const router = useRouter();
 
   if (loading) {
@@ -37,6 +37,23 @@ export default function GameSelectionPage() {
     );
   }
 
+  const wheelConfigs = appSettings.wheelConfigs;
+
+  const renderCard = (config: WheelTierConfig, icon: React.ReactNode) => (
+     <Link href={`/game/${config.id}`} passHref key={config.id}>
+      <Card className={`h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer ${config.themeClass} border-primary border-2`}>
+        <CardHeader>
+          {icon}
+          <CardTitle className="text-3xl font-bold text-primary mt-4">{config.name}</CardTitle>
+          <CardDescription className="text-muted-foreground mt-1 text-base">{config.description}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button className="w-full text-lg">Play Now <ArrowRight className="ml-2 h-5 w-5" /></Button>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+
   return (
     <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-8">
       <div className="text-center">
@@ -47,47 +64,9 @@ export default function GameSelectionPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 w-full max-w-6xl">
-        {/* Little Tier */}
-        <Link href="/game/little" passHref>
-          <Card className="h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer bg-card/70 border-primary border-2">
-            <CardHeader>
-              <Gem className="h-16 w-16 mx-auto text-primary" />
-              <CardTitle className="text-3xl font-bold text-primary mt-4">{wheelConfigs.little.name}</CardTitle>
-              <CardDescription className="text-muted-foreground mt-1 text-base">{wheelConfigs.little.description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full text-lg">Play Now <ArrowRight className="ml-2 h-5 w-5" /></Button>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* Big Tier */}
-        <Link href="/game/big" passHref>
-          <Card className="h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer theme-big border-primary border-2">
-            <CardHeader>
-              <Crown className="h-16 w-16 mx-auto text-primary" />
-              <CardTitle className="text-3xl font-bold text-primary mt-4">{wheelConfigs.big.name}</CardTitle>
-              <CardDescription className="text-muted-foreground mt-1 text-base">{wheelConfigs.big.description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full text-lg">Play Now <ArrowRight className="ml-2 h-5 w-5" /></Button>
-            </CardContent>
-          </Card>
-        </Link>
-        
-        {/* More Big Tier */}
-        <Link href="/game/more-big" passHref>
-          <Card className="h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer theme-more-big border-primary border-2">
-            <CardHeader>
-              <Rocket className="h-16 w-16 mx-auto text-primary" />
-              <CardTitle className="text-3xl font-bold text-primary mt-4">{wheelConfigs['more-big'].name}</CardTitle>
-              <CardDescription className="text-muted-foreground mt-1 text-base">{wheelConfigs['more-big'].description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full text-lg">Play Now <ArrowRight className="ml-2 h-5 w-5" /></Button>
-            </CardContent>
-          </Card>
-        </Link>
+        {wheelConfigs.little && renderCard(wheelConfigs.little, <Gem className="h-16 w-16 mx-auto text-primary" />)}
+        {wheelConfigs.big && renderCard(wheelConfigs.big, <Crown className="h-16 w-16 mx-auto text-primary" />)}
+        {wheelConfigs['more-big'] && renderCard(wheelConfigs['more-big'], <Rocket className="h-16 w-16 mx-auto text-primary" />)}
       </div>
     </div>
   );
