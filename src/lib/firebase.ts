@@ -408,6 +408,7 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
 };
 
 export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string) => {
+  const effectiveTierId = tierId || 'little'; // Default to 'little' for old requests without a tierId
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
 
@@ -418,15 +419,18 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
 
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const userData = userSnap.data() as UserDocument;
-  const currentBalance = (userData.balances || {})[tierId] || 0;
+  
+  // Safely access balances
+  const userBalances = userData.balances || {};
+  const currentBalance = userBalances[effectiveTierId] || 0;
   const newBalance = currentBalance + amount;
   
-  batch.update(userRef, { [`balances.${tierId}`]: newBalance });
+  batch.update(userRef, { [`balances.${effectiveTierId}`]: newBalance });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
 
-  const tierName = appConfig.settings.wheelConfigs[tierId]?.name || 'Unknown Tier';
+  const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
   
   const transactionPayload: TransactionData = {
     userId: userId,
@@ -436,7 +440,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
     description: `Balance added to ${tierName} (Req ID: ${requestId.substring(0,6)})`,
     status: 'completed',
     date: Timestamp.now(),
-    tierId: tierId,
+    tierId: effectiveTierId,
     balanceBefore: currentBalance,
     balanceAfter: newBalance
   };
@@ -451,6 +455,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
 };
 
 export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string, paymentMethodDetails: string) => {
+  const effectiveTierId = tierId || 'little'; // Default to 'little' for old requests without a tierId
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
 
@@ -462,16 +467,18 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   
   const userData = userSnap.data() as UserDocument;
-  const currentBalance = (userData.balances || {})[tierId] || 0;
+  const userBalances = (userData.balances || {});
+  const currentBalance = userBalances[effectiveTierId] || 0;
+  
   if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
   
   const newBalance = currentBalance - amount;
-  batch.update(userRef, { [`balances.${tierId}`]: newBalance });
+  batch.update(userRef, { [`balances.${effectiveTierId}`]: newBalance });
   
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
 
-  const tierName = appConfig.settings.wheelConfigs[tierId]?.name || 'Unknown Tier';
+  const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
   
   const transactionPayload: TransactionData = {
     userId: userId,
@@ -481,7 +488,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
     description: `Withdrawal from ${tierName}: ${paymentMethodDetails} (Req ID: ${requestId.substring(0,6)})`,
     status: 'completed',
     date: Timestamp.now(),
-    tierId: tierId,
+    tierId: effectiveTierId,
     balanceBefore: currentBalance,
     balanceAfter: newBalance
   };
