@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Home, Shield, DollarSign, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, DollarSign } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
 import PrizeDisplay from '@/components/PrizeDisplay';
@@ -14,16 +14,13 @@ import { useSound } from '@/hooks/useSound';
 import { useToast } from "@/hooks/use-toast";
 import type { SpinHistory } from '@/ai/flows/spinify-tip-generator';
 import { getAiTipAction, type TipGenerationResult } from '@/app/actions/generateTipAction';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { WheelTierConfig } from '@/lib/appConfig';
 import {
-  getUserData,
   updateUserData,
   addTransactionToFirestore,
-  createUserData,
-  Timestamp
 } from '@/lib/firebase';
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
@@ -33,7 +30,6 @@ const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: f
 // Helper to select winning segment
 const selectWinningSegmentByProbability = (segments: (Segment & { probability: number })[]): number => {
     const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
-    // Handle case where total probability is 0
     if (totalProbability <= 0) {
         console.warn("Total probability of segments is 0. Returning random segment.");
         return Math.floor(Math.random() * segments.length);
@@ -45,12 +41,11 @@ const selectWinningSegmentByProbability = (segments: (Segment & { probability: n
         if (random < segmentProbability) return i;
         random -= segmentProbability;
     }
-    // Fallback in case of floating point inaccuracies
     return segments.length - 1;
 };
 
 export default function GamePage() {
-  const { user, loading: authLoading, appSettings } = useAuth();
+  const { user, userData, loading: authLoading, appSettings } = useAuth();
   const router = useRouter();
   const params = useParams();
   const tier = params.tier as string;
@@ -80,14 +75,13 @@ export default function GamePage() {
   const { toast } = useToast();
 
   const [isClient, setIsClient] = useState(false);
-  const [userDataLoading, setUserDataLoading] = useState(true);
-
+  
   useEffect(() => {
     setIsClient(true);
     const config = appSettings.wheelConfigs ? appSettings.wheelConfigs[tier] : null;
     if (config) {
       setWheelConfig(config);
-    } else if (!authLoading) { // Only redirect if configs are loaded but tier is invalid
+    } else if (!authLoading) {
       router.push('/');
     }
   }, [tier, router, appSettings, authLoading]);
@@ -104,61 +98,26 @@ export default function GamePage() {
   }, [wheelConfig]);
 
   useEffect(() => {
-    if (!isClient || !wheelConfig) return;
-
-    if (authLoading) {
-      if (!userDataLoading) setUserDataLoading(true);
+    if (!user || authLoading || !userData) {
       return;
     }
+    
+    setUserBalance(userData.balances?.[tier] ?? 0);
+    setSpinsAvailable(userData.spinsAvailable ?? 0);
 
-    if (!user) {
-      setUserDataLoading(false);
-      setUserBalance(0);
-      setSpinsAvailable(0);
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (userData.lastPaidSpinDate === todayStr) {
+      setDailyPaidSpinsUsed(userData.dailyPaidSpinsUsed ?? 0);
+    } else {
       setDailyPaidSpinsUsed(0);
-      return;
-    }
-
-    const loadAndSyncUserData = async () => {
-      setUserDataLoading(true);
-      
-      try {
-        let data = await getUserData(user.uid);
-        
-        if (!data) {
-          console.warn(`User document for ${user.uid} not found. Creating it.`);
-          toast({ title: "Syncing Profile...", description: "Setting up your game profile." });
-          await createUserData(user.uid, user.email, user.displayName, user.photoURL, appSettings);
-          data = await getUserData(user.uid);
-          if (!data) throw new Error("Failed to create and then retrieve user document.");
-          toast({ title: "Profile Synced!", description: "Your game profile is ready. Welcome!" });
-        }
-
-        setUserBalance(data.balance ?? 0);
-        setSpinsAvailable(data.spinsAvailable ?? 0);
-
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        if (data.lastPaidSpinDate === todayStr) {
-          setDailyPaidSpinsUsed(data.dailyPaidSpinsUsed ?? 0);
-        } else {
-          setDailyPaidSpinsUsed(0);
-          updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
-            .catch(err => console.warn("Failed to reset daily spins on date change:", err));
-        }
-        setLastPaidSpinDate(data.lastPaidSpinDate || todayStr);
-
-      } catch (error) {
-        console.error("Error during user data loading/syncing:", error);
-        toast({ title: "Data Sync Issue", description: "Could not load or sync game data. Defaults applied.", variant: "destructive" });
-        setUserBalance(appSettings.initialBalanceForNewUsers);
-        setSpinsAvailable(appSettings.maxSpinsInBundle);
-      } finally {
-        setUserDataLoading(false);
+      if (user) {
+        updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
+          .catch(err => console.warn("Failed to reset daily spins on date change:", err));
       }
-    };
+    }
+    setLastPaidSpinDate(userData.lastPaidSpinDate || todayStr);
 
-    loadAndSyncUserData();
-  }, [isClient, user, authLoading, appSettings, toast, wheelConfig]);
+  }, [isClient, user, userData, authLoading, tier]);
 
 
   const addTransaction = useCallback(async (details: { type: 'credit' | 'debit'; amount: number; description: string; status?: 'completed' | 'pending' | 'failed' }) => {
@@ -169,13 +128,14 @@ export default function GamePage() {
         type: details.type,
         amount: details.amount,
         description: details.description,
-        status: details.status || 'completed', 
+        status: details.status || 'completed',
+        tierId: tier,
       }, user.uid);
     } catch (error) {
       console.error("Error adding transaction to Firestore:", error);
       toast({ title: "Transaction Error", description: "Could not save transaction.", variant: "destructive" });
     }
-  }, [user, toast]);
+  }, [user, toast, tier]);
 
   const startSpinProcess = useCallback(() => {
     if (!wheelConfig || !wheelConfig.segments || wheelConfig.segments.length === 0) return;
@@ -197,7 +157,7 @@ export default function GamePage() {
   }, [wheelConfig]);
 
   const handleSpinClick = useCallback(async () => {
-    if (!isClient || isSpinning || !user || authLoading || userDataLoading || !wheelConfig) {
+    if (!isClient || isSpinning || !user || authLoading || !userData || !wheelConfig) {
       if (!user && isClient && !authLoading) {
         toast({ title: "Login Required", description: "Please log in to spin.", variant: "destructive", action: <Button onClick={() => router.push('/login')}>Login</Button> });
       }
@@ -207,31 +167,30 @@ export default function GamePage() {
     let spinCost = 0;
     let costDescription = "Free Spin";
 
+    if (tier === 'little' && spinsAvailable > 0) {
+      startSpinProcess();
+      const newSpins = spinsAvailable - 1;
+      setSpinsAvailable(newSpins);
+      updateUserData(user.uid, { spinsAvailable: newSpins }).catch(err => console.warn("Free Spin: Failed to update spins in Firestore:", err));
+      return;
+    }
+
     if (tier === 'little') {
-        if (spinsAvailable > 0) {
-            startSpinProcess();
-            const newSpins = spinsAvailable - 1;
-            setSpinsAvailable(newSpins);
-            updateUserData(user.uid, { spinsAvailable: newSpins }).catch(err => console.warn("Free Spin: Failed to update spins in Firestore:", err));
-            return;
-        } else {
-            let currentDailySpins = dailyPaidSpinsUsed;
-            const todayString = new Date().toLocaleDateString('en-CA');
-            if (lastPaidSpinDate !== todayString) {
-                currentDailySpins = 0;
-                setDailyPaidSpinsUsed(0);
-                setLastPaidSpinDate(todayString);
-                updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayString }).catch(err => console.warn("Failed to reset daily spins:", err));
-            }
-            spinCost = getLittleTierSpinCost(currentDailySpins);
-            const costSettings = wheelConfig.costSettings;
-            let tierNum = 1;
-            if (costSettings.type === 'tiered') {
-              if (spinCost === costSettings.tier2Cost) tierNum = 2;
-              else if (spinCost === costSettings.tier3Cost) tierNum = 3;
-            }
-            costDescription = `Spin Cost (Tier ${tierNum})`;
+        let currentDailySpins = dailyPaidSpinsUsed;
+        const todayString = new Date().toLocaleDateString('en-CA');
+        if (lastPaidSpinDate !== todayString) {
+            currentDailySpins = 0;
+            setDailyPaidSpinsUsed(0);
+            setLastPaidSpinDate(todayString);
         }
+        spinCost = getLittleTierSpinCost(currentDailySpins);
+        const costSettings = wheelConfig.costSettings;
+        let tierNum = 1;
+        if (costSettings.type === 'tiered') {
+            if (spinCost === costSettings.tier2Cost) tierNum = 2;
+            else if (spinCost === costSettings.tier3Cost) tierNum = 3;
+        }
+        costDescription = `Spin Cost (Tier ${tierNum})`;
     } else {
         spinCost = wheelConfig.costSettings.baseCost || 0;
         costDescription = `Spin Cost (${wheelConfig.name})`;
@@ -244,7 +203,7 @@ export default function GamePage() {
         addTransaction({ type: 'debit', amount: spinCost, description: costDescription });
         toast({ title: `Spin Cost: -₹${spinCost.toFixed(2)}` });
 
-        let userDataUpdate: Partial<any> = { balance: newBalance };
+        let userDataUpdate: { [key: string]: any } = { [`balances.${tier}`]: newBalance };
         if (tier === 'little') {
             const newDailySpinsUsed = dailyPaidSpinsUsed + 1;
             setDailyPaidSpinsUsed(newDailySpinsUsed);
@@ -261,7 +220,7 @@ export default function GamePage() {
         setShowPaymentModal(true);
     }
   }, [
-    isClient, isSpinning, user, authLoading, userDataLoading, wheelConfig, tier,
+    isClient, isSpinning, user, authLoading, userData, wheelConfig, tier,
     spinsAvailable, userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, 
     startSpinProcess, addTransaction, getLittleTierSpinCost, toast, router
   ]);
@@ -269,7 +228,7 @@ export default function GamePage() {
   const handleSpinComplete = useCallback(async (winningSegment: Segment) => {
     setIsSpinning(false);
     setCurrentPrize(winningSegment);
-    if (!user) return;
+    if (!user || !userData) return;
 
     const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: winningSegment.amount ? `₹${winningSegment.amount}` : winningSegment.text };
     setSpinHistory(prev => [...prev, newSpinRecordForAI]);
@@ -278,7 +237,7 @@ export default function GamePage() {
     if (winningSegment.amount && winningSegment.amount > 0) {
       newBalance += (winningSegment.amount || 0);
       addTransaction({ type: 'credit', amount: winningSegment.amount, description: `Prize: ${winningSegment.text}` });
-      toast({ title: "You Won!", description: `₹${winningSegment.amount.toFixed(2)} added.`, variant: "default" });
+      toast({ title: "You Won!", description: `₹${winningSegment.amount.toFixed(2)} added to ${wheelConfig?.name} balance.`, variant: "default" });
       playSound('win');
       if (winningSegment.amount >= 10) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 4000); }
     } else {
@@ -288,17 +247,17 @@ export default function GamePage() {
     setUserBalance(newBalance);
 
     try {
-        const currentData = await getUserData(user.uid);
-        await updateUserData(user.uid, {
-            balance: newBalance,
-            totalSpinsPlayed: (currentData?.totalSpinsPlayed ?? 0) + 1,
-            totalWinnings: (currentData?.totalWinnings ?? 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
-        });
+        const updates: { [key: string]: any } = {
+            [`balances.${tier}`]: newBalance,
+            totalSpinsPlayed: (userData.totalSpinsPlayed ?? 0) + 1,
+            totalWinnings: (userData.totalWinnings ?? 0) + (winningSegment.amount && winningSegment.amount > 0 ? winningSegment.amount : 0)
+        };
+        await updateUserData(user.uid, updates);
     } catch (error) {
         console.error("Error updating total winnings/spins or balance after spin complete:", error);
         toast({variant: "destructive", title: "Sync Error", description: "Could not save spin summary to server."});
     }
-  }, [playSound, spinHistory.length, toast, addTransaction, user, userBalance]);
+  }, [playSound, spinHistory.length, toast, addTransaction, user, userData, userBalance, tier, wheelConfig]);
   
   const handleGenerateTip = useCallback(async () => {
     if (!user) { toast({ title: "Login Required", description: "Please log in." }); return; }
@@ -311,11 +270,11 @@ export default function GamePage() {
 
   const handlePaymentConfirm = useCallback(async () => {
     setShowPaymentModal(false);
-    toast({ title: "Action Required", description: `Please go to your profile to add balance.` });
+    toast({ title: "Action Required", description: `Please go to your profile to add balance to the ${wheelConfig?.name} wallet.` });
     router.push('/profile');
-  }, [router, toast]);
+  }, [router, toast, wheelConfig]);
 
-  if (!isClient || authLoading || userDataLoading || !wheelConfig) {
+  if (!isClient || authLoading || !userData || !wheelConfig) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg">
@@ -347,7 +306,7 @@ export default function GamePage() {
           <Card className="py-4 px-6 sm:px-8 inline-flex flex-col items-center gap-2 shadow-xl bg-card/60 dark:bg-card/40 backdrop-blur-sm border-2 border-primary/40 rounded-2xl">
             <div className="flex items-center gap-2">
               <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-primary/80" />
-              <span className="text-xs sm:text-sm font-medium text-foreground/80 tracking-wider uppercase">Your Balance</span>
+              <span className="text-xs sm:text-sm font-medium text-foreground/80 tracking-wider uppercase">{wheelConfig.name} Balance</span>
             </div>
             <span className="text-3xl sm:text-4xl font-bold text-primary glow">
               ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
@@ -381,7 +340,7 @@ export default function GamePage() {
       </main>
 
       <TipModal isOpen={showTipModal} onClose={() => setShowTipModal(false)} tip={generatedTip} isLoading={tipLoading} error={tipError} onGenerateTip={handleGenerateTip} />
-      <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} appName={appSettings.appName} amount={paymentModalAmount} />
+      <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} appName={appSettings.appName} amount={paymentModalAmount} tierName={wheelConfig.name} />
     </div>
   );
 }

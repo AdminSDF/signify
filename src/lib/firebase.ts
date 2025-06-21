@@ -29,8 +29,8 @@ import {
   writeBatch
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { AppSettings, AppConfiguration as AppConfigData } from '@/lib/appConfig'; // Renamed to avoid conflict
-import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMIN_EMAIL } from '@/lib/appConfig';
+import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
+import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMIN_EMAIL, initialWheelConfigs } from '@/lib/appConfig';
 
 
 const firebaseConfig: FirebaseOptions = {
@@ -66,7 +66,7 @@ export interface UserDocument {
   displayName: string | null;
   photoURL: string | null;
   createdAt: Timestamp;
-  balance: number;
+  balances: { [tierId: string]: number };
   spinsAvailable: number;
   dailyPaidSpinsUsed: number;
   lastPaidSpinDate: string; // YYYY-MM-DD
@@ -90,13 +90,21 @@ export const createUserData = async (
   initialAppSettings: AppSettings
 ): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
+
+  // Initialize balances for all tiers
+  const initialBalances: { [tierId: string]: number } = {};
+  Object.keys(initialAppSettings.wheelConfigs).forEach(tierId => {
+    // Give initial balance only to the 'little' tier, others start at 0.
+    initialBalances[tierId] = tierId === 'little' ? initialAppSettings.initialBalanceForNewUsers : 0;
+  });
+
   const userData: UserDocument = {
     uid: userId,
     email,
     displayName,
     photoURL,
     createdAt: Timestamp.now(),
-    balance: initialAppSettings.initialBalanceForNewUsers,
+    balances: initialBalances,
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
@@ -112,12 +120,21 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
   const userRef = doc(db, USERS_COLLECTION, userId);
   const docSnap = await getDoc(userRef);
   if (docSnap.exists()) {
-    return docSnap.data() as UserDocument;
+    const data = docSnap.data() as UserDocument;
+    // Ensure balances object exists for older users
+    if (!data.balances) {
+      data.balances = {
+        little: data.balance || 0, // migrate old balance field
+        big: 0,
+        'more-big': 0,
+      }
+    }
+    return data;
   }
   return null;
 };
 
-export const updateUserData = async (userId: string, data: Partial<UserDocument>): Promise<void> => {
+export const updateUserData = async (userId: string, data: Partial<UserDocument | { [key: string]: any }>): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
   const updateData = { ...data };
   if (data.hasOwnProperty('lastLogin')) {
@@ -169,6 +186,7 @@ export interface TransactionData {
   description: string;
   date: Timestamp;
   status: 'completed' | 'pending' | 'failed';
+  tierId?: string; // Optional field to track which balance was affected
   balanceBefore?: number;
   balanceAfter?: number;
 }
@@ -181,6 +199,7 @@ export const addTransactionToFirestore = async (transactionDetails: Omit<Transac
         amount: transactionDetails.amount,
         description: transactionDetails.description,
         status: transactionDetails.status || 'completed',
+        tierId: transactionDetails.tierId,
         date: Timestamp.now(),
     };
 
@@ -243,14 +262,22 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
     if (docSnap.exists()) {
       const fetchedData = docSnap.data();
       
-      // Deep merge settings and wheelConfigs to ensure no missing properties
+      const mergedWheelConfigs: { [key: string]: WheelTierConfig } = {};
+      const defaultWheelKeys = Object.keys(defaultAppSettings.wheelConfigs);
+      const fetchedWheelKeys = fetchedData?.settings?.wheelConfigs ? Object.keys(fetchedData.settings.wheelConfigs) : [];
+      const allKeys = new Set([...defaultWheelKeys, ...fetchedWheelKeys]);
+
+      allKeys.forEach(key => {
+        mergedWheelConfigs[key] = {
+          ...(defaultAppSettings.wheelConfigs[key] || {}),
+          ...(fetchedData?.settings?.wheelConfigs?.[key] || {}),
+        };
+      });
+
       const settings = { 
         ...defaultAppSettings, 
         ...(fetchedData?.settings || {}),
-        wheelConfigs: {
-          ...defaultAppSettings.wheelConfigs,
-          ...(fetchedData?.settings?.wheelConfigs || {})
-        }
+        wheelConfigs: mergedWheelConfigs
       };
 
       const newsItems = fetchedData?.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0
@@ -283,6 +310,7 @@ export interface WithdrawalRequestData {
   userId: string;
   userEmail: string;
   amount: number;
+  tierId: string;
   paymentMethod: "upi" | "bank";
   upiId?: string;
   bankDetails?: {
@@ -332,6 +360,7 @@ export interface AddFundRequestData {
   userId: string;
   userEmail: string;
   amount: number;
+  tierId: string;
   paymentReference: string;
   requestDate: Timestamp;
   status: "pending" | "approved" | "rejected";
@@ -368,64 +397,81 @@ export const updateAddFundRequestStatus = async (requestId: string, status: AddF
   await updateDoc(requestRef, updateData);
 };
 
-export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number) => {
+export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const userData = userSnap.data() as UserDocument;
-  const currentBalance = userData.balance || 0;
+  const currentBalance = userData.balances[tierId] || 0;
   const newBalance = currentBalance + amount;
-  batch.update(userRef, { balance: newBalance });
+  
+  batch.update(userRef, { [`balances.${tierId}`]: newBalance });
+
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
+
+  const tierName = initialWheelConfigs[tierId]?.name || 'Unknown Tier';
+  
   const transactionPayload: TransactionData = {
     userId: userId,
     userEmail: userData.email,
     type: 'credit',
     amount: amount,
-    description: `Balance added (Admin Approval Req ID: ${requestId.substring(0,6)})`,
+    description: `Balance added to ${tierName} (Req ID: ${requestId.substring(0,6)})`,
     status: 'completed',
     date: Timestamp.now(),
+    tierId: tierId,
     balanceBefore: currentBalance,
     balanceAfter: newBalance
   };
   batch.set(transactionDocRef, transactionPayload);
+  
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
     status: "approved", approvedDate: Timestamp.now(), transactionId: transactionDocRef.id
   } as Partial<AddFundRequestData>);
+  
   await batch.commit();
 };
 
-export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, paymentMethodDetails: string) => {
+export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string, paymentMethodDetails: string) => {
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
+  
   const userData = userSnap.data() as UserDocument;
-  const currentBalance = userData.balance || 0;
+  const currentBalance = userData.balances[tierId] || 0;
   if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
+  
   const newBalance = currentBalance - amount;
-  batch.update(userRef, { balance: newBalance });
+  batch.update(userRef, { [`balances.${tierId}`]: newBalance });
+  
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
+
+  const tierName = initialWheelConfigs[tierId]?.name || 'Unknown Tier';
+  
   const transactionPayload: TransactionData = {
     userId: userId,
     userEmail: userData.email,
     type: 'debit',
     amount: amount,
-    description: `Withdrawal: ${paymentMethodDetails} (Admin Approval Req ID: ${requestId.substring(0,6)})`,
+    description: `Withdrawal from ${tierName}: ${paymentMethodDetails} (Req ID: ${requestId.substring(0,6)})`,
     status: 'completed',
     date: Timestamp.now(),
+    tierId: tierId,
     balanceBefore: currentBalance,
     balanceAfter: newBalance
   };
   batch.set(transactionDocRef, transactionPayload);
+
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
     status: "processed", processedDate: Timestamp.now(), transactionId: transactionDocRef.id
   } as Partial<WithdrawalRequestData>);
+
   await batch.commit();
 };
 

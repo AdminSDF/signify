@@ -82,13 +82,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const docData = await getUserData(firebaseUser.uid);
             setUserData(docData);
 
-            const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
-            const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
-            
-            const isTrulyNewSession = Math.abs(creationTime - lastSignInTime) < 2000;
-
-            if (!isTrulyNewSession && docData) {
-                await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+            if (docData) {
+                // This check is to prevent updating lastLogin on account creation
+                const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
+                const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
+                const isNewUserSession = Math.abs(creationTime - lastSignInTime) < 5000;
+                
+                if (!isNewUserSession) {
+                    await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
+                }
             }
         } catch(err) {
             console.error("Error fetching or updating user data on auth change:", err);

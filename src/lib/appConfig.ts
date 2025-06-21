@@ -18,7 +18,7 @@ export interface WheelTierConfig {
   name: string;
   description: string;
   themeClass: string;
-  // Cost settings are now specific to each wheel
+  minWithdrawalAmount: number; // Moved from global settings
   costSettings: {
     type: 'tiered' | 'fixed';
     baseCost?: number; // for fixed cost wheels
@@ -39,6 +39,7 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Little Lux',
     description: 'Classic fun with frequent small wins!',
     themeClass: 'theme-little',
+    minWithdrawalAmount: 500,
     costSettings: {
       type: 'tiered',
       tier1Limit: 30,
@@ -63,6 +64,7 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Big Bonanza',
     description: 'Higher stakes, bigger prizes!',
     themeClass: 'theme-big',
+    minWithdrawalAmount: 1000,
     costSettings: {
       type: 'fixed',
       baseCost: 10,
@@ -83,6 +85,7 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Mega Millions',
     description: 'The ultimate risk for the ultimate reward!',
     themeClass: 'theme-more-big',
+    minWithdrawalAmount: 2000,
     costSettings: {
         type: 'fixed',
         baseCost: 20,
@@ -107,8 +110,8 @@ export interface AppSettings {
   upiId: string;
   initialBalanceForNewUsers: number;
   maxSpinsInBundle: number; // Free spins for new users
-  minWithdrawalAmount: number;
   minAddBalanceAmount: number;
+  addBalancePresets: number[];
   newsTickerSpeed: number;
   wheelConfigs: { [key: string]: WheelTierConfig };
 }
@@ -119,8 +122,8 @@ export const initialSettings: AppSettings = {
   upiId: "9828786246@jio",
   initialBalanceForNewUsers: 50.00,
   maxSpinsInBundle: 10,
-  minWithdrawalAmount: 500,
   minAddBalanceAmount: 100,
+  addBalancePresets: [100, 200, 500, 1000],
   newsTickerSpeed: 60,
   wheelConfigs: initialWheelConfigs, // Nesting the wheel configs here
 };

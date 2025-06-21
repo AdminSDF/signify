@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, CreditCard, ExternalLink, QrCode } from 'lucide-react';
+import { Copy, CreditCard, ExternalLink } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
 
 interface PaymentModalProps {
@@ -23,8 +23,9 @@ interface PaymentModalProps {
   onClose: () => void;
   onConfirm: () => void;
   upiId: string;
-  appName: string; // Added for Payee Name in UPI link
+  appName: string;
   amount: number;
+  tierName?: string;
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -34,6 +35,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   upiId,
   appName,
   amount,
+  tierName
 }) => {
   const { toast } = useToast();
   const [upiPaymentLink, setUpiPaymentLink] = useState('');
@@ -45,15 +47,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
   useEffect(() => {
     if (isOpen && upiId && amount > 0 && appName) {
-      // Standard UPI deeplink format:
-      // upi://pay?pa={upi_id}&pn={payee_name}&am={amount}&cu=INR&tn={transaction_note}
-      // Ensure appName is URL encoded if it can contain special characters
       const payeeName = encodeURIComponent(appName);
-      const transactionNote = encodeURIComponent(`Add ₹${amount} to ${appName}`);
+      const transactionNote = encodeURIComponent(`Add ₹${amount} to ${tierName || appName}`);
       const link = `upi://pay?pa=${upiId}&pn=${payeeName}&am=${amount.toFixed(2)}&cu=INR&tn=${transactionNote}`;
       setUpiPaymentLink(link);
     }
-  }, [isOpen, upiId, amount, appName]);
+  }, [isOpen, upiId, amount, appName, tierName]);
 
   const handleCopyUpiId = async () => {
     try {
@@ -71,7 +70,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  const descriptionText = <>To continue playing, you need to add at least <span className="font-bold text-primary">₹{amount.toFixed(2)}</span> to your balance.</>;
+  const descriptionText = <>To continue, you need to add at least <span className="font-bold text-primary">₹{amount.toFixed(2)}</span> to your {tierName ? <span className="font-bold text-primary">{tierName}</span> : ''} balance.</>;
   
   const modalTitle = "Insufficient Balance";
 

@@ -44,6 +44,7 @@ export default function AdminPage() {
 
   const [currentAppSettings, setCurrentAppSettings] = useState<AppSettings>(fallbackAppSettings);
   const [currentNewsItems, setCurrentNewsItems] = useState<string[]>(fallbackNewsItems);
+  const [addBalancePresetsInput, setAddBalancePresetsInput] = useState('');
   
   const [newNewsItem, setNewNewsItem] = useState('');
   const [editingNewsItemIndex, setEditingNewsItemIndex] = useState<number | null>(null);
@@ -61,6 +62,7 @@ export default function AdminPage() {
     if (!loading) {
       setCurrentAppSettings(appSettings);
       setCurrentNewsItems(newsItems);
+      setAddBalancePresetsInput(appSettings.addBalancePresets?.join(', ') || '');
     }
   }, [appSettings, newsItems, loading]);
 
@@ -101,6 +103,13 @@ export default function AdminPage() {
     }));
   };
 
+  const handleAddBalancePresetsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setAddBalancePresetsInput(value);
+    const presets = value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
+    setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: presets }));
+  };
+
   const handleWheelConfigChange = (tier: string, field: string, value: any) => {
       setCurrentAppSettings(prev => ({
           ...prev,
@@ -108,7 +117,7 @@ export default function AdminPage() {
               ...prev.wheelConfigs,
               [tier]: {
                   ...prev.wheelConfigs[tier],
-                  [field]: value
+                  [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value
               }
           }
       }));
@@ -198,7 +207,7 @@ export default function AdminPage() {
 
   const handleApproveAddFund = async (request: AddFundRequestData & {id: string}) => {
     try {
-      await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount);
+      await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount, request.tierId);
       toast({ title: "Fund Request Approved", description: `₹${request.amount} added to user ${request.userEmail}.`});
       fetchAdminData();
     } catch (error: any) {
@@ -221,7 +230,7 @@ export default function AdminPage() {
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => {
     const paymentMethodDetails = request.paymentMethod === 'upi' ? `UPI: ${request.upiId}` : `Bank: A/C ending ${request.bankDetails?.accountNumber.slice(-4)}`;
     try {
-      await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, paymentMethodDetails);
+      await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, paymentMethodDetails);
       toast({ title: "Withdrawal Approved & Processed", description: `₹${request.amount} processed for ${request.userEmail}.`});
       fetchAdminData();
     } catch (error: any) {
@@ -262,6 +271,8 @@ export default function AdminPage() {
     );
   }
 
+  const getTierName = (tierId: string) => appSettings.wheelConfigs[tierId]?.name || tierId;
+
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
       <Card className="w-full max-w-7xl shadow-xl bg-card text-card-foreground rounded-lg">
@@ -288,21 +299,24 @@ export default function AdminPage() {
             </TabsList>
 
              <TabsContent value="overview">
-              <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users.</CardDescription></CardHeader>
+              <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users and their balances.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Balance (₹)</TableHead><TableHead>Spins</TableHead><TableHead>Total Winnings (₹)</TableHead><TableHead>Joined On</TableHead><TableHead>Is Admin</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>User</TableHead>
+                   {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId)} Bal (₹)</TableHead>)}
+                   <TableHead>Spins</TableHead><TableHead>Total Winnings (₹)</TableHead><TableHead>Joined On</TableHead><TableHead>Is Admin</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={6 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
                       : allUsers.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{u.displayName?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
-                          <TableCell>{u.balance.toFixed(2)}</TableCell><TableCell>{u.spinsAvailable}</TableCell><TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
+                          {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{(u.balances?.[tierId] ?? 0).toFixed(2)}</TableCell>)}
+                          <TableCell>{u.spinsAvailable}</TableCell><TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
                           <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
                           <TableCell><Badge variant={u.isAdmin ? 'default' : 'secondary'}>{u.isAdmin ? 'Yes' : 'No'}</Badge></TableCell>
                         </TableRow>))}
-                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
+                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={6 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
 
@@ -317,13 +331,14 @@ export default function AdminPage() {
                                  <AccordionItem value={`item-${tier.id}`} key={tier.id}>
                                      <AccordionTrigger className="text-xl font-semibold">{tier.name}</AccordionTrigger>
                                      <AccordionContent className="space-y-6 p-4">
-                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div><Label>Name</Label><Input value={tier.name} onChange={(e) => handleWheelConfigChange(tier.id, 'name', e.target.value)} /></div>
                                             <div><Label>Description</Label><Input value={tier.description} onChange={(e) => handleWheelConfigChange(tier.id, 'description', e.target.value)} /></div>
+                                            <div><Label>Min Withdrawal (₹)</Label><Input type="number" value={tier.minWithdrawalAmount} onChange={(e) => handleWheelConfigChange(tier.id, 'minWithdrawalAmount', e.target.value)} /></div>
                                             {tier.costSettings.type === 'fixed' ? (
-                                                <div><Label>Spin Cost (₹)</Label><Input type="number" value={tier.costSettings.baseCost} onChange={(e) => handleCostSettingChange(tier.id, 'baseCost', e.target.value)} /></div>
+                                                <div className="md:col-span-3"><Label>Spin Cost (₹)</Label><Input type="number" value={tier.costSettings.baseCost} onChange={(e) => handleCostSettingChange(tier.id, 'baseCost', e.target.value)} /></div>
                                             ) : (
-                                                <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-2 border p-2 rounded-md">
+                                                <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-5 gap-2 border p-2 rounded-md">
                                                     <div><Label>Tier 1 Limit</Label><Input type="number" value={tier.costSettings.tier1Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Limit', e.target.value)} /></div>
                                                     <div><Label>Tier 1 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier1Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Cost', e.target.value)} /></div>
                                                     <div><Label>Tier 2 Limit</Label><Input type="number" value={tier.costSettings.tier2Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Limit', e.target.value)} /></div>
@@ -372,8 +387,8 @@ export default function AdminPage() {
                     <div className="space-y-1"><Label>Payment UPI ID</Label><Input name="upiId" value={currentAppSettings.upiId} onChange={handleSettingsChange} /></div>
                     <div className="space-y-1"><Label>Initial Balance for New Users (₹)</Label><Input type="number" name="initialBalanceForNewUsers" value={currentAppSettings.initialBalanceForNewUsers} onChange={handleSettingsChange} /></div>
                     <div className="space-y-1"><Label>Initial Free Spins for New Users</Label><Input type="number" name="maxSpinsInBundle" value={currentAppSettings.maxSpinsInBundle} onChange={handleSettingsChange} /></div>
-                    <div className="space-y-1"><Label>Min Withdrawal Amount (₹)</Label><Input type="number" name="minWithdrawalAmount" value={currentAppSettings.minWithdrawalAmount} onChange={handleSettingsChange} /></div>
                     <div className="space-y-1"><Label>Min Add Balance Amount (₹)</Label><Input type="number" name="minAddBalanceAmount" value={currentAppSettings.minAddBalanceAmount} onChange={handleSettingsChange} /></div>
+                    <div className="space-y-1"><Label>Add Balance Presets</Label><Input value={addBalancePresetsInput} onChange={handleAddBalancePresetsChange} placeholder="e.g. 100, 200, 500" /><CardDescription className="text-xs">Comma-separated numbers</CardDescription></div>
                     <div className="space-y-1"><Label>News Ticker Speed (seconds)</Label><Input type="number" name="newsTickerSpeed" value={currentAppSettings.newsTickerSpeed} onChange={handleSettingsChange} /></div>
                 </CardContent>
               </Card>
@@ -407,56 +422,59 @@ export default function AdminPage() {
             <TabsContent value="add-fund">
               <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Banknote /> Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={8} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
                       : addFundRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
+                          <TableCell><Badge variant="outline">{getTierName(req.tierId)}</Badge></TableCell>
                           <TableCell className="text-xs">{req.paymentReference}</TableCell>
                           <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
                         </TableRow>))}
-                      {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">No pending add fund requests.</TableCell></TableRow>)}
+                      {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground h-24">No pending add fund requests.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
             
             <TabsContent value="withdrawal-req">
               <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={8} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
                       : withdrawalRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
+                          <TableCell><Badge variant="outline">{getTierName(req.tierId)}</Badge></TableCell>
                           <TableCell className="text-xs">{req.paymentMethod === 'upi' ? `UPI: ${req.upiId}` : `Bank: ${req.bankDetails?.accountHolderName}, A/C ...${req.bankDetails?.accountNumber.slice(-4)}`}</TableCell>
                           <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
                         </TableRow>))}
-                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">No pending withdrawal requests.</TableCell></TableRow>)}
+                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground h-24">No pending withdrawal requests.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
             
              <TabsContent value="transactions">
               <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><History /> All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Type</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Type</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading transactions...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading transactions...</TableCell></TableRow>
                       : allTransactions.map((t) => (
                         <TableRow key={t.id}>
                             <TableCell className="font-medium">{t.userEmail}</TableCell>
                             <TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4"/> : <ArrowDownLeft className="h-4 w-4"/>}{t.type}</span></TableCell>
                             <TableCell className={`font-semibold ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</TableCell>
+                             <TableCell>{t.tierId ? <Badge variant="outline">{getTierName(t.tierId)}</Badge> : 'N/A'}</TableCell>
                             <TableCell>{t.description}</TableCell>
-                            <TableCell>{t.date instanceof Timestamp ? t.date.toDate().toLocaleString() : new Date(t.date as any).toLocaleString()}</TableCell>
+                            <TableCell>{t.date instanceof Timestamp ? t.date.toLocaleString() : new Date(t.date as any).toLocaleString()}</TableCell>
                             <TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell>
                         </TableRow>
                       ))}
-                      {!isLoadingData && allTransactions.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center text-muted-foreground h-24">No transactions found.</TableCell></TableRow>)}
+                      {!isLoadingData && allTransactions.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">No transactions found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
 
@@ -473,7 +491,7 @@ export default function AdminPage() {
                             <TableCell className="text-right font-semibold text-primary">₹{player.totalWinnings.toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
-                      {!isLoadingData && leaderboard.length === 0 && (<TableRow><TableCell colSpan={3} className="text-center text-muted-foreground h-24">Leaderboard is empty.</TableCell></TableRow>)}
+                      {!isLoadingData && leaderboard.length === 0 && (<TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-10">Leaderboard is empty.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
           </Tabs>
