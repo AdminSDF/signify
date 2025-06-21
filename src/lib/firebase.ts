@@ -26,7 +26,8 @@ import {
   Timestamp,
   serverTimestamp,
   deleteDoc,
-  writeBatch
+  writeBatch,
+  onSnapshot, // Export onSnapshot
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
@@ -124,7 +125,7 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
     // Ensure balances object exists for older users
     if (!data.balances) {
       data.balances = {
-        little: data.balance || 0, // migrate old balance field
+        little: (data as any).balance || 0, // migrate old balance field
         big: 0,
         'more-big': 0,
       }
@@ -478,5 +479,5 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
 export {
   app, auth, db, storage, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
-  Timestamp, FirebaseUser
+  Timestamp, FirebaseUser, onSnapshot
 };

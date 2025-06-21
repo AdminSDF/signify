@@ -16,11 +16,10 @@ import {
   AppConfiguration,
   updateUserData,
   Timestamp,
-  getDoc, 
   doc,
   db,
   UserDocument,
-  getUserData,
+  onSnapshot, // Import onSnapshot for real-time listening
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
@@ -74,36 +73,60 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []); // Fetch config once on mount
 
    useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      setUserDataLoading(true);
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        try {
-            const docData = await getUserData(firebaseUser.uid);
-            setUserData(docData);
+    let firestoreUnsubscribe: (() => void) | null = null;
 
-            if (docData) {
-                // This check is to prevent updating lastLogin on account creation
-                const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
-                const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
-                const isNewUserSession = Math.abs(creationTime - lastSignInTime) < 5000;
-                
-                if (!isNewUserSession) {
-                    await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
-                }
-            }
-        } catch(err) {
-            console.error("Error fetching or updating user data on auth change:", err);
-            setUserData(null); // Ensure userData is cleared on error
-        }
-      } else {
-        setUserData(null);
+    const authUnsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+      // First, clean up any previous listener if it exists
+      if (firestoreUnsubscribe) {
+        firestoreUnsubscribe();
       }
-      setUserDataLoading(false);
+      
+      setUser(firebaseUser);
       setFbAuthLoading(false); 
+
+      if (firebaseUser) {
+        setUserDataLoading(true);
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        
+        // Set up a new real-time listener for the logged-in user's data
+        firestoreUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setUserData(docSnap.data() as UserDocument);
+          } else {
+            // This case might happen if user is created in Auth but not Firestore yet.
+            setUserData(null);
+          }
+          setUserDataLoading(false);
+        }, (error) => {
+          console.error("AuthContext: Error with onSnapshot listener:", error);
+          setUserData(null);
+          setUserDataLoading(false);
+        });
+
+        // Update lastLogin, which only runs when auth state changes (i.e., on login)
+        const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
+        const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
+        const isNewUserSession = Math.abs(creationTime - lastSignInTime) < 5000;
+        
+        if (!isNewUserSession) {
+          updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() }).catch(err => console.warn("Failed to update last login time", err));
+        }
+
+      } else {
+        // User is logged out, clear data
+        setUserData(null);
+        setUserDataLoading(false);
+      }
     });
-    return () => unsubscribe();
-  }, []);
+
+    // Cleanup function runs when component unmounts
+    return () => {
+      authUnsubscribe();
+      if (firestoreUnsubscribe) {
+        firestoreUnsubscribe();
+      }
+    };
+  }, []); // This effect should run only once.
 
 
   const signUpWithEmailPassword = async ({ email, password, displayName }: SignUpCredentials) => {
