@@ -11,54 +11,34 @@ service cloud.firestore {
 
     // -- Users Collection Rules --
     match /users/{userId} {
-      // Create: Any authenticated user can create their own user document.
       allow create: if request.auth != null && request.auth.uid == userId;
-
-      // Read (Single Doc): User can read their own data. Admin can read any user's data.
       allow get: if request.auth != null && (request.auth.uid == userId || isAdmin());
-
-      // Read (List of Docs): Any authenticated user can list users (for Leaderboard & Admin Panel).
       allow list: if request.auth != null;
-
-      // Update: User can update their own data. Admin can update any user's data.
       allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
     // -- Transactions Collection Rules --
     match /transactions/{transactionId} {
-      // Create: Authenticated user can create a transaction for themselves.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      
-      // Read (Single Doc): User can read their own transaction. Admin can read any.
       allow get: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
-      
-      // Read (List of Docs): Admins can list their own transactions (as a user) or all transactions.
-      allow list: if request.auth != null;
+      allow list: if isAdmin();
     }
-    
-    // -- Withdrawal Requests Rules --
-    match /withdrawalRequests/{requestId} {
-      // Create: Authenticated user can create a request for themselves.
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
 
-      // Read, Write, Delete: ONLY Admin can manage these requests.
+    // -- Withdrawal Request Rules --
+    match /withdrawalRequests/{requestId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, write, delete: if isAdmin();
     }
     
-    // -- Add Fund Requests Rules --
+    // -- Add Fund Request Rules --
     match /addFundRequests/{requestId} {
-      // Create: Authenticated user can create a request for themselves.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-
-      // Read, Write, Delete: ONLY Admin can manage these requests.
       allow read, write, delete: if isAdmin();
     }
 
     // -- App Configuration Rules --
     match /appConfiguration/{docId} {
-      // Read: Any authenticated user can read app settings.
       allow read: if request.auth != null;
-      // Write: ONLY Admin can change app settings.
       allow write: if isAdmin();
     }
   }
