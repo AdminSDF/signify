@@ -1,65 +1,63 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if a user is an admin.
-    // It checks for the `isAdmin` flag on the user's own document.
+    // --- Helper Functions ---
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
     function isAdmin() {
-      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Check if the user is authenticated and if their document has isAdmin: true
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    // -- Users Collection Rules --
+    // --- Collection Rules ---
+
+    // Users Collection: For profiles and leaderboard
     match /users/{userId} {
-      // CREATE: Any authenticated user can create their own user document upon sign-up.
-      allow create: if request.auth != null && request.auth.uid == userId;
-
-      // GET (read one): A user can read their own data. An admin can read any user's data.
-      allow get: if request.auth != null && (isAdmin() || request.auth.uid == userId);
-
-      // LIST (read many): Any authenticated user can list users. This is needed for the public Leaderboard.
-      allow list: if request.auth != null;
-
-      // UPDATE: A user can update their own data. An admin can update any user's data.
-      allow update: if request.auth != null && (isAdmin() || request.auth.uid == userId);
+      // Anyone logged in can see user lists (for leaderboard) and individual profiles
+      allow read: if request.auth != null;
+      // A user can update their own profile, or an admin can update any profile
+      allow update: if isOwner(userId) || isAdmin();
+      // A user can only create their own profile document
+      allow create: if isOwner(userId);
     }
 
-    // -- Transactions Collection Rules --
+    // Transactions Collection
     match /transactions/{transactionId} {
-      // CREATE: An authenticated user can create a transaction for themselves.
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // An admin can read any transaction.
+      // A user can read their own transaction.
+      // This combined rule works for both single-doc reads and list queries.
+      allow read: if isAdmin() || isOwner(resource.data.userId);
       
-      // READ (get and list):
-      // The `isAdmin()` check is placed first. If it's true, the rule is satisfied without checking resource.data.
-      // This structure allows an admin to list the whole collection without filters.
-      // If `isAdmin()` is false, the second condition is checked, which requires a user's query to have `where('userId', '==', auth.uid)`.
-      allow read: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.userId);
+      // A user can only create a transaction for themself.
+      allow create: if isOwner(request.resource.data.userId);
     }
 
-    // -- Withdrawal Request Rules --
+    // Withdrawal Requests Collection
     match /withdrawalRequests/{requestId} {
-      // CREATE: A user can create their own request.
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      
-      // READ/WRITE: ONLY an Admin can manage (read, update, delete) all withdrawal requests.
-      allow read, write, delete: if isAdmin();
+      // Only admins can read or write requests.
+      allow read, write: if isAdmin();
+      // A user can only create a request for themself.
+      allow create: if isOwner(request.resource.data.userId);
     }
     
-    // -- Add Fund Request Rules --
+    // Add Fund Requests Collection
     match /addFundRequests/{requestId} {
-      // CREATE: A user can create their own request.
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-
-      // READ/WRITE: ONLY an Admin can manage all add fund requests.
-      allow read, write, delete: if isAdmin();
+      // Only admins can read or write requests.
+      allow read, write: if isAdmin();
+      // A user can only create a request for themself.
+      allow create: if isOwner(request.resource.data.userId);
     }
 
-    // -- App Configuration Rules --
+    // App Configuration: For game settings and news
     match /appConfiguration/{docId} {
-      // READ: Any authenticated user can read the app settings.
+      // Any logged-in user can read the configuration.
       allow read: if request.auth != null;
-      // WRITE: ONLY an Admin can change the app settings.
+      // Only admins can change the configuration.
       allow write: if isAdmin();
     }
   }
