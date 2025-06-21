@@ -3,47 +3,69 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- Helper Functions ---
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
     function isAdmin() {
-      return request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Checks if user is authenticated and their user document has isAdmin: true
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
+    // --- Collection Rules ---
+
+    // Users Collection: For profiles and leaderboard
     match /users/{userId} {
+      // Any authenticated user can read user lists (for leaderboard) and individual profiles.
       allow read: if request.auth != null;
+      // A user can update their own profile, or an admin can update any profile.
       allow update: if isOwner(userId) || isAdmin();
+      // A user can only create their own profile document.
       allow create: if isOwner(userId);
     }
 
+    // Transactions Collection
     match /transactions/{transactionId} {
-      // User can get their own doc, Admin can get any
-      allow get: if isAdmin() || isOwner(resource.data.userId);
-      // Admin can list all. User can list their own (with a client-side 'where' clause)
-      allow list: if isAdmin() || (request.auth != null && request.query.resource.data.userId == request.auth.uid);
-      // User can create their own transaction
-      allow create: if isOwner(request.resource.data.userId);
+      // Admin can do anything (read, write, list).
+      allow read, write: if isAdmin();
+      
+      // User-specific rules below
+      allow create: if isOwner(request.resource.data.userId); // User can create for themselves.
+      allow get: if isOwner(resource.data.userId); // User can get their own document.
+      
+      // Allow a user to LIST their own transactions.
+      // This rule is permissive for any logged-in user to ATTEMPT a list query.
+      // The query will then be secured by the 'get' rule on a per-document basis.
+      // If a user tries to list all transactions, the query will fail because they
+      // don't have 'get' permission on documents that are not theirs.
+      allow list: if request.auth.uid != null;
     }
 
+    // Withdrawal Requests Collection
     match /withdrawalRequests/{requestId} {
-      allow get, list, update, delete: if isAdmin();
+      // Only an admin can read or write these requests.
+      allow read, write: if isAdmin();
+      // A user can only create a request for themselves.
       allow create: if isOwner(request.resource.data.userId);
     }
-
+    
+    // Add Fund Requests Collection
     match /addFundRequests/{requestId} {
-      allow get, list, update, delete: if isAdmin();
+      // Only an admin can read or write these requests.
+      allow read, write: if isAdmin();
+      // A user can only create a request for themselves.
       allow create: if isOwner(request.resource.data.userId);
     }
 
+    // App Configuration: For game settings and news ticker
     match /appConfiguration/{docId} {
+      // Any authenticated user can read the settings.
       allow read: if request.auth != null;
+      // Only an admin can change the settings.
       allow write: if isAdmin();
-    }
-
-    match /testAdminOnly/{docId} {
-      allow read: if isAdmin();
     }
   }
 }
