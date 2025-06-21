@@ -17,7 +17,9 @@ import {
   Timestamp,
   getDoc, 
   doc,
-  db
+  db,
+  UserDocument,
+  getUserData,
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
@@ -25,8 +27,10 @@ import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS 
 
 interface AuthContextType {
   user: FirebaseUser | null;
+  userData: UserDocument | null;
   loading: boolean; 
   authLoading: boolean; 
+  userDataLoading: boolean;
   appSettings: AppSettings;
   newsItems: string[];
   isAppConfigLoading: boolean; 
@@ -40,7 +44,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userData, setUserData] = useState<UserDocument | null>(null);
   const [fbAuthLoading, setFbAuthLoading] = useState(true); 
+  const [userDataLoading, setUserDataLoading] = useState(true);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [newsItems, setNewsItems] = useState<string[]>(DEFAULT_NEWS_ITEMS);
   const [fbAppConfigLoading, setFbAppConfigLoading] = useState(true); 
@@ -74,27 +80,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
    useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      setUserDataLoading(true);
       setUser(firebaseUser);
       if (firebaseUser) {
+        const docData = await getUserData(firebaseUser.uid);
+        setUserData(docData);
+
         const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
         const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
         
         const isTrulyNewSession = Math.abs(creationTime - lastSignInTime) < 2000;
 
-        if (!isTrulyNewSession) {
+        if (!isTrulyNewSession && docData) {
           try {
-             const userDocRef = doc(db, 'users', firebaseUser.uid);
-             const userDoc = await getDoc(userDocRef);
-             if (userDoc.exists()) {
-                await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
-             } else {
-                console.warn("User document not found for lastLogin update, possibly very new user or document creation is pending/failed:", firebaseUser.uid);
-             }
+             await updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() });
           } catch (updateError) {
             console.warn("Could not update lastLogin on auth state change:", updateError);
           }
         }
+      } else {
+        setUserData(null);
       }
+      setUserDataLoading(false);
       setFbAuthLoading(false); 
     });
     return () => unsubscribe();
@@ -191,6 +198,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login');
       setUser(null); 
+      setUserData(null);
     } catch (error: any) {
       console.error("Firebase Auth: Error during logout (Code:", error.code, "):", error.message);
       toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
@@ -201,8 +209,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const contextValue = {
     user,
-    loading: fbAuthLoading || fbAppConfigLoading, 
+    userData,
+    loading: fbAuthLoading || fbAppConfigLoading || userDataLoading, 
     authLoading: fbAuthLoading, 
+    userDataLoading,
     appSettings,
     newsItems,
     isAppConfigLoading: fbAppConfigLoading, 
@@ -226,5 +236,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-    

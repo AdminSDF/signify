@@ -36,10 +36,8 @@ import {
   Timestamp
 } from '@/lib/firebase';
 
-const ADMIN_EMAIL_CHECK = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
-
 export default function AdminPage() {
-  const { user, loading: authLoading, appSettings: contextAppSettings, newsItems: contextNewsItems, isAppConfigLoading, refreshAppConfig } = useAuth();
+  const { user, userData, loading: authContextLoading, appSettings: contextAppSettings, newsItems: contextNewsItems, isAppConfigLoading, refreshAppConfig } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -72,7 +70,6 @@ export default function AdminPage() {
   }, [isClient, contextAppSettings, contextNewsItems, isAppConfigLoading]);
 
   const fetchAdminData = useCallback(async () => {
-    if (!isClient) return;
     setIsLoadingData(true);
     try {
       const [withdrawals, adds, users, transactions, leaderboardUsers] = await Promise.all([
@@ -93,22 +90,13 @@ export default function AdminPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [isClient, toast]);
+  }, [toast]);
 
   useEffect(() => {
-    if (user && user.email === ADMIN_EMAIL_CHECK && isClient) {
+    if (isClient && userData?.isAdmin) {
       fetchAdminData();
     }
-  }, [user, isClient, fetchAdminData]);
-
-
-  useEffect(() => {
-    if (!authLoading && isClient) {
-      if (!user || user.email !== ADMIN_EMAIL_CHECK) {
-        router.push('/'); 
-      }
-    }
-  }, [user, authLoading, router, isClient]);
+  }, [isClient, userData, fetchAdminData]);
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -209,20 +197,24 @@ export default function AdminPage() {
     }
   };
 
-  if (authLoading || !isClient || isAppConfigLoading || (!user || user.email !== ADMIN_EMAIL_CHECK)) {
+  if (authContextLoading || !isClient) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
-        {(authLoading || !isClient || isAppConfigLoading) ? (
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        ) : (
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user || !userData?.isAdmin) {
+    return (
+        <div className="flex-grow flex flex-col items-center justify-center p-4">
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
             <ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" />
             <CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle>
-            <CardDescription className="text-muted-foreground mt-2">You do not have permission.</CardDescription>
+            <CardDescription className="text-muted-foreground mt-2">You do not have permission to view this page.</CardDescription>
             <Button onClick={() => router.push('/')} className="mt-6">Go to Home</Button>
           </Card>
-        )}
-      </div>
+        </div>
     );
   }
 

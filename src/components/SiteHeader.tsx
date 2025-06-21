@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut } from 'lucide-react';
+import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const SiteHeader: React.FC = () => {
-  const { user, logout, loading } = useAuth();
+  const { user, userData, logout, loading } = useAuth();
 
   return (
     <>
@@ -81,6 +81,15 @@ const SiteHeader: React.FC = () => {
                         Profile
                       </Link>
                   </DropdownMenuItem>
+                  {userData?.isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
                     Log out

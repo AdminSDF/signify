@@ -30,15 +30,11 @@ import { initialSettings } from '@/lib/appConfig';
 
 type PaymentMethod = "upi" | "bank";
 const presetAddBalanceAmounts = [100, 200, 500, 1000];
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jameafaizanrasool@gmail.com";
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, appSettings, isAppConfigLoading } = useAuth();
+  const { user, userData, loading: authContextLoading, appSettings } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-
-  const [balance, setBalance] = useState<number | null>(null);
-  const [userDataLoading, setUserDataLoading] = useState(true);
 
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("upi");
@@ -62,40 +58,17 @@ export default function ProfilePage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  const fetchUserBalanceData = useCallback(async () => {
-    if (!user || !isClient) return;
-    setUserDataLoading(true);
-    try {
-      const userData = await getUserData(user.uid);
-      if (userData) {
-        setBalance(userData.balance ?? 0);
+  
+  useEffect(() => {
+    if (isClient && userData) {
         setUpiIdInput(userData.upiIdForWithdrawal || '');
         if (userData.bankDetailsForWithdrawal) {
           setAccountHolderName(userData.bankDetailsForWithdrawal.accountHolderName || '');
           setAccountNumber(userData.bankDetailsForWithdrawal.accountNumber || '');
           setIfscCode(userData.bankDetailsForWithdrawal.ifscCode || '');
         }
-      } else {
-        setBalance(0);
-      }
-    } catch (error) {
-      console.error("Error fetching user balance data:", error);
-      toast({ title: "Error", description: "Could not load your balance.", variant: "destructive" });
-      setBalance(0);
-    } finally {
-      setUserDataLoading(false);
     }
-  }, [user, toast, isClient]);
-
-  useEffect(() => {
-    if (!authLoading && !user && isClient) {
-      router.push('/login');
-    } else if (user && isClient && !isAppConfigLoading) {
-      fetchUserBalanceData();
-    }
-  }, [user, authLoading, router, isClient, isAppConfigLoading, fetchUserBalanceData]);
-
+  }, [isClient, userData]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -147,19 +120,20 @@ export default function ProfilePage() {
 
   const minSafeWithdrawalAmount = appSettings?.minWithdrawalAmount ?? initialSettings.minWithdrawalAmount ?? 0;
   const minSafeAddBalanceAmount = appSettings?.minAddBalanceAmount ?? initialSettings.minAddBalanceAmount ?? 0;
+  const balance = userData?.balance;
 
   const handlePaymentMethodChange = (value: string) => {
     setSelectedPaymentMethod(value as PaymentMethod);
   };
 
   const handleWithdrawal = async () => {
-    if (!isClient || !user) return;
+    if (!isClient || !user || balance === undefined || balance === null) return;
     setIsWithdrawing(true);
     const amount = parseFloat(withdrawalAmount);
 
     if (isNaN(amount) || amount <= 0) { toast({ title: 'Invalid Amount', variant: 'destructive' }); setIsWithdrawing(false); return; }
     if (amount < minSafeWithdrawalAmount) { toast({ title: 'Minimum Withdrawal', description: `Min is ₹${minSafeWithdrawalAmount.toFixed(2)}.`, variant: 'destructive' }); setIsWithdrawing(false); return; }
-    if (balance === null || amount > balance) { toast({ title: 'Insufficient Balance', variant: 'destructive' }); setIsWithdrawing(false); return; }
+    if (amount > balance) { toast({ title: 'Insufficient Balance', variant: 'destructive' }); setIsWithdrawing(false); return; }
 
     let paymentDetails: any = { paymentMethod: selectedPaymentMethod };
     if (selectedPaymentMethod === "upi") {
@@ -207,7 +181,7 @@ export default function ProfilePage() {
     if (!isClient || isWithdrawing || !withdrawalAmount) return true;
     const amount = parseFloat(withdrawalAmount);
     if (isNaN(amount) || amount <= 0 || amount < minSafeWithdrawalAmount) return true;
-    if (balance !== null && amount > balance) return true;
+    if (balance !== undefined && balance !== null && amount > balance) return true;
     if (selectedPaymentMethod === "upi" && !upiIdInput.trim()) return true;
     if (selectedPaymentMethod === "bank" && (!accountNumber.trim() || !ifscCode.trim() || !accountHolderName.trim())) return true;
     return false;
@@ -233,7 +207,7 @@ export default function ProfilePage() {
   };
 
   const handleConfirmAddBalance = async (paymentRef?: string) => {
-    if (!isClient || !user) return;
+    if (!isClient || !user || balance === undefined || balance === null) return;
     setIsAddingBalance(true);
     const amount = currentAmountForModal;
 
@@ -250,8 +224,8 @@ export default function ProfilePage() {
         amount: amount,
         description: `Add balance request (₹${amount.toFixed(2)}) - Pending`,
         status: 'pending',
-        balanceBefore: balance ?? 0,
-        balanceAfter: (balance ?? 0) + amount,
+        balanceBefore: balance,
+        balanceAfter: balance + amount,
         userEmail: user.email,
       }, user.uid);
 
@@ -267,26 +241,30 @@ export default function ProfilePage() {
   };
 
 
-  if (authLoading || !isClient || (!user && isClient) || isAppConfigLoading || userDataLoading) {
+  if (authContextLoading || !isClient) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-        {(authLoading || !isClient || isAppConfigLoading || userDataLoading) && !(!user && isClient && !authLoading) ? (
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        ) : (
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
+  if (!user && isClient) {
+     return (
+        <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
             <ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" />
             <CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle>
             <CardDescription className="text-muted-foreground mt-2">Please log in to view your profile.</CardDescription>
             <Button onClick={() => router.push('/login')} className="mt-6">Go to Login</Button>
           </Card>
-        )}
-      </div>
-    );
+        </div>
+     )
   }
 
-  if (!user) return <div className="flex items-center justify-center min-h-screen">Redirecting...</div>;
+  if (!user || !userData) return <div className="flex items-center justify-center min-h-screen">Loading Profile...</div>;
 
-  const isUserAdmin = user?.email === ADMIN_EMAIL;
+  const isUserAdmin = userData?.isAdmin;
 
   return (
     <div className="container mx-auto py-8">
@@ -382,7 +360,7 @@ export default function ProfilePage() {
               <Button onClick={handleWithdrawal} disabled={isWithdrawalButtonDisabled() || !isClient} className="w-full" variant="default">
                 {isWithdrawing ? 'Processing...' : 'Request Withdrawal'}
               </Button>
-              {balance !== null && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) > balance && (<p className="text-xs text-destructive text-center mt-1">Amount exceeds balance.</p>)}
+              {balance !== undefined && balance !== null && parseFloat(withdrawalAmount) > 0 && parseFloat(withdrawalAmount) > balance && (<p className="text-xs text-destructive text-center mt-1">Amount exceeds balance.</p>)}
             </CardContent>
           </Card>
         </CardContent>
