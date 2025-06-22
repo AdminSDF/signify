@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy } from 'lucide-react';
+import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, initialWheelConfigs } from '@/lib/appConfig';
 import {
@@ -41,6 +41,7 @@ import {
   SupportTicketData,
   updateSupportTicketStatus
 } from '@/lib/firebase';
+import { cn } from '@/lib/utils';
 
 export default function AdminPage() {
   const { user, userData, loading, appSettings, newsItems, refreshAppConfig } = useAuth();
@@ -62,8 +63,9 @@ export default function AdminPage() {
   const [leaderboard, setLeaderboard] = useState<UserDocument[]>([]);
   const [supportTickets, setSupportTickets] = useState<(SupportTicketData & {id: string})[]>([]);
 
-  
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
+
 
   useEffect(() => {
     if (!loading) {
@@ -173,6 +175,37 @@ export default function AdminPage() {
   const removeSegment = (tier: string, index: number) => {
       const updatedSegments = currentAppSettings.wheelConfigs[tier].segments.filter((_, i) => i !== index);
       handleWheelConfigChange(tier, 'segments', updatedSegments);
+  };
+  
+  const handleDragStart = (tierId: string, index: number) => {
+    setDraggedSegment({ tierId, index });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (targetTierId: string, dropIndex: number) => {
+    if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
+      setDraggedSegment(null);
+      return;
+    }
+
+    const sourceTierId = draggedSegment.tierId;
+    const dragIndex = draggedSegment.index;
+
+    const tierConfig = currentAppSettings.wheelConfigs[sourceTierId];
+    const segments = [...tierConfig.segments];
+    
+    const [draggedItem] = segments.splice(dragIndex, 1);
+    segments.splice(dropIndex, 0, draggedItem);
+    
+    handleWheelConfigChange(sourceTierId, 'segments', segments);
+    setDraggedSegment(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSegment(null);
   };
 
   const handleSaveConfiguration = async () => {
@@ -370,22 +403,41 @@ export default function AdminPage() {
                                          </div>
                                          <h4 className="font-semibold text-lg border-b pb-2">Segments</h4>
                                          <Table>
-                                             <TableHeader><TableRow><TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Probability</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
-                                             <TableBody>
-                                                 {tier.segments.map((seg, index) => (
-                                                     <TableRow key={seg.id}>
-                                                         <TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell>
-                                                         <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
-                                                         <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
-                                                         <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
-                                                         <TableCell><Input type="number" step="0.001" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
-                                                         <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
-                                                     </TableRow>
-                                                 ))}
-                                             </TableBody>
+                                            <TableHeader><TableRow>
+                                                <TableHead className="w-20 text-center">#</TableHead>
+                                                <TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Probability</TableHead><TableHead>Actions</TableHead>
+                                            </TableRow></TableHeader>
+                                            <TableBody onDragOver={handleDragOver}>
+                                                {tier.segments.map((seg, index) => (
+                                                    <TableRow 
+                                                        key={seg.id}
+                                                        draggable
+                                                        onDragStart={() => handleDragStart(tier.id, index)}
+                                                        onDrop={() => handleDrop(tier.id, index)}
+                                                        onDragEnd={handleDragEnd}
+                                                        className={cn(
+                                                            "cursor-move",
+                                                            draggedSegment?.tierId === tier.id && draggedSegment?.index === index && "opacity-50 bg-primary/20"
+                                                        )}
+                                                    >
+                                                        <TableCell className="text-center font-medium text-muted-foreground">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <GripVertical className="h-5 w-5 text-muted-foreground" />
+                                                                {index + 1}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell>
+                                                        <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" step="0.001" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
+                                                        <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
                                              <TableFoot>
                                                  <TableRow>
-                                                     <TableCell colSpan={4} className="text-right font-bold">Total Probability:</TableCell>
+                                                     <TableCell colSpan={5} className="text-right font-bold">Total Probability:</TableCell>
                                                      <TableCell className={`font-bold ${Math.abs(probabilitySum - 1) > 0.001 ? 'text-destructive' : 'text-green-600'}`}>{probabilitySum.toFixed(3)}</TableCell>
                                                      <TableCell>{Math.abs(probabilitySum - 1) > 0.001 && <Badge variant="destructive">Should be 1.0</Badge>}</TableCell>
                                                  </TableRow>
@@ -563,3 +615,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
