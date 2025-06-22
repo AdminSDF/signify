@@ -19,6 +19,7 @@ import {
   doc,
   db,
   UserDocument,
+  getUserData,
   onSnapshot, // Import onSnapshot for real-time listening
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +72,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fetchAppConfig();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Fetch config once on mount
+  
+  const logout = useCallback(async (isBlocked = false) => {
+    setFbAuthLoading(true); 
+    try {
+      await firebaseSignOut(auth);
+      if (isBlocked) {
+        toast({ title: "Account Blocked", description: "Your account is blocked. Please contact support.", variant: "destructive" });
+      } else {
+        toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      }
+      router.push('/login');
+      setUser(null); 
+      setUserData(null);
+    } catch (error: any) {
+      console.error("Firebase Auth: Error during logout (Code:", error.code, "):", error.message);
+      toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
+    } finally {
+      setFbAuthLoading(false); 
+    }
+  }, [router, toast]);
+
 
    useEffect(() => {
     let firestoreUnsubscribe: (() => void) | null = null;
@@ -88,12 +110,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUserDataLoading(true);
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         
-        // Set up a new real-time listener for the logged-in user's data
         firestoreUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
-            setUserData(docSnap.data() as UserDocument);
+            const latestUserData = docSnap.data() as UserDocument;
+            setUserData(latestUserData);
+            
+            // If user is blocked, log them out immediately.
+            if (latestUserData.isBlocked) {
+              logout(true);
+              return;
+            }
+
           } else {
-            // This case might happen if user is created in Auth but not Firestore yet.
             setUserData(null);
           }
           setUserDataLoading(false);
@@ -103,7 +131,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUserDataLoading(false);
         });
 
-        // Update lastLogin, which only runs when auth state changes (i.e., on login)
         const creationTime = firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime).getTime() : 0;
         const lastSignInTime = firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime).getTime() : 0;
         const isNewUserSession = Math.abs(creationTime - lastSignInTime) < 5000;
@@ -126,7 +153,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         firestoreUnsubscribe();
       }
     };
-  }, []); // This effect should run only once.
+  }, [logout]);
 
 
   const signUpWithEmailPassword = async ({ email, password, displayName }: SignUpCredentials) => {
@@ -192,7 +219,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginWithEmailPassword = async ({ email, password }: LoginCredentials) => {
     setFbAuthLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // After successful sign-in, check if user is blocked before proceeding
+      const loggedInUser = await getUserData(userCredential.user.uid);
+      if (loggedInUser?.isBlocked) {
+        await logout(true); // Call logout with blocked flag
+        return; // Stop further execution
+      }
+
       toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/');
     } catch (error: any) {
@@ -211,22 +245,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const logout = async () => {
-    setFbAuthLoading(true); 
-    try {
-      await firebaseSignOut(auth);
-      toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      router.push('/login');
-      setUser(null); 
-      setUserData(null);
-    } catch (error: any) {
-      console.error("Firebase Auth: Error during logout (Code:", error.code, "):", error.message);
-      toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
-    } finally {
-      setFbAuthLoading(false); 
-    }
-  };
-
   const contextValue = {
     user,
     userData,
@@ -236,7 +254,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,
-    logout,
+    logout: () => logout(false), // Expose a simple logout function
   };
 
   return (

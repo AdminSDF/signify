@@ -8,10 +8,10 @@ export interface Segment {
   id: string;
   text: string;
   emoji: string;
-  amount?: number;
+  amount?: number; // Can be used for display if needed
+  multiplier?: number; // The core logic may use this
   color: string; // HSL string e.g., '0 100% 50%' for red
   textColor?: string; // HSL string for text, defaults to contrast
-  probability?: number;
 }
 
 interface SpinWheelProps {
@@ -63,13 +63,9 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       // Number of full spins for visual effect. e.g., 10 full rotations
       const fullSpinsDegrees = 360 * 10;
 
-      // Calculate rotation needed from current accumulatedRotation (which is the resting state)
-      // to the new target orientation. The animation starts from `accumulatedRotation`.
       const currentNormalizedAngle = accumulatedRotation % 360;
       let rotationToNewOrientation = (finalOrientationAngle - currentNormalizedAngle);
       
-      // Ensure it's a positive rotation by adding multiples of 360 if needed.
-      // This ensures the additional rotation for the final segment alignment is always forward.
       while (rotationToNewOrientation <= 0 && numSegments > 0) {
         rotationToNewOrientation += 360;
       }
@@ -80,21 +76,16 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
        }
 
       const totalAdditionalRotation = fullSpinsDegrees + rotationToNewOrientation;
-      // This newFinalAccumulatedRotation is the target for the CSS transform.
-      // The actual accumulatedRotation state will be updated *after* the animation.
       const newFinalAccumulatedRotation = accumulatedRotation + totalAdditionalRotation;
 
       wheelElement.style.transition = `transform ${spinDuration}s cubic-bezier(0.17, 0.67, 0.83, 0.67)`;
       wheelElement.style.transform = `rotate(${newFinalAccumulatedRotation}deg)`;
 
       const timer = setTimeout(() => {
-        // Update the React state for accumulatedRotation to the new resting position
         setAccumulatedRotation(newFinalAccumulatedRotation);
 
         if (wheelRef.current) {
-            wheelRef.current.style.transition = 'none'; // Remove transition after animation
-            // The transform is already at newFinalAccumulatedRotation due to CSS animation.
-            // Setting it again ensures consistency if needed, but primarily handled by setAccumulatedRotation + resting effect.
+            wheelRef.current.style.transition = 'none'; 
         }
         onSpinComplete(segments[targetSegmentIndex]);
         isAnimatingRef.current = false; // Reset for next spin
@@ -102,8 +93,6 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
       return () => {
         clearTimeout(timer);
-        // If the component unmounts or spin is interrupted, reset the flag.
-        // Also, ensure transition is removed if the effect is cleaned up mid-animation.
         if (wheelRef.current) {
           wheelRef.current.style.transition = 'none';
         }
@@ -113,19 +102,18 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   }, [isSpinning, targetSegmentIndex, segments, anglePerSegment, onSpinComplete, spinDuration, numSegments, accumulatedRotation]);
 
 
-  // Effect to set initial rotation and the wheel's resting position when not spinning
   useEffect(() => {
     if (wheelRef.current && !isSpinning) { // Only apply when not actively spinning
       wheelRef.current.style.transition = 'none'; // No transition for setting resting state
       wheelRef.current.style.transform = `rotate(${accumulatedRotation}deg)`;
     }
-  }, [accumulatedRotation, isSpinning]); // Runs when accumulatedRotation changes or when isSpinning changes
+  }, [accumulatedRotation, isSpinning]); 
 
 
   const gradientDefs = useMemo(() => {
     const uniqueColors = new Map<string, string>();
-    segments.forEach((segment, index) => {
-      const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`;
+    segments.forEach((segment) => {
+      const gradId = `grad-${segment.color.replace(/\s/g, '-')}`;
       if (!uniqueColors.has(segment.color)) {
         uniqueColors.set(segment.color, gradId);
       }
@@ -146,7 +134,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   const colorToGradientIdMap = useMemo(() => {
     const map = new Map<string, string>();
     segments.forEach((segment) => {
-       const gradId = `grad-${segments.findIndex(s => s.color === segment.color)}`;
+       const gradId = `grad-${segment.color.replace(/\s/g, '-')}`;
       if (!map.has(segment.color)) {
         map.set(segment.color, gradId);
       }
@@ -234,7 +222,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
             const gradientId = colorToGradientIdMap.get(segment.color);
 
             return (
-              <g key={segment.id} role="listitem" aria-label={`Prize: ${segment.text} ${segment.amount !== undefined ? `(value ${segment.amount})` : ''}`}>
+              <g key={segment.id} role="listitem" aria-label={`Prize: ${segment.text}`}>
                 <path
                   d={pathData}
                   fill={gradientId ? `url(#${gradientId})` : `hsl(${segment.color})`}
@@ -254,6 +242,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                 >
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.6em">{segment.emoji}</tspan>
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{segment.text}</tspan>
+                  {segment.multiplier > 0 && <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{`(${segment.multiplier}x)`}</tspan>}
                 </text>
               </g>
             );
@@ -265,4 +254,3 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 };
 
 export default SpinWheel;
-

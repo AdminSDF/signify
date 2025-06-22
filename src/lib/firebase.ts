@@ -59,6 +59,7 @@ const ADD_FUND_REQUESTS_COLLECTION = 'addFundRequests';
 const APP_CONFIG_COLLECTION = 'appConfiguration';
 const APP_CONFIG_DOC_ID = 'main';
 const SUPPORT_TICKETS_COLLECTION = 'supportTickets';
+const FRAUD_ALERTS_COLLECTION = 'fraudAlerts';
 
 
 // --- User Functions ---
@@ -75,6 +76,7 @@ export interface UserDocument {
   totalWinnings: number;
   totalSpinsPlayed: number;
   isAdmin?: boolean;
+  isBlocked?: boolean; // For fraud prevention
   lastLogin?: Timestamp;
   upiIdForWithdrawal?: string;
   bankDetailsForWithdrawal?: {
@@ -120,6 +122,7 @@ export const createUserData = async (
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
     isAdmin: adminEmails.includes(userEmail),
+    isBlocked: false, // Default to not blocked
     lastLogin: Timestamp.now(),
     totalWinnings: 0,
     totalSpinsPlayed: 0,
@@ -192,14 +195,18 @@ export const getLeaderboardUsers = async (count: number = 20): Promise<UserDocum
 export interface TransactionData {
   userId: string;
   userEmail: string | null;
-  type: 'credit' | 'debit';
-  amount: number;
+  type: 'credit' | 'debit' | 'spin';
+  amount: number; // Net amount for the transaction
   description: string;
   date: Timestamp;
   status: 'completed' | 'pending' | 'failed';
   tierId?: string; // Optional field to track which balance was affected
   balanceBefore?: number;
   balanceAfter?: number;
+  spinDetails?: {
+      betAmount: number;
+      winAmount: number;
+  }
 }
 
 export const addTransactionToFirestore = async (transactionDetails: Omit<TransactionData, 'date' | 'userId'>, userId: string): Promise<string> => {
@@ -212,6 +219,7 @@ export const addTransactionToFirestore = async (transactionDetails: Omit<Transac
         status: transactionDetails.status || 'completed',
         tierId: transactionDetails.tierId,
         date: Timestamp.now(),
+        spinDetails: transactionDetails.spinDetails,
     };
 
     if (typeof transactionDetails.balanceBefore === 'number' && !isNaN(transactionDetails.balanceBefore)) {

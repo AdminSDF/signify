@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical } from 'lucide-react';
+import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, initialWheelConfigs } from '@/lib/appConfig';
 import {
@@ -32,6 +32,7 @@ import {
   approveWithdrawalAndUpdateBalance,
   getAllUsers,
   UserDocument,
+  updateUserData,
   getAllTransactions,
   TransactionData,
   getLeaderboardUsers,
@@ -42,6 +43,7 @@ import {
   updateSupportTicketStatus
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
 export default function AdminPage() {
   const { user, userData, loading, appSettings, newsItems, refreshAppConfig } = useAuth();
@@ -154,7 +156,7 @@ export default function AdminPage() {
       const updatedSegments = [...currentAppSettings.wheelConfigs[tier].segments];
       updatedSegments[index] = {
           ...updatedSegments[index],
-          [field]: field === 'amount' || field === 'probability' ? parseFloat(value) || 0 : value
+          [field]: field === 'multiplier' ? parseFloat(value) || 0 : value
       };
       handleWheelConfigChange(tier, 'segments', updatedSegments);
   };
@@ -164,9 +166,8 @@ export default function AdminPage() {
           id: `${tier.charAt(0)}${new Date().getTime()}`,
           text: 'New Prize',
           emoji: '🎉',
-          amount: 1,
+          multiplier: 1,
           color: '0 0% 80%',
-          probability: 0.1
       };
       const updatedSegments = [...currentAppSettings.wheelConfigs[tier].segments, newSegment];
       handleWheelConfigChange(tier, 'segments', updatedSegments);
@@ -206,6 +207,17 @@ export default function AdminPage() {
 
   const handleDragEnd = () => {
     setDraggedSegment(null);
+  };
+  
+  const handleToggleUserBlock = async (userId: string, currentStatus: boolean) => {
+    try {
+      await updateUserData(userId, { isBlocked: !currentStatus });
+      toast({ title: "User Status Updated", description: `User has been ${!currentStatus ? 'blocked' : 'unblocked'}.` });
+      fetchAdminData(); // Refresh user list
+    } catch (error: any) {
+      console.error("Error updating user status:", error);
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleSaveConfiguration = async () => {
@@ -357,9 +369,9 @@ export default function AdminPage() {
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>User</TableHead>
                    {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId)} Bal (₹)</TableHead>)}
-                   <TableHead>Spins</TableHead><TableHead>Total Winnings (₹)</TableHead><TableHead>Joined On</TableHead><TableHead>Is Admin</TableHead></TableRow></TableHeader>
+                   <TableHead>Spins</TableHead><TableHead>Total Winnings (₹)</TableHead><TableHead>Joined On</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={6 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={7 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
                       : allUsers.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
@@ -368,20 +380,33 @@ export default function AdminPage() {
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{(u.balances?.[tierId] ?? 0).toFixed(2)}</TableCell>)}
                           <TableCell>{u.spinsAvailable}</TableCell><TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
                           <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
-                          <TableCell><Badge variant={u.isAdmin ? 'default' : 'secondary'}>{u.isAdmin ? 'Yes' : 'No'}</Badge></TableCell>
+                          <TableCell>
+                             <Badge variant={u.isBlocked ? 'destructive' : 'default'}>{u.isBlocked ? 'Blocked' : 'Active'}</Badge>
+                             {u.isAdmin && <Badge variant="secondary" className="ml-2">Admin</Badge>}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`block-switch-${u.id}`} className="text-xs text-muted-foreground">{u.isBlocked ? 'Unblock' : 'Block'}</Label>
+                              <Switch
+                                id={`block-switch-${u.id}`}
+                                checked={u.isBlocked}
+                                onCheckedChange={() => handleToggleUserBlock(u.id, u.isBlocked || false)}
+                                disabled={u.isAdmin} // Prevent blocking admins
+                                aria-label={`Block or unblock user ${u.displayName}`}
+                              />
+                            </div>
+                          </TableCell>
                         </TableRow>))}
-                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={6 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
+                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={7 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
 
              <TabsContent value="wheel-settings">
                  <Card className="bg-muted/20">
-                     <CardHeader><CardTitle className="flex items-center gap-2"><Wand2 /> Wheel & Segment Settings</CardTitle><CardDescription>Control prizes, costs, and probabilities for each wheel.</CardDescription></CardHeader>
+                     <CardHeader><CardTitle className="flex items-center gap-2"><Wand2 /> Wheel & Segment Settings</CardTitle><CardDescription>Control prizes, costs, and visual appearance for each wheel.</CardDescription></CardHeader>
                      <CardContent>
                          <Accordion type="single" collapsible className="w-full" defaultValue="item-little">
-                             {Object.values(currentAppSettings.wheelConfigs).map((tier) => {
-                                const probabilitySum = tier.segments.reduce((acc, s) => acc + (s.probability || 0), 0);
-                                return (
+                             {Object.values(currentAppSettings.wheelConfigs).map((tier) => (
                                  <AccordionItem value={`item-${tier.id}`} key={tier.id}>
                                      <AccordionTrigger className="text-xl font-semibold">{tier.name}</AccordionTrigger>
                                      <AccordionContent className="space-y-6 p-4">
@@ -401,11 +426,11 @@ export default function AdminPage() {
                                                 </div>
                                             )}
                                          </div>
-                                         <h4 className="font-semibold text-lg border-b pb-2">Segments</h4>
+                                         <h4 className="font-semibold text-lg border-b pb-2">Segments (Visual Only)</h4>
                                          <Table>
                                             <TableHeader><TableRow>
                                                 <TableHead className="w-20 text-center">#</TableHead>
-                                                <TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Probability</TableHead><TableHead>Actions</TableHead>
+                                                <TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Multiplier (x)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Actions</TableHead>
                                             </TableRow></TableHeader>
                                             <TableBody onDragOver={handleDragOver}>
                                                 {tier.segments.map((seg, index) => (
@@ -428,20 +453,12 @@ export default function AdminPage() {
                                                         </TableCell>
                                                         <TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell>
                                                         <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
-                                                        <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={seg.multiplier} onChange={(e) => handleSegmentChange(tier.id, index, 'multiplier', e.target.value)} /></TableCell>
                                                         <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
-                                                        <TableCell><Input type="number" step="0.001" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
                                                         <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
-                                             <TableFoot>
-                                                 <TableRow>
-                                                     <TableCell colSpan={5} className="text-right font-bold">Total Probability:</TableCell>
-                                                     <TableCell className={`font-bold ${Math.abs(probabilitySum - 1) > 0.001 ? 'text-destructive' : 'text-green-600'}`}>{probabilitySum.toFixed(3)}</TableCell>
-                                                     <TableCell>{Math.abs(probabilitySum - 1) > 0.001 && <Badge variant="destructive">Should be 1.0</Badge>}</TableCell>
-                                                 </TableRow>
-                                             </TableFoot>
                                          </Table>
                                          <Button onClick={() => addSegment(tier.id)} variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Add Segment</Button>
                                      </AccordionContent>
@@ -533,14 +550,14 @@ export default function AdminPage() {
              <TabsContent value="transactions">
               <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><History /> All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Type</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Type</TableHead><TableHead>Net Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading transactions...</TableCell></TableRow>
                       : allTransactions.map((t) => (
                         <TableRow key={t.id}>
                             <TableCell className="font-medium">{t.userEmail}</TableCell>
                             <TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4"/> : <ArrowDownLeft className="h-4 w-4"/>}{t.type}</span></TableCell>
-                            <TableCell className={`font-semibold ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</TableCell>
+                            <TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</TableCell>
                              <TableCell>{t.tierId ? <Badge variant="outline">{getTierName(t.tierId)}</Badge> : 'N/A'}</TableCell>
                             <TableCell>{t.description}</TableCell>
                             <TableCell>{t.date instanceof Timestamp ? t.date.toLocaleString() : new Date(t.date as any).toLocaleString()}</TableCell>
@@ -615,5 +632,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -9,6 +10,7 @@ interface PrizeDisplayProps {
     text: string;
     emoji: string;
     amount?: number;
+    multiplier?: number;
   } | null;
 }
 
@@ -33,7 +35,7 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
     );
   }
 
-  const isWin = prize.text !== 'Try Again';
+  const isWin = prize.multiplier !== 0;
 
   return (
     <div className={cn(
@@ -56,7 +58,7 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
           <p className="text-5xl my-4">{prize.emoji}</p>
           <p className="text-2xl font-semibold text-foreground">
             You won: {prize.text}
-            {prize.amount && ` (₹${prize.amount})`}
+            {prize.amount && prize.amount > 0 && ` (₹${prize.amount.toFixed(2)})`}
           </p>
         </CardContent>
       </Card>

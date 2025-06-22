@@ -1,4 +1,6 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -7,49 +9,63 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function isNotBlocked() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked == false;
+    }
+
     function isAdmin() {
-      // Robust check: ensures user document exists and isAdmin field is explicitly true.
       return request.auth != null &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
     // --- Global Admin Rule ---
     // This rule gives admins full read/write access to the entire database.
+    // If a user is an admin, no other rules are needed for them.
     match /{document=**} {
       allow read, write: if isAdmin();
     }
 
-    // --- User-Specific Rules (for non-admins) ---
+    // --- User-Specific Rules (applied only if user is NOT an admin) ---
 
     match /users/{userId} {
       allow get, list: if request.auth != null;
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      // User can update their own profile only if they are not blocked
+      allow update: if isOwner(userId) && isNotBlocked();
     }
     
     match /transactions/{transactionId} {
-      allow create: if isOwner(request.resource.data.userId);
+      // User can create their own transactions, only if not blocked.
+      allow create: if isOwner(request.resource.data.userId) && isNotBlocked();
+      // User can read their own transactions.
       allow read: if isOwner(resource.data.userId);
     }
 
     match /withdrawalRequests/{requestId} {
-      allow create: if isOwner(request.resource.data.userId);
+      // Users can only create their own requests, only if not blocked.
+      allow create: if isOwner(request.resource.data.userId) && isNotBlocked();
     }
     
     match /addFundRequests/{requestId} {
-      allow create: if isOwner(request.resource.data.userId);
+      // Users can only create their own requests, only if not blocked.
+      allow create: if isOwner(request.resource.data.userId) && isNotBlocked();
     }
-
+    
     match /supportTickets/{ticketId} {
-      // User can create their own tickets.
-      allow create: if isOwner(request.resource.data.userId);
-      // User must be able to read their own ticket for the Storage Rule to work.
+      // Users can create their own tickets, only if not blocked.
+      allow create: if isOwner(request.resource.data.userId) && isNotBlocked();
+      // Allow user to get their own ticket (needed for storage rules to work)
       allow get: if isOwner(resource.data.userId);
     }
 
     match /appConfiguration/{docId} {
       // Any authenticated non-admin user can read the configuration.
       allow read: if request.auth != null;
+    }
+
+    match /fraudAlerts/{alertId} {
+        // Only admins can access fraud alerts
+        allow read, write: if false; // Covered by global admin rule
     }
   }
 }
