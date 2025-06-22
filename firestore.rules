@@ -1,6 +1,4 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -12,55 +10,46 @@ service cloud.firestore {
     function isAdmin() {
       // Robust check: ensures user document exists and isAdmin field is explicitly true.
       return request.auth != null &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
-    
+
     // --- Global Admin Rule ---
     // This rule gives admins full read/write access to the entire database.
-    // If a user is an admin, no other rules are needed for them.
     match /{document=**} {
       allow read, write: if isAdmin();
     }
 
-    // --- User-Specific Rules ---
-    // These rules apply ONLY if the user is NOT an admin.
+    // --- User-Specific Rules (for non-admins) ---
 
     match /users/{userId} {
-      // Any authenticated user can read user lists (for leaderboard) and individual profiles.
       allow get, list: if request.auth != null;
-      // A user can update their own profile
-      allow update: if isOwner(userId);
-      // A user can only create their own profile document.
       allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
     }
     
     match /transactions/{transactionId} {
-      // User can create their own transactions.
       allow create: if isOwner(request.resource.data.userId);
-      // User can read their own transactions (get and list with where clause).
       allow read: if isOwner(resource.data.userId);
     }
 
     match /withdrawalRequests/{requestId} {
-      // Users can only create their own requests. Admins handle the rest via the global rule.
       allow create: if isOwner(request.resource.data.userId);
     }
     
     match /addFundRequests/{requestId} {
-      // Users can only create their own requests. Admins handle the rest via the global rule.
-      allow create: if isOwner(request.resource.data.userId);
-    }
-    
-    match /supportTickets/{ticketId} {
-      // Users can only create their own tickets. Admins handle the rest.
       allow create: if isOwner(request.resource.data.userId);
     }
 
+    match /supportTickets/{ticketId} {
+      // User can create their own tickets.
+      allow create: if isOwner(request.resource.data.userId);
+      // User must be able to read their own ticket for the Storage Rule to work.
+      allow get: if isOwner(resource.data.userId);
+    }
+
     match /appConfiguration/{docId} {
-      // Any user (authenticated or not) can read the configuration.
-      // This is necessary for the app to load its theme and settings before login.
-      allow read: if true;
+      // Any authenticated non-admin user can read the configuration.
+      allow read: if request.auth != null;
     }
   }
 }
