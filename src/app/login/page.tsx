@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { LoginCredentialsValidator, SignUpCredentialsValidator, type LoginCredentials, type SignUpCredentials } from '@/lib/validators/auth';
 import { LogIn, UserPlus, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { initialSettings } from '@/lib/appConfig';
 
 type FormData = LoginCredentials | SignUpCredentials;
 
@@ -95,12 +97,7 @@ export default function LoginPage() {
         )}
       >
         <CardHeader className="items-center text-center border-b pb-4">
-           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" className="h-16 w-16 text-primary mb-3">
-            <rect width="256" height="256" fill="none"></rect>
-            <path d="M128,24a104,104,0,1,0,104,104A104.2,104.2,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z" opacity="0.2"></path>
-            <path d="M128,24a104,104,0,1,0,104,104A104.2,104.2,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z" fill="currentColor" strokeWidth="0"></path>
-            <path d="M143.8,149.9a40.2,40.2,0,0,1-31.6,0L70.7,173.2a88,88,0,0,0,45.2,18.7,87,87,0,0,0,12.1-.8V132a40,40,0,0,1,0-8Z" fill="hsl(var(--primary))" strokeWidth="0"></path>
-          </svg>
+           <Image src={initialSettings.logoUrl} alt="Spinify Logo" width={64} height={64} className="h-16 w-16 mb-3 rounded-full" />
           <CardTitle className="text-3xl font-bold font-headline text-primary">
             {isLoginMode ? "Welcome Back!" : "Create Account"}
           </CardTitle>

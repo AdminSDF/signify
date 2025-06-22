@@ -4,10 +4,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Gem, Crown, Rocket, ShieldAlert } from 'lucide-react';
+import { ArrowRight, ShieldAlert } from 'lucide-react';
 import type { WheelTierConfig } from '@/lib/appConfig';
 
 export default function GameSelectionPage() {
@@ -39,11 +40,11 @@ export default function GameSelectionPage() {
 
   const wheelConfigs = appSettings.wheelConfigs;
 
-  const renderCard = (config: WheelTierConfig, icon: React.ReactNode) => (
+  const renderCard = (config: WheelTierConfig) => (
      <Link href={`/game/${config.id}`} passHref key={config.id}>
-      <Card className={`h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer ${config.themeClass} border-primary border-2`}>
+      <Card className={`h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 ${config.themeClass} border-primary border-2`}>
         <CardHeader>
-          {icon}
+          <Image src={appSettings.logoUrl} alt={`${config.name} Logo`} width={64} height={64} className="h-16 w-16 mx-auto animate-glow-pulse rounded-full" />
           <CardTitle className="text-3xl font-bold text-primary mt-4">{config.name}</CardTitle>
           <CardDescription className="text-muted-foreground mt-1 text-base">{config.description}</CardDescription>
         </CardHeader>
@@ -64,9 +65,9 @@ export default function GameSelectionPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 w-full max-w-6xl">
-        {wheelConfigs.little && renderCard(wheelConfigs.little, <Gem className="h-16 w-16 mx-auto text-primary" />)}
-        {wheelConfigs.big && renderCard(wheelConfigs.big, <Crown className="h-16 w-16 mx-auto text-primary" />)}
-        {wheelConfigs['more-big'] && renderCard(wheelConfigs['more-big'], <Rocket className="h-16 w-16 mx-auto text-primary" />)}
+        {wheelConfigs.little && renderCard(wheelConfigs.little)}
+        {wheelConfigs.big && renderCard(wheelConfigs.big)}
+        {wheelConfigs['more-big'] && renderCard(wheelConfigs['more-big'])}
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ import {
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
-import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS } from '@/lib/appConfig';
+import { AppSettings, initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_LOGO_URL } from '@/lib/appConfig';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -164,7 +164,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         await updateProfile(userCredential.user, { displayName });
         profileUpdated = true;
-        const photoURL = userCredential.user.photoURL; 
+        const photoURL = userCredential.user.photoURL || currentAppSettings.logoUrl || DEFAULT_LOGO_URL;
         await createFirestoreUser(
           userCredential.user.uid,
           userCredential.user.email,

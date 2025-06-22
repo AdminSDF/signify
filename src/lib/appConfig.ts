@@ -103,10 +103,13 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
   }
 };
 
+export const DEFAULT_LOGO_URL = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh-PsVQj50OZx4UwZAuk7W0JDqdVv7XtdPtA6RdvBPdJhIDzCnNnM8sfdKkZD8MTbpZIk3-E4aJA9oehwoZnTEmDhH1c7B89EJINSQngImBFvAUFPTcFAGAj0vXi9UNeBOMDOSJtw4a0GUGMNakf-z7TTS9S-vziyAbW8LpcrcIA9R7SNSj0G3ECbtMlJuT/s1600/file_00000000f80061f882df150eb41a6b72.png";
+
 
 // General App Settings Interface
 export interface AppSettings {
   appName: string;
+  logoUrl: string;
   upiId: string;
   initialBalanceForNewUsers: number;
   maxSpinsInBundle: number; // Free spins for new users
@@ -119,6 +122,7 @@ export interface AppSettings {
 // Initial structure / fallback for general settings if Firestore is unavailable.
 export const initialSettings: AppSettings = {
   appName: "Spinify",
+  logoUrl: DEFAULT_LOGO_URL,
   upiId: "9828786246@jio",
   initialBalanceForNewUsers: 50.00,
   maxSpinsInBundle: 10,

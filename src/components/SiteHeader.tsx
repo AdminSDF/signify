@@ -3,6 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
@@ -17,19 +18,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const SiteHeader: React.FC = () => {
-  const { user, userData, logout, loading } = useAuth();
+  const { user, userData, logout, loading, appSettings } = useAuth();
 
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 max-w-screen-2xl items-center">
           <Link href="/" className="mr-6 flex items-center space-x-2">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" className="h-6 w-6 text-primary">
-              <rect width="256" height="256" fill="none"></rect>
-              <path d="M128,24a104,104,0,1,0,104,104A104.2,104.2,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z" opacity="0.2"></path>
-              <path d="M128,24a104,104,0,1,0,104,104A104.2,104.2,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Z" fill="currentColor" strokeWidth="0"></path>
-              <path d="M143.8,149.9a40.2,40.2,0,0,1-31.6,0L70.7,173.2a88,88,0,0,0,45.2,18.7,87,87,0,0,0,12.1-.8V132a40,40,0,0,1,0-8Z" fill="hsl(var(--primary))" strokeWidth="0"></path>
-            </svg>
+            <Image src={appSettings.logoUrl} alt="Spinify Logo" width={32} height={32} className="h-8 w-8 rounded-full" />
           </Link>
           <nav className="flex items-center gap-1 text-sm flex-grow">
             <Link href="/" passHref>

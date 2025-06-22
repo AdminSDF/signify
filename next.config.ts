@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'blogger.googleusercontent.com',
+      },
     ],
   },
   // Add the allowed origin from the development server logs to prevent cross-origin errors.
