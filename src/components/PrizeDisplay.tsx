@@ -4,10 +4,10 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { SegmentConfig } from '@/lib/appConfig'; // Use the central config type
+import type { SegmentConfig } from '@/lib/appConfig';
 
 interface PrizeDisplayProps {
-  prize: (SegmentConfig & { amount?: number }) | null; // Allow adding amount dynamically
+  prize: (SegmentConfig & { amount?: number }) | null;
 }
 
 const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
@@ -15,8 +15,8 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
 
   useEffect(() => {
     if (prize) {
-      setVisible(false); // Reset for animation
-      const timer = setTimeout(() => setVisible(true), 100); // Small delay to trigger transition
+      setVisible(false); 
+      const timer = setTimeout(() => setVisible(true), 100);
       return () => clearTimeout(timer);
     } else {
       setVisible(false);
@@ -25,13 +25,14 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
 
   if (!prize) {
     return (
-      <div className="text-center text-xl font-medium text-muted-foreground h-24 flex items-center justify-center">
+      <div className="text-center text-xl font-medium text-muted-foreground h-32 flex items-center justify-center">
         Spin the wheel to win a prize!
       </div>
     );
   }
 
   const isWin = prize.multiplier > 0;
+  const prizeAmount = prize.amount;
 
   return (
     <div className={cn(
@@ -39,23 +40,28 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
       visible && "scale-100 opacity-100"
     )}>
       <Card className={cn(
-        "text-center shadow-xl w-full max-w-md mx-auto my-6",
+        "text-center shadow-xl w-full max-w-md mx-auto my-4",
         isWin ? "border-green-500 bg-green-50 dark:bg-green-900/30" : "border-destructive bg-red-50 dark:bg-red-900/30"
       )}>
-        <CardHeader>
+        <CardHeader className="p-4">
           <CardTitle className={cn(
-            "text-3xl font-bold font-headline",
+            "text-3xl font-bold font-headline flex items-center justify-center gap-3",
             isWin ? "text-green-700 dark:text-green-300" : "text-destructive"
           )}>
-            {isWin ? 'Congratulations! 🎉' : 'Better Luck Next Time! 😥'}
+            <span className="text-4xl">{prize.emoji}</span>
+            <span>{prize.text}</span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-5xl my-4">{prize.emoji}</p>
-          <p className="text-2xl font-semibold text-foreground">
-            You won: {prize.text}
-            {prize.amount && prize.amount > 0 && ` (₹${prize.amount.toFixed(2)})`}
-          </p>
+        <CardContent className="p-4 pt-0">
+          {isWin && prizeAmount !== undefined && prizeAmount > 0 ? (
+            <p className="text-2xl font-semibold text-foreground">
+              You won <span className="font-bold text-primary">₹{prizeAmount.toFixed(2)}!</span>
+            </p>
+          ) : (
+            <p className="text-xl font-medium text-muted-foreground">
+              No prize this time. Spin again for another chance!
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

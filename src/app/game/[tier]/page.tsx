@@ -31,36 +31,27 @@ import { Steps } from 'intro.js-react';
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
-// This function determines the spin outcome based on the probabilities defined in the admin panel.
 const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConfig | undefined } => {
   if (!segments || segments.length === 0) {
     return { winningSegment: undefined };
   }
 
-  // Calculate the sum of all probabilities from the configuration.
   const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
 
-  // If no probabilities are set at all, fall back to picking a random segment to avoid errors.
   if (totalProbability <= 0) {
     console.warn("No probabilities set for any segment. Falling back to equal distribution.");
     return { winningSegment: segments[Math.floor(Math.random() * segments.length)] };
   }
 
-  // Generate a random number between 0 and the total probability.
   let random = Math.random() * totalProbability;
 
-  // Determine the winning segment based on its weighted probability.
-  // We iterate through the segments and subtract their probability from our random number.
-  // The segment that makes the random number drop to 0 or below is the winner.
   for (const segment of segments) {
     random -= (segment.probability || 0);
     if (random <= 0) {
       return { winningSegment: segment };
     }
   }
-
-  // Fallback in case of floating point inaccuracies, though it's highly unlikely.
-  // This ensures a segment is always returned if probabilities are valid.
+  
   return { winningSegment: segments[segments.length - 1] };
 };
 
@@ -75,8 +66,8 @@ export default function GamePage() {
   
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
-  const [currentPrize, setCurrentPrize] = useState<SegmentConfig | null>(null);
-  const pendingPrizeRef = useRef<SegmentConfig | null>(null);
+  const [currentPrize, setCurrentPrize] = useState<(SegmentConfig & { amount?: number }) | null>(null);
+  const pendingPrizeRef = useRef<(SegmentConfig & { amount?: number }) | null>(null);
   const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
@@ -337,7 +328,7 @@ export default function GamePage() {
         return;
     }
     
-    const prizeForDisplay: SegmentConfig = { ...winningSegment, amount: winAmount };
+    const prizeForDisplay: (SegmentConfig & { amount: number }) = { ...winningSegment, amount: winAmount };
     
     pendingPrizeRef.current = prizeForDisplay;
 
@@ -382,7 +373,7 @@ export default function GamePage() {
     startSpinProcess, addTransaction, getLittleTierSpinCost, toast, router
   ]);
 
-  const handleSpinComplete = useCallback(async (winningSegmentFromWheel: SegmentConfig) => {
+  const handleSpinComplete = useCallback(async () => {
     const prizeToDisplay = pendingPrizeRef.current;
     if (prizeToDisplay) {
       setCurrentPrize(prizeToDisplay);
