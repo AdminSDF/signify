@@ -69,7 +69,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       const totalAdditionalRotation = fullSpinsDegrees + rotationToNewOrientation;
       const newFinalAccumulatedRotation = accumulatedRotation + totalAdditionalRotation;
 
-      wheelElement.style.transition = `transform ${spinDuration}s cubic-bezier(0.17, 0.67, 0.83, 0.67)`;
+      wheelElement.style.transition = `transform ${spinDuration}s cubic-bezier(0.22, 1, 0.36, 1)`;
       wheelElement.style.transform = `rotate(${newFinalAccumulatedRotation}deg)`;
 
       const timer = setTimeout(() => {
