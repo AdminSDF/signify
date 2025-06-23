@@ -21,7 +21,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock,
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet,
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig } from '@/lib/appConfig';
@@ -50,10 +50,13 @@ import {
   ActivitySummary,
   getFraudAlerts,
   FraudAlertData,
+  getGlobalStats,
+  GlobalStats,
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
@@ -160,6 +163,7 @@ export default function AdminPage() {
   const [supportTickets, setSupportTickets] = useState<(SupportTicketData & {id: string})[]>([]);
   const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [fraudAlerts, setFraudAlerts] = useState<(FraudAlertData & {id: string})[]>([]);
+  const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
@@ -183,7 +187,7 @@ export default function AdminPage() {
     setIsLoadingData(true);
     try {
       const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
-      const [withdrawals, adds, users, transactions, leaderboardUsers, tickets, summary, alerts] = await Promise.all([
+      const [withdrawals, adds, users, transactions, leaderboardUsers, tickets, summary, alerts, stats] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
         getAllUsers(100, { field, direction }),
@@ -192,6 +196,7 @@ export default function AdminPage() {
         getSupportTickets(),
         getActivitySummary(1),
         getFraudAlerts(),
+        getGlobalStats(),
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
@@ -201,6 +206,7 @@ export default function AdminPage() {
       setSupportTickets(tickets);
       setActivitySummary(summary);
       setFraudAlerts(alerts);
+      setGlobalStats(stats);
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
@@ -583,9 +589,66 @@ export default function AdminPage() {
              <TabsContent value="overview">
               <Card className="bg-muted/20">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle>
-                  <CardDescription>List of all registered users and their balances.</CardDescription>
-                  <div className="pt-4">
+                  <CardTitle className="flex items-center gap-2"><Users /> Cash Flow & User Overview</CardTitle>
+                  <CardDescription>Key financial metrics and a list of all registered users.</CardDescription>
+
+                   <div className="pt-6">
+                      <h3 className="text-lg font-semibold mb-4">Global Cash Flow</h3>
+                      {isLoadingData ? (
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                           <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
+                           <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
+                           <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
+                           <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
+                        </div>
+                      ) : globalStats && (
+                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Deposited</CardTitle>
+                                    <ArrowUpRight className="h-4 w-4 text-green-500"/>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">₹{globalStats.totalDeposited.toFixed(2)}</div>
+                                    <p className="text-xs text-muted-foreground">Total funds added by all users.</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Withdrawn</CardTitle>
+                                    <ArrowDownLeft className="h-4 w-4 text-red-500"/>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">₹{globalStats.totalWithdrawn.toFixed(2)}</div>
+                                    <p className="text-xs text-muted-foreground">Total funds withdrawn by all users.</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total User Winnings</CardTitle>
+                                    <Trophy className="h-4 w-4 text-yellow-500"/>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">₹{globalStats.totalWinnings.toFixed(2)}</div>
+                                    <p className="text-xs text-muted-foreground">Total prize money won by all users.</p>
+                                </CardContent>
+                            </Card>
+                             <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Current Balance</CardTitle>
+                                    <Wallet className="h-4 w-4 text-blue-500"/>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">₹{globalStats.currentBalance.toFixed(2)}</div>
+                                    <p className="text-xs text-muted-foreground">Total funds currently in all user wallets.</p>
+                                </CardContent>
+                            </Card>
+                         </div>
+                      )}
+                    </div>
+
+                  <div className="pt-8 border-t mt-8">
+                    <h3 className="text-lg font-semibold mb-2">User Details</h3>
                     <Label htmlFor="user-sort" className="text-sm font-medium">Sort Users By</Label>
                     <Select value={userSortBy} onValueChange={setUserSortBy}>
                       <SelectTrigger id="user-sort" className="w-full max-w-sm mt-1">

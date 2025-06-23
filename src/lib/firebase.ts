@@ -691,6 +691,43 @@ export const getFraudAlerts = async (): Promise<(FraudAlertData & {id: string})[
 };
 
 
+// --- Global Stats Function ---
+
+export interface GlobalStats {
+  totalDeposited: number;
+  totalWithdrawn: number;
+  totalWinnings: number;
+  currentBalance: number;
+}
+
+export const getGlobalStats = async (): Promise<GlobalStats> => {
+  const stats: GlobalStats = {
+    totalDeposited: 0,
+    totalWithdrawn: 0,
+    totalWinnings: 0,
+    currentBalance: 0,
+  };
+
+  const usersCollectionRef = collection(db, USERS_COLLECTION);
+  const querySnapshot = await getDocs(usersCollectionRef);
+
+  querySnapshot.forEach(doc => {
+    const user = doc.data() as UserDocument;
+    stats.totalDeposited += user.totalDeposited || 0;
+    stats.totalWithdrawn += user.totalWithdrawn || 0;
+    stats.totalWinnings += user.totalWinnings || 0;
+    
+    if (user.balances) {
+      Object.values(user.balances).forEach(balance => {
+        stats.currentBalance += balance || 0;
+      });
+    }
+  });
+
+  return stats;
+};
+
+
 export {
   app, auth, db, storage, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
