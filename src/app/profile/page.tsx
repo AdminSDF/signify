@@ -21,7 +21,8 @@ import {
   createAddFundRequest,
   uploadProfilePhoto,
   auth,
-  updateProfile
+  updateProfile,
+  logUserActivity,
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
 
@@ -137,6 +138,9 @@ export default function ProfilePage() {
         ...paymentDetails
       });
 
+      // Log withdrawal request activity
+      await logUserActivity(user.uid, user.email, 'withdrawalRequest');
+
       const userUpdateData: Partial<UserDocument> = {};
       if (selectedPaymentMethod === "upi") userUpdateData.upiIdForWithdrawal = upiIdInput.trim();
       else userUpdateData.bankDetailsForWithdrawal = paymentDetails.bankDetails;
@@ -174,6 +178,10 @@ export default function ProfilePage() {
         tierId: activeTier,
         paymentReference: "User Confirmed Payment In Modal",
       });
+
+      // Log add fund request activity
+      await logUserActivity(user.uid, user.email, 'addFundRequest');
+
       toast({ title: 'Add Balance Request Submitted', description: `Request to add ₹${amount.toFixed(2)} to ${activeWheelConfig.name} is pending.`, variant: 'default' });
       setAddBalanceAmount('');
     } catch (error) {

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -17,7 +17,12 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban, ArrowRightLeft } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
+  PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon,
+} from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig } from '@/lib/appConfig';
 import {
@@ -40,7 +45,11 @@ import {
   AppConfiguration,
   getSupportTickets,
   SupportTicketData,
-  updateSupportTicketStatus
+  updateSupportTicketStatus,
+  getActivitySummary,
+  ActivitySummary,
+  getFraudAlerts,
+  FraudAlertData,
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
@@ -114,6 +123,19 @@ const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'dateti
     return dateObj.toLocaleString();
 };
 
+const StatCard = ({ title, value, icon }: { title: string, value: number, icon: React.ReactNode }) => (
+  <Card>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      {icon}
+    </CardHeader>
+    <CardContent>
+      <div className="text-2xl font-bold">{value}</div>
+      <p className="text-xs text-muted-foreground">Total activities (last 24h)</p>
+    </CardContent>
+  </Card>
+);
+
 
 // --- ADMIN PAGE COMPONENT ---
 
@@ -136,6 +158,8 @@ export default function AdminPage() {
   const [allTransactions, setAllTransactions] = useState<(TransactionData & {id: string})[]>([]);
   const [leaderboard, setLeaderboard] = useState<UserDocument[]>([]);
   const [supportTickets, setSupportTickets] = useState<(SupportTicketData & {id: string})[]>([]);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
+  const [fraudAlerts, setFraudAlerts] = useState<(FraudAlertData & {id: string})[]>([]);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
@@ -154,13 +178,15 @@ export default function AdminPage() {
     setIsLoadingData(true);
     try {
       const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
-      const [withdrawals, adds, users, transactions, leaderboardUsers, tickets] = await Promise.all([
+      const [withdrawals, adds, users, transactions, leaderboardUsers, tickets, summary, alerts] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
         getAllUsers(100, { field, direction }),
         getAllTransactions(),
         getLeaderboardUsers(20),
-        getSupportTickets()
+        getSupportTickets(),
+        getActivitySummary(1),
+        getFraudAlerts(),
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
@@ -168,6 +194,8 @@ export default function AdminPage() {
       setAllTransactions(transactions);
       setLeaderboard(leaderboardUsers);
       setSupportTickets(tickets);
+      setActivitySummary(summary);
+      setFraudAlerts(alerts);
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
@@ -432,6 +460,16 @@ export default function AdminPage() {
         toast({ title: "Error", description: "Could not resolve the ticket.", variant: "destructive" });
     }
   };
+
+  const activityChartData = useMemo(() => {
+    if (!activitySummary) return [];
+    return [
+        { name: 'Morning', value: activitySummary.morning, fill: '#FFC107' },
+        { name: 'Afternoon', value: activitySummary.afternoon, fill: '#2196F3' },
+        { name: 'Evening', value: activitySummary.evening, fill: '#FF9800' },
+        { name: 'Night', value: activitySummary.night, fill: '#4A148C' },
+    ];
+  }, [activitySummary]);
   
   if (loading) {
     return (
@@ -468,8 +506,10 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-9 gap-2 mb-6 h-auto flex-wrap">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-11 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
+              <TabsTrigger value="activity"><Activity className="mr-2 h-4 w-4"/>Activity</TabsTrigger>
+              <TabsTrigger value="fraud-alerts"><ShieldAlert className="mr-2 h-4 w-4"/>Fraud Alerts</TabsTrigger>
               <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund</TabsTrigger>
               <TabsTrigger value="withdrawal-req"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal</TabsTrigger>
               <TabsTrigger value="transactions"><History className="mr-2 h-4 w-4" />Transactions</TabsTrigger>
@@ -537,6 +577,75 @@ export default function AdminPage() {
                         </TableRow>))}
                       {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={9 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
+            </TabsContent>
+            
+            <TabsContent value="activity">
+              <Card className="bg-muted/20">
+                <CardHeader><CardTitle className="flex items-center gap-2"><BarChart2 /> User Activity</CardTitle><CardDescription>Real-time user activity based on time of day (last 24 hours).</CardDescription></CardHeader>
+                <CardContent className="space-y-6">
+                  {isLoadingData ? (
+                     <div className="flex justify-center items-center h-64"><RefreshCcw className="h-8 w-8 animate-spin text-primary" /></div>
+                  ) : activitySummary && activityChartData.length > 0 ? (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <StatCard title="Morning" value={activitySummary.morning} icon={<Sunrise className="h-4 w-4 text-muted-foreground" />} />
+                        <StatCard title="Afternoon" value={activitySummary.afternoon} icon={<Sun className="h-4 w-4 text-muted-foreground" />} />
+                        <StatCard title="Evening" value={activitySummary.evening} icon={<Sunset className="h-4 w-4 text-muted-foreground" />} />
+                        <StatCard title="Night" value={activitySummary.night} icon={<Moon className="h-4 w-4 text-muted-foreground" />} />
+                      </div>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={activityChartData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={100}
+                            label={(props) => `${props.name}: ${props.percent ? (props.percent * 100).toFixed(0) : 0}%`}
+                          >
+                            {activityChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-10">No activity data available.</div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="fraud-alerts">
+              <Card className="bg-muted/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><ShieldAlert /> Fraud Alerts</CardTitle>
+                  <CardDescription>
+                    Alerts for suspicious user activities. Note: Automatic detection requires a separate Cloud Function to be deployed.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                   <Table>
+                    <TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Reason</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {isLoadingData ? <TableRow><TableCell colSpan={4} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading alerts...</TableCell></TableRow>
+                      : fraudAlerts.map((alert) => (
+                        <TableRow key={alert.id}>
+                          <TableCell>{alert.userEmail}</TableCell>
+                          <TableCell className="font-medium text-destructive">{alert.reason}</TableCell>
+                          <TableCell>{formatDisplayDate(alert.timestamp)}</TableCell>
+                          <TableCell><Badge variant={alert.status === 'open' ? 'destructive' : 'default'}>{alert.status}</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                      {!isLoadingData && fraudAlerts.length === 0 && (<TableRow><TableCell colSpan={4} className="text-center text-muted-foreground h-24">No fraud alerts found.</TableCell></TableRow>)}
+                    </TableBody>
+                   </Table>
+                </CardContent>
+              </Card>
             </TabsContent>
 
              <TabsContent value="wheel-settings">

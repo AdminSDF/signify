@@ -23,6 +23,7 @@ import {
   updateUserData,
   addTransactionToFirestore,
   Timestamp,
+  logUserActivity,
 } from '@/lib/firebase';
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
@@ -213,6 +214,9 @@ export default function GamePage() {
             return;
         }
     }
+    
+    // Log spin activity
+    await logUserActivity(user.uid, user.email, 'spin');
     
     // --- New Spin Logic ---
     const betAmount = isFreeSpin ? 0 : spinCost;

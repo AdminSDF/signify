@@ -59,6 +59,7 @@ const ADD_FUND_REQUESTS_COLLECTION = 'addFundRequests';
 const APP_CONFIG_COLLECTION = 'appConfiguration';
 const APP_CONFIG_DOC_ID = 'main';
 const SUPPORT_TICKETS_COLLECTION = 'supportTickets';
+const ACTIVITY_LOGS_COLLECTION = 'activityLogs';
 const FRAUD_ALERTS_COLLECTION = 'fraudAlerts';
 
 
@@ -86,6 +87,8 @@ export interface UserDocument {
     accountNumber: string;
     ifscCode: string;
   };
+  totalPlayTime?: number; // in minutes
+  devices?: string[]; // e.g. ['Android', 'iOS', 'Web']
 }
 
 export const createUserData = async (
@@ -582,6 +585,99 @@ export const updateSupportTicketStatus = async (ticketId: string, status: Suppor
         updateData.resolvedAt = Timestamp.now();
     }
     await updateDoc(ticketRef, updateData);
+};
+
+// --- Activity and Fraud Detection Functions ---
+
+export type ActivityPeriod = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export const getTimePeriod = (): ActivityPeriod => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
+};
+
+export interface ActivityLogData {
+    id?: string;
+    userId: string;
+    userEmail: string;
+    action: 'login' | 'spin' | 'addFundRequest' | 'withdrawalRequest';
+    timestamp: Timestamp;
+    period: ActivityPeriod;
+    device?: string;
+}
+
+export interface FraudAlertData {
+    id?: string;
+    userId: string;
+    userEmail: string;
+    reason: string;
+    timestamp: Timestamp;
+    status: 'open' | 'resolved';
+}
+
+export const logUserActivity = async (
+    userId: string,
+    userEmail: string | null,
+    action: ActivityLogData['action']
+): Promise<void> => {
+    try {
+        await addDoc(collection(db, ACTIVITY_LOGS_COLLECTION), {
+            userId,
+            userEmail: userEmail || 'N/A',
+            action,
+            timestamp: Timestamp.now(),
+            period: getTimePeriod(),
+        });
+    } catch (error) {
+        console.warn("Could not log user activity:", error);
+    }
+};
+
+export type ActivitySummary = {
+    [key in ActivityPeriod]: number;
+};
+
+export const getActivitySummary = async (days: number = 1): Promise<ActivitySummary> => {
+    const summary: ActivitySummary = {
+        morning: 0,
+        afternoon: 0,
+        evening: 0,
+        night: 0,
+    };
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const q = query(
+        collection(db, ACTIVITY_LOGS_COLLECTION),
+        where("timestamp", ">=", Timestamp.fromDate(startDate))
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    querySnapshot.forEach(doc => {
+        const log = doc.data() as ActivityLogData;
+        if(log.period && summary.hasOwnProperty(log.period)) {
+            summary[log.period]++;
+        }
+    });
+    
+    return summary;
+};
+
+
+export const getFraudAlerts = async (): Promise<(FraudAlertData & {id: string})[]> => {
+    const q = query(
+        collection(db, FRAUD_ALERTS_COLLECTION),
+        orderBy("timestamp", "desc"),
+        limit(50)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (FraudAlertData & {id: string})));
 };
 
 

@@ -21,6 +21,7 @@ import {
   UserDocument,
   getUserData,
   onSnapshot, // Import onSnapshot for real-time listening
+  logUserActivity, // Import activity logger
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
@@ -199,6 +200,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           photoURL,
           currentAppSettings 
         );
+        // Log login activity after successful signup and data creation
+        await logUserActivity(userCredential.user.uid, userCredential.user.email, 'login');
         toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
         router.push('/');
       } catch (setupError: any) {
@@ -226,6 +229,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await logout(true); // Call logout with blocked flag
         return; // Stop further execution
       }
+
+      // Log login activity after successful signin
+      await logUserActivity(userCredential.user.uid, userCredential.user.email, 'login');
 
       toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/');
