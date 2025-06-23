@@ -196,60 +196,63 @@ export default function AdminPage() {
     const value = e.target.value;
     setAddBalancePresetsInput(value);
     
-    const presetsStringArray = value.split(',');
-    const presetsNumberArray: number[] = [];
-    for (const s of presetsStringArray) {
-        const num = parseFloat(s.trim());
-        if (!isNaN(num) && num > 0) {
-            presetsNumberArray.push(num);
-        }
-    }
+    const presets = value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
     
     setCurrentAppSettings(prev => ({
         ...prev,
-        addBalancePresets: presetsNumberArray
+        addBalancePresets: presets
     }));
   };
   
-    const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
-        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
-        newAppSettings.wheelConfigs[tierId][field] = finalValue;
-        setCurrentAppSettings(newAppSettings);
-    };
+  const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
+      setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
+          newAppSettings.wheelConfigs[tierId][field] = finalValue;
+          return newAppSettings;
+      });
+  };
 
-    const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
-        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const finalValue = parseFloat(value) || 0;
-        newAppSettings.wheelConfigs[tierId].costSettings[field] = finalValue;
-        setCurrentAppSettings(newAppSettings);
-    };
+  const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
+      setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const finalValue = parseFloat(value) || 0;
+          newAppSettings.wheelConfigs[tierId].costSettings[field] = finalValue;
+          return newAppSettings;
+      });
+  };
 
-    const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
-        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
-        newAppSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
-        setCurrentAppSettings(newAppSettings);
-    };
+  const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
+      setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
+          newAppSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
+          return newAppSettings;
+      });
+  };
 
-    const addSegment = (tierId: string) => {
-        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const newSegment: SegmentConfig = {
-            id: `${tierId.charAt(0)}${new Date().getTime()}`,
-            text: 'New Prize',
-            emoji: '🎉',
-            multiplier: 1,
-            color: '0 0% 80%',
-        };
-        newAppSettings.wheelConfigs[tierId].segments.push(newSegment);
-        setCurrentAppSettings(newAppSettings);
-    };
+  const addSegment = (tierId: string) => {
+      setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const newSegment: SegmentConfig = {
+              id: `${tierId.charAt(0)}${new Date().getTime()}`,
+              text: 'New Prize',
+              emoji: '🎉',
+              multiplier: 1,
+              color: '0 0% 80%',
+          };
+          newAppSettings.wheelConfigs[tierId].segments.push(newSegment);
+          return newAppSettings;
+      });
+  };
 
-    const removeSegment = (tierId: string, indexToRemove: number) => {
-        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        newAppSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
-        setCurrentAppSettings(newAppSettings);
-    };
+  const removeSegment = (tierId: string, indexToRemove: number) => {
+      setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          newAppSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
+          return newAppSettings;
+      });
+  };
   
   const handleDragStart = (tierId: string, index: number) => {
     setDraggedSegment({ tierId, index });
@@ -259,22 +262,22 @@ export default function AdminPage() {
     e.preventDefault();
   };
 
-    const handleDrop = (targetTierId: string, dropIndex: number) => {
-        if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
-            setDraggedSegment(null);
-            return;
-        }
-
-        const sourceIndex = draggedSegment.index;
-        
-        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const segments = newAppSettings.wheelConfigs[targetTierId].segments;
-        const [draggedItem] = segments.splice(sourceIndex, 1);
-        segments.splice(dropIndex, 0, draggedItem);
-        setCurrentAppSettings(newAppSettings);
-        
-        setDraggedSegment(null);
-    };
+  const handleDrop = (targetTierId: string, dropIndex: number) => {
+      if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
+          setDraggedSegment(null);
+          return;
+      }
+      
+      setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const segments = newAppSettings.wheelConfigs[targetTierId].segments;
+          const [draggedItem] = segments.splice(draggedSegment.index, 1);
+          segments.splice(dropIndex, 0, draggedItem);
+          return newAppSettings;
+      });
+      
+      setDraggedSegment(null);
+  };
 
   const handleDragEnd = () => {
     setDraggedSegment(null);
@@ -709,5 +712,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    
