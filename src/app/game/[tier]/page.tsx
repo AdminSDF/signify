@@ -31,23 +31,23 @@ const TipModal = dynamic(() => import('@/components/TipModal'), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
 // This function determines the spin outcome based on the 60/40 rule
-const getSpinResult = (betAmount: number): { winAmount: number; outcome: 'Big Win' | 'Medium Win' | 'Small Win' | 'Loss' } => {
+const getSpinResult = (betAmount: number): { winAmount: number; multiplier: number } => {
   const adminWinChance = 0.6; // 60%
   const random = Math.random();
 
   if (random <= adminWinChance) {
-    return { winAmount: 0, outcome: 'Loss' }; // Admin wins
+    return { winAmount: 0, multiplier: 0 }; // Admin wins (Loss)
   }
 
   // User wins, now determine the prize tier (Small: 70%, Medium: 20%, Big: 10% of wins)
   const winRandom = Math.random();
   if (winRandom <= 0.7) {
-    return { winAmount: betAmount * 0.5, outcome: 'Small Win' };
+    return { winAmount: betAmount * 0.5, multiplier: 0.5 }; // Small Win
   }
   if (winRandom <= 0.9) { // 0.7 + 0.2
-    return { winAmount: betAmount * 1.5, outcome: 'Medium Win' };
+    return { winAmount: betAmount * 1.5, multiplier: 1.5 }; // Medium Win
   }
-  return { winAmount: betAmount * 3, outcome: 'Big Win' };
+  return { winAmount: betAmount * 3, multiplier: 3 }; // Big Win
 };
 
 
@@ -220,26 +220,25 @@ export default function GamePage() {
     
     // --- New Spin Logic ---
     const betAmount = isFreeSpin ? 0 : spinCost;
-    const { winAmount, outcome } = getSpinResult(betAmount);
+    const { winAmount, multiplier } = getSpinResult(betAmount);
     
-    const outcomeToSegmentTextMap = {
-      'Big Win': 'Big Win',
-      'Medium Win': 'Medium Win',
-      'Small Win': 'Small Win',
-      'Loss': 'Try Again',
-    };
+    // Find all segments that match the winning multiplier
+    const possibleSegments = wheelConfig.segments
+      .map((segment, index) => ({ ...segment, originalIndex: index }))
+      .filter(s => s.multiplier === multiplier);
 
-    const targetSegmentText = outcomeToSegmentTextMap[outcome];
-    const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.text === targetSegmentText);
-    
-    if (winningSegmentIndex === -1) {
-        toast({ title: "Config Error", description: `Could not find segment for outcome: ${targetSegmentText}`, variant: "destructive" });
+    if (possibleSegments.length === 0) {
+        toast({ title: "Config Error", description: `Could not find any segment with a multiplier of ${multiplier}x. Please check admin panel.`, variant: "destructive" });
         return;
     }
 
+    // Randomly pick one of the possible segments
+    const winningSegment = possibleSegments[Math.floor(Math.random() * possibleSegments.length)];
+    const winningSegmentIndex = winningSegment.originalIndex;
+    
     // Set the winning segment's amount dynamically for prize display
     const winningSegmentForDisplay: Segment = {
-        ...wheelConfig.segments[winningSegmentIndex],
+        ...winningSegment,
         amount: winAmount,
     };
 
