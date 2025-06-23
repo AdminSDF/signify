@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/context/AuthContext';
@@ -14,7 +15,7 @@ import { cn } from '@/lib/utils';
 type FormData = LoginCredentials | SignUpCredentials;
 
 export default function LoginPage() {
-  const { user, loginWithEmailPassword, signUpWithEmailPassword, loading } = useAuth();
+  const { user, loginWithEmailPassword, signUpWithEmailPassword, loading, appSettings } = useAuth();
   const router = useRouter();
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [isSpinning, setIsSpinning] = useState(false); // State to control animation
@@ -100,14 +101,26 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-black p-4">
       <div
         className={cn(
-          "relative w-[450px] h-[450px] rounded-full border-8 border-red-600 overflow-hidden flex items-center justify-center shadow-2xl",
-          isSpinning && "animate-spin-once" // Conditionally apply animation
+          "relative w-[450px] h-[450px] rounded-full border-8 border-red-600 overflow-hidden flex items-center justify-center",
+          isSpinning && "animate-spin-once"
         )}
         style={wheelStyle}
       >
         <div className="absolute w-full h-full bg-black/30 rounded-full backdrop-blur-sm"></div>
 
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-black rounded-full border-4 border-gray-500 z-20"></div>
+        {/* Centerpiece with Logo */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full border-4 border-gray-500 z-20 overflow-hidden bg-background">
+          {appSettings.logoUrl && (
+            <Image
+              src={appSettings.logoUrl}
+              alt="Spinify Logo"
+              width={80}
+              height={80}
+              className="h-full w-full object-cover"
+              priority
+            />
+          )}
+        </div>
 
         <div className="relative z-10 w-full flex flex-col items-center justify-center p-8">
           <Form {...form}>
