@@ -355,12 +355,6 @@ export default function GamePage() {
     const balanceAfter = balanceBefore + netChange;
     setUserBalance(balanceAfter);
     
-    if (winAmount > 0) {
-      toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
-    } else {
-      toast({ title: "Better luck next time!", description: "You didn't win a prize. Try again!" });
-    }
-    
     await addTransaction({
         amount: netChange,
         description: `Spin: Bet ₹${betAmount.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`,
@@ -399,6 +393,13 @@ export default function GamePage() {
     setIsSpinning(false);
     
     if (!user || !userData || !prizeToDisplay) return;
+    
+    const winAmount = prizeToDisplay.amount ?? 0;
+    if (winAmount > 0) {
+      toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
+    } else {
+      toast({ title: "Better luck next time!", description: "You didn't win a prize. Try again!" });
+    }
 
     const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: prizeToDisplay.amount ? `₹${prizeToDisplay.amount.toFixed(2)}` : prizeToDisplay.text };
     const updatedHistory = [...spinHistory, newSpinRecordForAI];
@@ -416,7 +417,7 @@ export default function GamePage() {
     } else {
       playSound('tryAgain');
     }
-  }, [playSound, spinHistory, user, userData, fetchAssistantMessage]);
+  }, [playSound, spinHistory, user, userData, fetchAssistantMessage, toast]);
   
   const handlePaymentConfirm = useCallback(async () => {
     setShowPaymentModal(false);
