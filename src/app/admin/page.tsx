@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFoot } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -281,8 +281,24 @@ export default function AdminPage() {
     }
   };
 
+  const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
+    if (!req) return 'N/A';
+    if (req.paymentMethod === 'upi') {
+      return `UPI: ${req.upiId || 'N/A'}`;
+    }
+    if (req.paymentMethod === 'bank') {
+      const holderName = req.bankDetails?.accountHolderName;
+      const lastFour = req.bankDetails?.accountNumber?.slice(-4) ?? '****';
+      if (holderName) {
+        return `Bank: ${holderName}, A/C ...${lastFour}`;
+      }
+      return `Bank: A/C ...${lastFour}`;
+    }
+    return 'N/A';
+  };
+
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => {
-    const paymentMethodDetails = request.paymentMethod === 'upi' ? `UPI: ${request.upiId}` : `Bank: A/C ending ${request.bankDetails?.accountNumber.slice(-4)}`;
+    const paymentMethodDetails = getPaymentDetailsString(request);
     try {
       await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, paymentMethodDetails);
       toast({ title: "Withdrawal Approved & Processed", description: `₹${request.amount} processed for ${request.userEmail}.`});
@@ -315,6 +331,26 @@ export default function AdminPage() {
     }
   };
 
+  const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'datetime'): string => {
+    if (!dateInput) return 'N/A';
+    
+    let dateObj: Date;
+    if (dateInput instanceof Timestamp) {
+      dateObj = dateInput.toDate();
+    } else {
+      dateObj = new Date(dateInput);
+    }
+  
+    if (isNaN(dateObj.getTime())) {
+      return 'N/A';
+    }
+  
+    if (format === 'date') {
+      return dateObj.toLocaleDateString();
+    }
+    return dateObj.toLocaleString();
+  };
+
   if (loading) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
@@ -336,7 +372,12 @@ export default function AdminPage() {
     );
   }
 
-  const getTierName = (tierId: string) => appSettings.wheelConfigs[tierId]?.name || tierId;
+  const getTierName = (tierId: string): string => appSettings.wheelConfigs[tierId]?.name || tierId;
+
+  const getUserBalanceForTier = (user: UserDocument, tierId: string): string => {
+    const balance = user.balances?.[tierId] ?? 0;
+    return balance.toFixed(2);
+  };
 
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
@@ -377,13 +418,13 @@ export default function AdminPage() {
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{u.displayName?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
-                          {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{(u.balances?.[tierId] ?? 0).toFixed(2)}</TableCell>)}
+                          {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{getUserBalanceForTier(u, tierId)}</TableCell>)}
                           <TableCell>{u.spinsAvailable}</TableCell>
                           <TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
                           <TableCell>{u.totalDeposited?.toFixed(2) ?? '0.00'}</TableCell>
                           <TableCell>{u.totalWithdrawn?.toFixed(2) ?? '0.00'}</TableCell>
-                          <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleString() : 'N/A'}</TableCell>
-                          <TableCell>{u.lastActive ? (u.lastActive instanceof Timestamp ? u.lastActive.toDate().toLocaleString() : new Date(u.lastActive as any).toLocaleString()) : 'N/A'}</TableCell>
+                          <TableCell>{formatDisplayDate(u.createdAt)}</TableCell>
+                          <TableCell>{formatDisplayDate(u.lastActive)}</TableCell>
                           <TableCell>
                              <Badge variant={u.isBlocked ? 'destructive' : 'default'}>{u.isBlocked ? 'Blocked' : 'Active'}</Badge>
                              {u.isAdmin && <Badge variant="secondary" className="ml-2">Admin</Badge>}
@@ -393,7 +434,7 @@ export default function AdminPage() {
                               <Label htmlFor={`block-switch-${u.id}`} className="text-xs text-muted-foreground">{u.isBlocked ? 'Unblock' : 'Block'}</Label>
                               <Switch
                                 id={`block-switch-${u.id}`}
-                                checked={u.isBlocked}
+                                checked={u.isBlocked || false}
                                 onCheckedChange={() => handleToggleUserBlock(u.id, u.isBlocked || false)}
                                 disabled={u.isAdmin} // Prevent blocking admins
                                 aria-label={`Block or unblock user ${u.displayName}`}
@@ -524,7 +565,7 @@ export default function AdminPage() {
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
                           <TableCell><Badge variant="outline">{getTierName(req.tierId)}</Badge></TableCell>
                           <TableCell className="text-xs">{req.paymentReference}</TableCell>
-                          <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
+                          <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
                         </TableRow>))}
@@ -542,8 +583,8 @@ export default function AdminPage() {
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
                           <TableCell><Badge variant="outline">{getTierName(req.tierId)}</Badge></TableCell>
-                          <TableCell className="text-xs">{req.paymentMethod === 'upi' ? `UPI: ${req.upiId}` : `Bank: ${req.bankDetails?.accountHolderName}, A/C ...${req.bankDetails?.accountNumber.slice(-4)}`}</TableCell>
-                          <TableCell>{req.requestDate instanceof Timestamp ? req.requestDate.toDate().toLocaleDateString() : new Date(req.requestDate).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell>
+                          <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
                         </TableRow>))}
@@ -564,7 +605,7 @@ export default function AdminPage() {
                             <TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</TableCell>
                              <TableCell>{t.tierId ? <Badge variant="outline">{getTierName(t.tierId)}</Badge> : 'N/A'}</TableCell>
                             <TableCell>{t.description}</TableCell>
-                            <TableCell>{t.date instanceof Timestamp ? t.date.toLocaleString() : new Date(t.date as any).toLocaleString()}</TableCell>
+                            <TableCell>{formatDisplayDate(t.date)}</TableCell>
                             <TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell>
                         </TableRow>
                       ))}
@@ -614,7 +655,7 @@ export default function AdminPage() {
                               </Dialog>
                             ) : "N/A"}
                           </TableCell>
-                          <TableCell>{ticket.createdAt instanceof Timestamp ? ticket.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
+                          <TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell>
                           <TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell>
                           <TableCell>
                             {ticket.status === 'open' && (
@@ -636,3 +677,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
