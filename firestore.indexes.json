@@ -94,6 +94,26 @@
       ]
     },
     {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "lastActive",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "totalDeposited",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "supportTickets",
       "queryScope": "COLLECTION",
       "fields": [

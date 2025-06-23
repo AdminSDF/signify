@@ -44,6 +44,7 @@ import {
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
@@ -138,6 +139,7 @@ export default function AdminPage() {
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
+  const [userSortBy, setUserSortBy] = useState('totalWinnings_desc');
 
 
   useEffect(() => {
@@ -151,10 +153,11 @@ export default function AdminPage() {
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
     try {
+      const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
       const [withdrawals, adds, users, transactions, leaderboardUsers, tickets] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
-        getAllUsers(),
+        getAllUsers(100, { field, direction }),
         getAllTransactions(),
         getLeaderboardUsers(20),
         getSupportTickets()
@@ -171,7 +174,7 @@ export default function AdminPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [toast]);
+  }, [toast, userSortBy]);
 
   useEffect(() => {
     if (userData?.isAdmin && !loading) {
@@ -205,35 +208,57 @@ export default function AdminPage() {
   };
   
   const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
-      setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
-          newAppSettings.wheelConfigs[tierId][field] = finalValue;
-          return newAppSettings;
-      });
+    setCurrentAppSettings(prev => ({
+      ...prev,
+      wheelConfigs: {
+        ...prev.wheelConfigs,
+        [tierId]: {
+          ...prev.wheelConfigs[tierId],
+          [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value
+        }
+      }
+    }));
   };
 
   const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
-      setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          const finalValue = parseFloat(value) || 0;
-          newAppSettings.wheelConfigs[tierId].costSettings[field] = finalValue;
-          return newAppSettings;
-      });
+      setCurrentAppSettings(prev => ({
+          ...prev,
+          wheelConfigs: {
+              ...prev.wheelConfigs,
+              [tierId]: {
+                  ...prev.wheelConfigs[tierId],
+                  costSettings: {
+                      ...prev.wheelConfigs[tierId].costSettings,
+                      [field]: parseFloat(value) || 0
+                  }
+              }
+          }
+      }));
   };
 
   const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
       setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
-          newAppSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
-          return newAppSettings;
+          const newSegments = [...prev.wheelConfigs[tierId].segments];
+          newSegments[segmentIndex] = {
+              ...newSegments[segmentIndex],
+              [field]: field === 'multiplier' ? parseFloat(value) || 0 : value
+          };
+
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tierId]: {
+                      ...prev.wheelConfigs[tierId],
+                      segments: newSegments
+                  }
+              }
+          };
       });
   };
 
   const addSegment = (tierId: string) => {
       setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
           const newSegment: SegmentConfig = {
               id: `${tierId.charAt(0)}${new Date().getTime()}`,
               text: 'New Prize',
@@ -241,16 +266,33 @@ export default function AdminPage() {
               multiplier: 1,
               color: '0 0% 80%',
           };
-          newAppSettings.wheelConfigs[tierId].segments.push(newSegment);
-          return newAppSettings;
+          const newSegments = [...prev.wheelConfigs[tierId].segments, newSegment];
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tierId]: {
+                      ...prev.wheelConfigs[tierId],
+                      segments: newSegments
+                  }
+              }
+          };
       });
   };
 
   const removeSegment = (tierId: string, indexToRemove: number) => {
       setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          newAppSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
-          return newAppSettings;
+          const newSegments = prev.wheelConfigs[tierId].segments.filter((_, index) => index !== indexToRemove);
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tierId]: {
+                      ...prev.wheelConfigs[tierId],
+                      segments: newSegments
+                  }
+              }
+          };
       });
   };
   
@@ -269,10 +311,12 @@ export default function AdminPage() {
       }
       
       setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          const segments = newAppSettings.wheelConfigs[targetTierId].segments;
+          const newAppSettings = { ...prev };
+          const segments = [...newAppSettings.wheelConfigs[targetTierId].segments];
           const [draggedItem] = segments.splice(draggedSegment.index, 1);
           segments.splice(dropIndex, 0, draggedItem);
+          
+          newAppSettings.wheelConfigs[targetTierId].segments = segments;
           return newAppSettings;
       });
       
@@ -437,7 +481,25 @@ export default function AdminPage() {
             </TabsList>
 
              <TabsContent value="overview">
-              <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users and their balances.</CardDescription></CardHeader>
+              <Card className="bg-muted/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle>
+                  <CardDescription>List of all registered users and their balances.</CardDescription>
+                  <div className="pt-4">
+                    <Label htmlFor="user-sort" className="text-sm font-medium">Sort Users By</Label>
+                    <Select value={userSortBy} onValueChange={setUserSortBy}>
+                      <SelectTrigger id="user-sort" className="w-full max-w-sm mt-1">
+                        <SelectValue placeholder="Sort by..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="totalWinnings_desc">Highest Winnings</SelectItem>
+                        <SelectItem value="lastActive_desc">Most Recently Active</SelectItem>
+                        <SelectItem value="totalDeposited_desc">Highest Deposits</SelectItem>
+                        <SelectItem value="createdAt_desc">Newest First</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>User</TableHead>
                    {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
@@ -712,5 +774,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    

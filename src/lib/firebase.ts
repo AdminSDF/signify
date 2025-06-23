@@ -170,10 +170,13 @@ export const uploadProfilePhoto = async (userId: string, file: File): Promise<st
   return downloadURL;
 };
 
-export const getAllUsers = async (count: number = 100): Promise<(UserDocument & {id: string})[]> => {
+export const getAllUsers = async (
+  count: number = 100,
+  sortBy: { field: string; direction: 'asc' | 'desc' } = { field: 'createdAt', direction: 'desc' }
+): Promise<(UserDocument & {id: string})[]> => {
   const q = query(
     collection(db, USERS_COLLECTION),
-    orderBy("createdAt", "desc"),
+    orderBy(sortBy.field, sortBy.direction),
     limit(count)
   );
   const querySnapshot = await getDocs(q);
