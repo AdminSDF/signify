@@ -165,6 +165,11 @@ export default function AdminPage() {
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
   const [userSortBy, setUserSortBy] = useState('totalWinnings_desc');
 
+  const pendingWithdrawalsCount = useMemo(() => withdrawalRequests.filter(req => req.status === 'pending').length, [withdrawalRequests]);
+  const pendingAddFundsCount = useMemo(() => addFundRequests.filter(req => req.status === 'pending').length, [addFundRequests]);
+  const openSupportTicketsCount = useMemo(() => supportTickets.filter(ticket => ticket.status === 'open').length, [supportTickets]);
+  const openFraudAlertsCount = useMemo(() => fraudAlerts.filter(alert => alert.status === 'open').length, [fraudAlerts]);
+
 
   useEffect(() => {
     if (!loading) {
@@ -509,15 +514,48 @@ export default function AdminPage() {
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-11 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="activity"><Activity className="mr-2 h-4 w-4"/>Activity</TabsTrigger>
-              <TabsTrigger value="fraud-alerts"><ShieldAlert className="mr-2 h-4 w-4"/>Fraud Alerts</TabsTrigger>
-              <TabsTrigger value="add-fund"><Banknote className="mr-2 h-4 w-4"/>Add Fund</TabsTrigger>
-              <TabsTrigger value="withdrawal-req"><ClipboardList className="mr-2 h-4 w-4"/>Withdrawal</TabsTrigger>
+              
+              <TabsTrigger value="fraud-alerts" className="relative">
+                <ShieldAlert className="mr-2 h-4 w-4"/>Fraud Alerts
+                {openFraudAlertsCount > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 rounded-full bg-destructive text-destructive-foreground animate-pulse">
+                    {openFraudAlertsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              
+              <TabsTrigger value="add-fund" className="relative">
+                <Banknote className="mr-2 h-4 w-4"/>Add Fund
+                 {pendingAddFundsCount > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 rounded-full bg-destructive text-destructive-foreground animate-pulse">
+                    {pendingAddFundsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              
+              <TabsTrigger value="withdrawal-req" className="relative">
+                <ClipboardList className="mr-2 h-4 w-4"/>Withdrawal
+                 {pendingWithdrawalsCount > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 rounded-full bg-destructive text-destructive-foreground animate-pulse">
+                    {pendingWithdrawalsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+
               <TabsTrigger value="transactions"><History className="mr-2 h-4 w-4" />Transactions</TabsTrigger>
               <TabsTrigger value="leaderboard"><Trophy className="mr-2 h-4 w-4"/>Leaderboard</TabsTrigger>
               <TabsTrigger value="wheel-settings"><Wand2 className="mr-2 h-4 w-4"/>Wheel Settings</TabsTrigger>
               <TabsTrigger value="game-settings"><Settings className="mr-2 h-4 w-4"/>App Settings</TabsTrigger>
               <TabsTrigger value="news-ticker"><Newspaper className="mr-2 h-4 w-4"/>News Ticker</TabsTrigger>
-              <TabsTrigger value="support"><LifeBuoy className="mr-2 h-4 w-4"/>Support</TabsTrigger>
+              
+              <TabsTrigger value="support" className="relative">
+                <LifeBuoy className="mr-2 h-4 w-4"/>Support
+                {openSupportTicketsCount > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 rounded-full bg-destructive text-destructive-foreground animate-pulse">
+                    {openSupportTicketsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
             </TabsList>
 
              <TabsContent value="overview">
