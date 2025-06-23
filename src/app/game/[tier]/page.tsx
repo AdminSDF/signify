@@ -68,7 +68,7 @@ const getSpinResult = (segments: Segment[]): { winningSegment: Segment | undefin
       chosenSegment = pushSegments[Math.floor(Math.random() * pushSegments.length)];
     }
     // If there are no losing or push segments, admin cannot be forced to win. 
-    // We must give the user a prize, so we give them the smallest possible win.
+    // We must give the user a prize, so we give them the smallest possible win to minimize admin loss.
     else if (winningSegments.length > 0) {
       chosenSegment = winningSegments[0];
     }
@@ -104,10 +104,10 @@ const getSpinResult = (segments: Segment[]): { winningSegment: Segment | undefin
   }
 
   // If after all this, a segment couldn't be chosen (e.g., empty segments array initially)
-  if (!chosenSegment) {
-    // This should only happen if segments array is empty, which is handled outside.
-    // But as a final safeguard, we return undefined.
-    return { winningSegment: undefined };
+  // this is the final safeguard. The initial check should catch this, but it's good to have.
+  if (!chosenSegment && segments.length > 0) {
+    // As a last resort, pick any segment from the wheel. This prevents a crash.
+    chosenSegment = segments[Math.floor(Math.random() * segments.length)];
   }
 
   return { winningSegment: chosenSegment };
@@ -378,7 +378,7 @@ export default function GamePage() {
     }
 
     const { winAmount } = { 
-        winAmount: betAmount * winningSegment.multiplier, 
+        winAmount: betAmount * (winningSegment.multiplier ?? 0),
     };
 
     const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
@@ -593,3 +593,5 @@ export default function GamePage() {
     </>
   );
 }
+
+    
