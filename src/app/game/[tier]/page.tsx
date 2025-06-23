@@ -76,6 +76,7 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
   const [currentPrize, setCurrentPrize] = useState<SegmentConfig | null>(null);
+  const pendingPrizeRef = useRef<SegmentConfig | null>(null);
   const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
@@ -285,7 +286,8 @@ export default function GamePage() {
       return;
     }
     
-    resetIdleTimer(); // Reset idle timer on spin attempt
+    resetIdleTimer();
+    setCurrentPrize(null);
 
     let spinCost = 0;
     let isFreeSpin = false;
@@ -295,7 +297,7 @@ export default function GamePage() {
       const newSpins = spinsAvailable - 1;
       setSpinsAvailable(newSpins);
       await updateUserData(user.uid, { spinsAvailable: newSpins });
-    } else { // Paid spin logic
+    } else {
         if (tier === 'little') {
             let currentDailySpins = dailyPaidSpinsUsed;
             const todayString = new Date().toLocaleDateString('en-CA');
@@ -316,7 +318,6 @@ export default function GamePage() {
         }
     }
     
-    // Log spin activity
     await logUserActivity(user.uid, user.email, 'spin');
     
     const betAmount = isFreeSpin ? 0 : spinCost;
@@ -337,6 +338,8 @@ export default function GamePage() {
     }
     
     const prizeForDisplay: SegmentConfig = { ...winningSegment, amount: winAmount };
+    
+    pendingPrizeRef.current = prizeForDisplay;
 
     startSpinProcess(winningSegmentIndex);
     
@@ -373,9 +376,6 @@ export default function GamePage() {
     
     await updateUserData(user.uid, updates);
 
-    // This needs to be stored locally because the spin complete function needs it
-    setCurrentPrize(prizeForDisplay);
-
   }, [
     isClient, isSpinning, user, authLoading, userData, wheelConfig, tier, spinsAvailable,
     userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, resetIdleTimer,
@@ -383,8 +383,10 @@ export default function GamePage() {
   ]);
 
   const handleSpinComplete = useCallback(async (winningSegmentFromWheel: SegmentConfig) => {
-    // The actual prize was already determined in handleSpinClick, this is just for final UI updates
-    const prizeToDisplay = currentPrize;
+    const prizeToDisplay = pendingPrizeRef.current;
+    if (prizeToDisplay) {
+      setCurrentPrize(prizeToDisplay);
+    }
     setIsSpinning(false);
     
     if (!user || !userData || !prizeToDisplay) return;
@@ -405,7 +407,7 @@ export default function GamePage() {
     } else {
       playSound('tryAgain');
     }
-  }, [playSound, spinHistory, user, userData, currentPrize, fetchAssistantMessage]);
+  }, [playSound, spinHistory, user, userData, fetchAssistantMessage]);
   
   const handlePaymentConfirm = useCallback(async () => {
     setShowPaymentModal(false);
