@@ -47,7 +47,6 @@ import { Switch } from '@/components/ui/switch';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
-
 const getTierName = (tierId: string, wheelConfigs: { [key: string]: WheelTierConfig }): string => {
     if (wheelConfigs && wheelConfigs[tierId] && wheelConfigs[tierId].name) {
         return wheelConfigs[tierId].name;
@@ -56,8 +55,8 @@ const getTierName = (tierId: string, wheelConfigs: { [key: string]: WheelTierCon
 };
 
 const getUserBalanceForTier = (user: UserDocument, tierId: string): string => {
-    const balance = user?.balances?.[tierId];
-    if (typeof balance === 'number') {
+    if (user && user.balances && typeof user.balances[tierId] === 'number') {
+        const balance = user.balances[tierId];
         return balance.toFixed(2);
     }
     return '0.00';
@@ -74,35 +73,21 @@ const getAvatarFallback = (user: UserDocument): string => {
 };
 
 const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
-    if (!req) {
-        return 'N/A';
-    }
+    if (!req) return 'N/A';
+    
     if (req.paymentMethod === 'upi') {
-        if (req.upiId) {
-            return `UPI: ${req.upiId}`;
-        }
-        return 'UPI: N/A';
+        return `UPI: ${req.upiId || 'N/A'}`;
     }
-    if (req.paymentMethod === 'bank') {
-        const accountDetails = req.bankDetails;
-        if (!accountDetails) {
-            return 'Bank: Details missing';
+
+    if (req.paymentMethod === 'bank' && req.bankDetails) {
+        const { accountHolderName, accountNumber } = req.bankDetails;
+        const lastFour = accountNumber ? `...${accountNumber.slice(-4)}` : '';
+        if (accountHolderName) {
+            return `Bank: ${accountHolderName}, A/C ${lastFour}`;
         }
-        const holderName = accountDetails.accountHolderName || '';
-        const accNum = accountDetails.accountNumber || '';
-        
-        let lastFour = '****';
-        if (accNum && accNum.length > 4) {
-            lastFour = accNum.slice(-4);
-        } else if (accNum && accNum.length > 0) {
-            lastFour = accNum;
-        }
-        
-        if (holderName) {
-            return `Bank: ${holderName}, A/C ...${lastFour}`;
-        }
-        return `Bank: A/C ...${lastFour}`;
+        return `Bank: A/C ${lastFour}`;
     }
+
     return 'N/A';
 };
 
@@ -195,20 +180,20 @@ export default function AdminPage() {
   }, [userData, loading, fetchAdminData]);
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const { name, value } = e.target;
-      const type = e.target.getAttribute('type');
+    const { name, value } = e.target;
+    const type = e.target.getAttribute('type');
 
-      setCurrentAppSettings(prev => {
-          let finalValue: string | number = value;
-          if (type === 'number') {
-              const numValue = parseFloat(value);
-              finalValue = isNaN(numValue) ? 0 : numValue;
-          }
-          return {
+    setCurrentAppSettings(prev => {
+        let finalValue: string | number = value;
+        if (type === 'number') {
+            const numValue = parseFloat(value);
+            finalValue = isNaN(numValue) ? 0 : numValue;
+        }
+        return {
             ...prev,
-            [name]: finalValue
-          };
-      });
+            [name]: finalValue,
+        };
+    });
   };
 
   const handleAddBalancePresetsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,63 +213,86 @@ export default function AdminPage() {
         }
     }
     
-    setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: validPresets }));
+    setCurrentAppSettings(prev => ({
+        ...prev,
+        addBalancePresets: validPresets,
+    }));
   };
   
   const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
     setCurrentAppSettings(prev => {
-      const newAppSettings = JSON.parse(JSON.stringify(prev));
-      const tierConfig = newAppSettings.wheelConfigs[tierId];
-      if (!tierConfig) return prev;
-
-      if (field === 'minWithdrawalAmount') {
         const numValue = parseFloat(value);
-        tierConfig.minWithdrawalAmount = isNaN(numValue) ? 0 : numValue;
-      } else {
-        tierConfig[field] = value;
-      }
-      return newAppSettings;
+        const finalValue = (field === 'minWithdrawalAmount' && !isNaN(numValue)) ? numValue : value;
+        
+        const updatedTier = {
+            ...prev.wheelConfigs[tierId],
+            [field]: finalValue,
+        };
+
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [tierId]: updatedTier,
+            },
+        };
     });
   };
 
   const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
       setCurrentAppSettings(prev => {
-        const newAppSettings = JSON.parse(JSON.stringify(prev));
-        const costSettings = newAppSettings.wheelConfigs[tierId]?.costSettings;
-        if (!costSettings) return prev;
+          const numValue = parseFloat(value);
+          const finalValue = isNaN(numValue) ? 0 : numValue;
+          
+          const updatedCostSettings = {
+              ...prev.wheelConfigs[tierId].costSettings,
+              [field]: finalValue,
+          };
+          
+          const updatedTier = {
+              ...prev.wheelConfigs[tierId],
+              costSettings: updatedCostSettings,
+          };
 
-        const numValue = parseFloat(value);
-        const finalValue = isNaN(numValue) ? 0 : numValue;
-
-        costSettings[field] = finalValue;
-        
-        return newAppSettings;
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tierId]: updatedTier,
+              },
+          };
       });
   };
 
   const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
     setCurrentAppSettings(prev => {
-      const newAppSettings = JSON.parse(JSON.stringify(prev));
-      const segment = newAppSettings.wheelConfigs[tierId]?.segments[segmentIndex];
-      if (!segment) return prev;
+        const numValue = parseFloat(value);
+        const finalValue = (field === 'multiplier' && !isNaN(numValue)) ? numValue : value;
 
-      if (field === 'multiplier') {
-          const numValue = parseFloat(value);
-          segment.multiplier = isNaN(numValue) ? 0 : numValue;
-      } else if (field === 'text' || field === 'emoji' || field === 'color') {
-        segment[field] = value;
-      }
-      
-      return newAppSettings;
+        const updatedSegments = prev.wheelConfigs[tierId].segments.map((seg, index) => {
+            if (index === segmentIndex) {
+                return { ...seg, [field]: finalValue };
+            }
+            return seg;
+        });
+
+        const updatedTier = {
+            ...prev.wheelConfigs[tierId],
+            segments: updatedSegments,
+        };
+
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [tierId]: updatedTier,
+            },
+        };
     });
   };
   
   const addSegment = (tierId: string) => {
       setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          const tierConfig = newAppSettings.wheelConfigs[tierId];
-          if (!tierConfig) return prev;
-
           const newSegment: SegmentConfig = {
               id: `${tierId.charAt(0)}${new Date().getTime()}`,
               text: 'New Prize',
@@ -292,20 +300,40 @@ export default function AdminPage() {
               multiplier: 1,
               color: '0 0% 80%',
           };
+
+          const updatedSegments = [...prev.wheelConfigs[tierId].segments, newSegment];
           
-          tierConfig.segments.push(newSegment);
-          return newAppSettings;
+          const updatedTier = {
+              ...prev.wheelConfigs[tierId],
+              segments: updatedSegments,
+          };
+
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tierId]: updatedTier,
+              },
+          };
       });
   };
   
   const removeSegment = (tierId: string, indexToRemove: number) => {
     setCurrentAppSettings(prev => {
-      const newAppSettings = JSON.parse(JSON.stringify(prev));
-      const tierConfig = newAppSettings.wheelConfigs[tierId];
-      if (!tierConfig) return prev;
-      
-      tierConfig.segments = tierConfig.segments.filter((_, index) => index !== indexToRemove);
-      return newAppSettings;
+        const updatedSegments = prev.wheelConfigs[tierId].segments.filter((_, index) => index !== indexToRemove);
+
+        const updatedTier = {
+            ...prev.wheelConfigs[tierId],
+            segments: updatedSegments,
+        };
+
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [tierId]: updatedTier,
+            },
+        };
     });
   };
   
@@ -318,24 +346,32 @@ export default function AdminPage() {
   };
 
   const handleDrop = (targetTierId: string, dropIndex: number) => {
-      if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
-        setDraggedSegment(null);
-        return;
-      }
-  
-      setCurrentAppSettings(prev => {
-          const newAppSettings = JSON.parse(JSON.stringify(prev));
-          const tierConfig = newAppSettings.wheelConfigs[targetTierId];
-          if (!tierConfig) return prev;
-
-          const segmentsCopy = tierConfig.segments;
-          const [draggedItem] = segmentsCopy.splice(draggedSegment.index, 1);
-          segmentsCopy.splice(dropIndex, 0, draggedItem);
-          
-          return newAppSettings;
-      });
-  
+    if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
       setDraggedSegment(null);
+      return;
+    }
+
+    setCurrentAppSettings(prev => {
+        const currentSegments = prev.wheelConfigs[targetTierId].segments;
+        const newSegments = Array.from(currentSegments);
+        const [draggedItem] = newSegments.splice(draggedSegment.index, 1);
+        newSegments.splice(dropIndex, 0, draggedItem);
+        
+        const updatedTier = {
+            ...prev.wheelConfigs[targetTierId],
+            segments: newSegments,
+        };
+        
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [targetTierId]: updatedTier,
+            },
+        };
+    });
+
+    setDraggedSegment(null);
   };
 
   const handleDragEnd = () => {
