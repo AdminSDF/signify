@@ -110,33 +110,58 @@ export default function AdminPage() {
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    let finalValue: string | number = value;
+    if (type === 'number') {
+        const num = parseFloat(value);
+        finalValue = isNaN(num) ? 0 : num;
+    }
     setCurrentAppSettings(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value,
+      [name]: finalValue,
     }));
   };
 
   const handleAddBalancePresetsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setAddBalancePresetsInput(value);
-    const presets = value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
-    setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: presets }));
+    
+    const presetsArray = value.split(',');
+    const validPresets: number[] = [];
+
+    for (const s of presetsArray) {
+        const trimmedString = s.trim();
+        if (trimmedString === '') continue;
+        
+        const num = parseFloat(trimmedString);
+        if (!isNaN(num) && num > 0) {
+            validPresets.push(num);
+        }
+    }
+    
+    setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: validPresets }));
   };
 
   const handleWheelConfigChange = (tier: string, field: string, value: any) => {
+      let finalValue = value;
+      if (field === 'minWithdrawalAmount') {
+        const num = parseFloat(value);
+        finalValue = isNaN(num) ? 0 : num;
+      }
       setCurrentAppSettings(prev => ({
           ...prev,
           wheelConfigs: {
               ...prev.wheelConfigs,
               [tier]: {
                   ...prev.wheelConfigs[tier],
-                  [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value
+                  [field]: finalValue
               }
           }
       }));
   };
   
   const handleCostSettingChange = (tier: string, field: string, value: any) => {
+      const num = parseFloat(value);
+      const finalValue = isNaN(num) ? 0 : num;
       setCurrentAppSettings(prev => ({
           ...prev,
           wheelConfigs: {
@@ -145,7 +170,7 @@ export default function AdminPage() {
                   ...prev.wheelConfigs[tier],
                   costSettings: {
                       ...prev.wheelConfigs[tier].costSettings,
-                      [field]: parseFloat(value) || 0
+                      [field]: finalValue
                   }
               }
           }
@@ -154,9 +179,14 @@ export default function AdminPage() {
 
   const handleSegmentChange = (tier: string, index: number, field: string, value: any) => {
       const updatedSegments = [...currentAppSettings.wheelConfigs[tier].segments];
+      let finalValue = value;
+      if (field === 'multiplier') {
+        const num = parseFloat(value);
+        finalValue = isNaN(num) ? 0 : num;
+      }
       updatedSegments[index] = {
           ...updatedSegments[index],
-          [field]: field === 'multiplier' ? parseFloat(value) || 0 : value
+          [field]: finalValue
       };
       handleWheelConfigChange(tier, 'segments', updatedSegments);
   };
@@ -282,13 +312,26 @@ export default function AdminPage() {
   };
 
   const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
-    if (!req) return 'N/A';
+    if (!req) {
+      return 'N/A';
+    }
     if (req.paymentMethod === 'upi') {
       return `UPI: ${req.upiId || 'N/A'}`;
     }
     if (req.paymentMethod === 'bank') {
-      const holderName = req.bankDetails?.accountHolderName;
-      const lastFour = req.bankDetails?.accountNumber?.slice(-4) ?? '****';
+      const accountDetails = req.bankDetails;
+      if (!accountDetails) {
+        return 'Bank: Details missing';
+      }
+      const holderName = accountDetails.accountHolderName || '';
+      const accNumStr = String(accountDetails.accountNumber || '');
+      let lastFour = '****';
+      if (accNumStr.length > 4) {
+        lastFour = accNumStr.slice(-4);
+      } else if (accNumStr.length > 0) {
+        lastFour = accNumStr;
+      }
+      
       if (holderName) {
         return `Bank: ${holderName}, A/C ...${lastFour}`;
       }
@@ -296,6 +339,7 @@ export default function AdminPage() {
     }
     return 'N/A';
   };
+
 
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => {
     const paymentMethodDetails = getPaymentDetailsString(request);
@@ -330,7 +374,7 @@ export default function AdminPage() {
         toast({ title: "Error", description: "Could not resolve the ticket.", variant: "destructive" });
     }
   };
-
+  
   const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'datetime'): string => {
     if (!dateInput) return 'N/A';
     
@@ -371,12 +415,23 @@ export default function AdminPage() {
         </div>
     );
   }
-
-  const getTierName = (tierId: string): string => appSettings.wheelConfigs[tierId]?.name || tierId;
+  
+  const getTierName = (tierId: string): string => {
+    const configs = appSettings?.wheelConfigs;
+    if (configs) {
+        const specificConfig = configs[tierId];
+        if (specificConfig && specificConfig.name) {
+            return specificConfig.name;
+        }
+    }
+    return tierId;
+  };
 
   const getUserBalanceForTier = (user: UserDocument, tierId: string): string => {
-    const balance = user.balances?.[tierId] ?? 0;
-    return balance.toFixed(2);
+    if (user && user.balances && typeof user.balances[tierId] === 'number') {
+        return user.balances[tierId].toFixed(2);
+    }
+    return '0.00';
   };
 
   return (
@@ -677,4 +732,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
