@@ -16,7 +16,7 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
   useEffect(() => {
     if (prize) {
       setVisible(false); 
-      const timer = setTimeout(() => setVisible(true), 100);
+      const timer = setTimeout(() => setVisible(true), 100); // Short delay for transition effect
       return () => clearTimeout(timer);
     } else {
       setVisible(false);
@@ -31,8 +31,7 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
     );
   }
 
-  const isWin = prize.multiplier > 0;
-  const prizeAmount = prize.amount;
+  const hasWonAmount = prize.amount !== undefined && prize.amount > 0;
 
   return (
     <div className={cn(
@@ -41,21 +40,21 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
     )}>
       <Card className={cn(
         "text-center shadow-xl w-full max-w-md mx-auto my-4",
-        isWin ? "border-green-500 bg-green-50 dark:bg-green-900/30" : "border-destructive bg-red-50 dark:bg-red-900/30"
+        hasWonAmount ? "border-green-500 bg-green-50 dark:bg-green-900/30" : "border-destructive bg-red-50 dark:bg-red-900/30"
       )}>
         <CardHeader className="p-4">
           <CardTitle className={cn(
             "text-3xl font-bold font-headline flex items-center justify-center gap-3",
-            isWin ? "text-green-700 dark:text-green-300" : "text-destructive"
+            hasWonAmount ? "text-green-700 dark:text-green-300" : "text-destructive"
           )}>
             <span className="text-4xl">{prize.emoji}</span>
             <span>{prize.text}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          {isWin && prizeAmount !== undefined && prizeAmount > 0 ? (
+          {hasWonAmount ? (
             <p className="text-2xl font-semibold text-foreground">
-              You won <span className="font-bold text-primary">₹{prizeAmount.toFixed(2)}!</span>
+              You won <span className="font-bold text-primary">₹{prize.amount.toFixed(2)}!</span>
             </p>
           ) : (
             <p className="text-xl font-medium text-muted-foreground">

@@ -31,16 +31,19 @@ import { Steps } from 'intro.js-react';
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
-const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConfig | undefined } => {
+
+const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConfig } => {
   if (!segments || segments.length === 0) {
-    return { winningSegment: undefined };
+    // This case should be handled by the UI, but as a fallback:
+    throw new Error("Cannot determine spin result from an empty segments array.");
   }
 
   const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
 
   if (totalProbability <= 0) {
     console.warn("No probabilities set for any segment. Falling back to equal distribution.");
-    return { winningSegment: segments[Math.floor(Math.random() * segments.length)] };
+    const randomIndex = Math.floor(Math.random() * segments.length);
+    return { winningSegment: segments[randomIndex] };
   }
 
   let random = Math.random() * totalProbability;
@@ -52,6 +55,7 @@ const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConf
     }
   }
   
+  // Fallback in case of floating point inaccuracies
   return { winningSegment: segments[segments.length - 1] };
 };
 
@@ -339,13 +343,17 @@ export default function GamePage() {
     const balanceAfter = balanceBefore + netChange;
     setUserBalance(balanceAfter);
     
-    const description = `Spin Result: ${netChange >= 0 ? '+' : ''}₹${netChange.toFixed(2)} (Bet: ₹${betAmount.toFixed(2)}, Win: ₹${winAmount.toFixed(2)})`;
-    toast({ title: description });
+    const descriptionForHistory = `Spin: Bet ₹${betAmount.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`;
+    if (winAmount > 0) {
+      toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
+    } else {
+      toast({ title: "Better luck next time!", description: "You didn't win a prize. Try again!" });
+    }
     
     await addTransaction({
         type: 'spin',
         amount: netChange,
-        description,
+        description: descriptionForHistory,
         spinDetails: { betAmount, winAmount },
         balanceBefore,
         balanceAfter,
@@ -386,10 +394,10 @@ export default function GamePage() {
     const updatedHistory = [...spinHistory, newSpinRecordForAI];
     setSpinHistory(updatedHistory);
     
-    const isWin = prizeToDisplay.multiplier > 0;
-    fetchAssistantMessage(isWin ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
+    const hasWonMoney = prizeToDisplay.amount !== undefined && prizeToDisplay.amount > 0;
+    fetchAssistantMessage(hasWonMoney ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
     
-    if (prizeToDisplay.amount && prizeToDisplay.amount > 0) {
+    if (hasWonMoney) {
       playSound('win');
       if (prizeToDisplay.amount >= 10) { 
         setShowConfetti(true); 
@@ -419,7 +427,6 @@ export default function GamePage() {
     );
   }
 
-  // New check for wheel configuration
   if (!wheelConfig.segments || wheelConfig.segments.length === 0) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
