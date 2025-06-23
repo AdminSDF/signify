@@ -21,7 +21,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon,
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock,
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig } from '@/lib/appConfig';
@@ -248,6 +248,19 @@ export default function AdminPage() {
         [tierId]: {
           ...prev.wheelConfigs[tierId],
           [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value
+        }
+      }
+    }));
+  };
+
+  const handleToggleLock = (tierId: string, checked: boolean) => {
+    setCurrentAppSettings(prev => ({
+      ...prev,
+      wheelConfigs: {
+        ...prev.wheelConfigs,
+        [tierId]: {
+          ...prev.wheelConfigs[tierId],
+          isLocked: checked
         }
       }
     }));
@@ -704,22 +717,34 @@ export default function AdminPage() {
                                  <AccordionItem value={`item-${tier.id}`} key={tier.id}>
                                      <AccordionTrigger className="text-xl font-semibold">{tier.name}</AccordionTrigger>
                                      <AccordionContent className="space-y-6 p-4">
-                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div><Label>Name</Label><Input value={tier.name} onChange={(e) => handleWheelConfigChange(tier.id, 'name', e.target.value)} /></div>
-                                            <div><Label>Description</Label><Input value={tier.description} onChange={(e) => handleWheelConfigChange(tier.id, 'description', e.target.value)} /></div>
-                                            <div><Label>Min Withdrawal (₹)</Label><Input type="number" value={tier.minWithdrawalAmount} onChange={(e) => handleWheelConfigChange(tier.id, 'minWithdrawalAmount', e.target.value)} /></div>
+                                        <div className="border p-4 rounded-md space-y-4">
+                                            <h3 className="font-semibold text-lg">Arena Settings</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div><Label>Name</Label><Input value={tier.name} onChange={(e) => handleWheelConfigChange(tier.id, 'name', e.target.value)} /></div>
+                                                <div><Label>Description</Label><Input value={tier.description} onChange={(e) => handleWheelConfigChange(tier.id, 'description', e.target.value)} /></div>
+                                                <div><Label>Min Withdrawal (₹)</Label><Input type="number" value={tier.minWithdrawalAmount} onChange={(e) => handleWheelConfigChange(tier.id, 'minWithdrawalAmount', e.target.value)} /></div>
+                                            </div>
+                                            <div className="flex items-center space-x-2 pt-2">
+                                                <Switch id={`lock-switch-${tier.id}`} checked={tier.isLocked} onCheckedChange={(checked) => handleToggleLock(tier.id, checked)} />
+                                                <Label htmlFor={`lock-switch-${tier.id}`} className="text-destructive font-semibold">Lock this game arena</Label>
+                                            </div>
+                                        </div>
+
+                                        <div className="border p-4 rounded-md space-y-4">
+                                            <h3 className="font-semibold text-lg">Spin Cost Settings</h3>
                                             {tier.costSettings.type === 'fixed' ? (
-                                                <div className="md:col-span-3"><Label>Spin Cost (₹)</Label><Input type="number" value={tier.costSettings.baseCost} onChange={(e) => handleCostSettingChange(tier.id, 'baseCost', e.target.value)} /></div>
-                                            ) : (
-                                                <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-5 gap-2 border p-2 rounded-md">
-                                                    <div><Label>Tier 1 Limit</Label><Input type="number" value={tier.costSettings.tier1Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Limit', e.target.value)} /></div>
-                                                    <div><Label>Tier 1 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier1Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Cost', e.target.value)} /></div>
-                                                    <div><Label>Tier 2 Limit</Label><Input type="number" value={tier.costSettings.tier2Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Limit', e.target.value)} /></div>
-                                                    <div><Label>Tier 2 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier2Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Cost', e.target.value)} /></div>
-                                                    <div><Label>Tier 3 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier3Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier3Cost', e.target.value)} /></div>
-                                                </div>
-                                            )}
-                                         </div>
+                                                  <div className="md:col-span-3"><Label>Spin Cost (₹)</Label><Input type="number" value={tier.costSettings.baseCost} onChange={(e) => handleCostSettingChange(tier.id, 'baseCost', e.target.value)} /></div>
+                                              ) : (
+                                                  <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-5 gap-2">
+                                                      <div><Label>Tier 1 Limit</Label><Input type="number" value={tier.costSettings.tier1Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Limit', e.target.value)} /></div>
+                                                      <div><Label>Tier 1 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier1Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Cost', e.target.value)} /></div>
+                                                      <div><Label>Tier 2 Limit</Label><Input type="number" value={tier.costSettings.tier2Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Limit', e.target.value)} /></div>
+                                                      <div><Label>Tier 2 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier2Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Cost', e.target.value)} /></div>
+                                                      <div><Label>Tier 3 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier3Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier3Cost', e.target.value)} /></div>
+                                                  </div>
+                                              )}
+                                        </div>
+
                                          <h4 className="font-semibold text-lg border-b pb-2">Segments (Prizes &amp; Probabilities)</h4>
                                          <Table>
                                             <TableHeader><TableRow>

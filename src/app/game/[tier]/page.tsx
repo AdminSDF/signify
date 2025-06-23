@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, DollarSign, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, DollarSign, Lock, ShieldAlert } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel from '@/components/SpinWheel';
 import type { SegmentConfig } from '@/lib/appConfig';
@@ -135,10 +135,17 @@ export default function GamePage() {
     const config = appSettings.wheelConfigs ? appSettings.wheelConfigs[tier] : null;
     if (config) {
       setWheelConfig(config);
+      if (config.isLocked) {
+        toast({
+            title: "Arena Locked",
+            description: "Playing and withdrawals are disabled for this arena.",
+            variant: "destructive"
+        });
+      }
     } else if (!authLoading) {
       router.push('/');
     }
-  }, [tier, router, appSettings, authLoading]);
+  }, [tier, router, appSettings, authLoading, toast]);
 
   useEffect(() => {
     if (wheelConfig?.themeClass) {
@@ -274,6 +281,15 @@ export default function GamePage() {
       return;
     }
     
+    if (wheelConfig.isLocked) {
+      toast({
+        title: "Arena Locked",
+        description: "This arena is temporarily closed for playing.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (userData.isBlocked) {
       toast({ title: "Account Blocked", description: "Your account is blocked. Please contact support.", variant: "destructive" });
       return;
@@ -498,13 +514,22 @@ export default function GamePage() {
         )}
         
         <main className="flex flex-col items-center w-full max-w-2xl">
+           {wheelConfig.isLocked && (
+            <Alert variant="destructive" className="w-full max-w-lg mb-4 text-center">
+              <Lock className="h-4 w-4" />
+              <AlertTitle>This Arena is Locked</AlertTitle>
+              <AlertDescription>
+                Playing and withdrawals are temporarily disabled. You can still add funds to your balance.
+              </AlertDescription>
+            </Alert>
+          )}
           <div data-tour-id="spin-wheel">
             <SpinWheel
               segments={wheelConfig.segments}
               onSpinComplete={handleSpinComplete}
               targetSegmentIndex={targetSegmentIndex}
               isSpinning={isSpinning}
-              onClick={user && !isSpinning ? handleSpinClick : undefined}
+              onClick={user && !isSpinning && !wheelConfig.isLocked ? handleSpinClick : undefined}
             />
           </div>
           

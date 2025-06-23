@@ -8,10 +8,11 @@ import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Lock, ShieldAlert } from 'lucide-react';
 import type { WheelTierConfig } from '@/lib/appConfig';
 import { updateUserData } from '@/lib/firebase';
 import { Steps } from 'intro.js-react';
+import { cn } from '@/lib/utils';
 
 export default function GameSelectionPage() {
   const { user, userData, loading, appSettings } = useAuth();
@@ -79,14 +80,27 @@ export default function GameSelectionPage() {
 
   const renderCard = (config: WheelTierConfig) => (
      <Link href={`/game/${config.id}`} passHref key={config.id}>
-      <Card data-tour-id={`game-card-${config.id}`} className={`h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 ${config.themeClass} border-primary border-2`}>
+      <Card data-tour-id={`game-card-${config.id}`} className={cn(
+          "h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 border-2 relative",
+          config.isLocked ? "border-destructive/50" : "border-primary",
+          config.themeClass
+        )}>
+        {config.isLocked && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
+            <Lock className="h-12 w-12 text-destructive" />
+            <p className="mt-2 font-bold text-xl text-destructive-foreground">Arena Locked</p>
+          </div>
+        )}
         <CardHeader>
           <Image src={appSettings.logoUrl} alt={`${config.name} Logo`} width={64} height={64} className="h-16 w-16 mx-auto animate-glow-pulse rounded-full" />
           <CardTitle className="text-3xl font-bold text-primary mt-4">{config.name}</CardTitle>
           <CardDescription className="text-muted-foreground mt-1 text-base">{config.description}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full text-lg">Play Now <ArrowRight className="ml-2 h-5 w-5" /></Button>
+          <Button className="w-full text-lg">
+            {config.isLocked ? "View Arena" : "Play Now"}
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
         </CardContent>
       </Card>
     </Link>

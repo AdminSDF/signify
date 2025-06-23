@@ -18,6 +18,7 @@ export interface WheelTierConfig {
   name: string;
   description: string;
   themeClass: string;
+  isLocked: boolean; // Controls if the arena is playable/withdrawable
   minWithdrawalAmount: number; // Moved from global settings
   costSettings: {
     type: 'tiered' | 'fixed';
@@ -39,6 +40,7 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Little Lux',
     description: 'Classic fun with frequent small wins!',
     themeClass: 'theme-little',
+    isLocked: false,
     minWithdrawalAmount: 500,
     costSettings: {
       type: 'tiered',
@@ -60,6 +62,7 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Big Bonanza',
     description: 'Higher stakes, bigger prizes!',
     themeClass: 'theme-big',
+    isLocked: false,
     minWithdrawalAmount: 1000,
     costSettings: {
       type: 'fixed',
@@ -77,6 +80,7 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Mega Millions',
     description: 'The ultimate risk for the ultimate reward!',
     themeClass: 'theme-more-big',
+    isLocked: false,
     costSettings: {
         type: 'fixed',
         baseCost: 20,

@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -150,6 +150,11 @@ export default function ProfilePage() {
 
   const handleWithdrawal = async () => {
     if (!user || !userData || !activeWheelConfig) return;
+    if (activeWheelConfig.isLocked) {
+      toast({ title: "Arena Locked", description: "Withdrawals are disabled for this arena.", variant: "destructive"});
+      return;
+    }
+
     setIsProcessing(true);
     const amount = parseFloat(withdrawalAmount);
     const balance = userData.balances[activeTier] ?? 0;
@@ -281,14 +286,24 @@ export default function ProfilePage() {
           </Card>
 
           <Card data-tour-id="withdraw-funds-section" className="p-4 pt-2 bg-card shadow-md">
-            <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-primary"><ArrowDownCircle className="mr-2 h-6 w-6" />Withdraw Funds</CardTitle></CardHeader>
+            <CardHeader className="p-2 pb-4">
+              <CardTitle className="text-xl flex items-center font-headline text-primary">
+                <ArrowDownCircle className="mr-2 h-6 w-6" />
+                Withdraw Funds
+              </CardTitle>
+               {tierConfig.isLocked && (
+                 <CardDescription className="text-destructive flex items-center gap-1 pt-1">
+                  <Lock className="h-3 w-3" /> Withdrawals disabled: Arena is locked.
+                </CardDescription>
+              )}
+            </CardHeader>
             <CardContent className="space-y-4 p-2">
                <div>
                 <Label htmlFor="withdrawalAmount" className="text-sm font-medium text-muted-foreground">Amount to Withdraw (Min. ₹{minWithdrawal.toFixed(2)})</Label>
-                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`e.g. ${minWithdrawal}`} className="mt-1" disabled={isProcessing} />
+                <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`e.g. ${minWithdrawal}`} className="mt-1" disabled={isProcessing || tierConfig.isLocked} />
                </div>
-               <Button onClick={handleWithdrawal} disabled={isProcessing || !withdrawalAmount || parseFloat(withdrawalAmount) < minWithdrawal || parseFloat(withdrawalAmount) > balance} className="w-full" variant="default">
-                {isProcessing ? 'Processing...' : 'Request Withdrawal'}
+               <Button onClick={handleWithdrawal} disabled={isProcessing || tierConfig.isLocked || !withdrawalAmount || parseFloat(withdrawalAmount) < minWithdrawal || parseFloat(withdrawalAmount) > balance} className="w-full" variant="default">
+                {tierConfig.isLocked ? <><Lock className="mr-2 h-4 w-4" /> Locked</> : isProcessing ? 'Processing...' : 'Request Withdrawal'}
               </Button>
               {parseFloat(withdrawalAmount) > balance && (<p className="text-xs text-destructive text-center mt-1">Amount exceeds balance for this tier.</p>)}
             </CardContent>
