@@ -30,39 +30,53 @@ import { Steps } from 'intro.js-react';
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
-// This function determines the spin outcome based on the 60/40 rule and available wheel segments
+// This function determines the spin outcome based on the 60/40 rule and available wheel segments.
+// It is designed to be robust and handle any configuration from the admin panel.
 const getSpinResult = (segments: Segment[]): { winningSegment: Segment | undefined } => {
-  const adminWinChance = 0.6;
-  const random = Math.random();
-
-  const losingSegments = segments.filter(s => s.multiplier === 0);
-  const winningSegments = segments.filter(s => s.multiplier > 0);
-
-  // Sort winning segments by multiplier to identify small/medium/big wins
-  winningSegments.sort((a, b) => a.multiplier - b.multiplier);
-
-  const hasLosingSegments = losingSegments.length > 0;
-  const hasWinningSegments = winningSegments.length > 0;
-
-  if (!hasLosingSegments && !hasWinningSegments) {
-    return { winningSegment: undefined }; // No segments to choose from
+  // If there are no segments at all, we can't do anything.
+  if (!segments || segments.length === 0) {
+    return { winningSegment: undefined };
   }
 
-  let chosenSegment: Segment;
+  const adminWinChance = 0.6; // 60%
+  const random = Math.random();
+
+  // A "losing" outcome for the user is when their net change is negative.
+  // This happens when multiplier < 1.
+  const losingSegments = segments.filter(s => s.multiplier < 1);
+  
+  // A "push" or "tie" outcome. The user gets their bet back.
+  const pushSegments = segments.filter(s => s.multiplier === 1);
+  
+  // A "winning" outcome for the user. Net change is positive.
+  const winningSegments = segments.filter(s => s.multiplier > 1);
+
+  // Sort winning segments to distinguish small/medium/big wins
+  winningSegments.sort((a, b) => a.multiplier - b.multiplier);
+
+  let chosenSegment: Segment | undefined = undefined;
 
   // Case 1: Admin is meant to win (60% chance)
-  if (random <= adminWinChance) {
-    if (hasLosingSegments) {
-      // Pick a random losing segment
+  if (random < adminWinChance) {
+    // Admin wins. We want to give the user a "losing" or "push" segment.
+    // Prioritize segments with multiplier < 1.
+    if (losingSegments.length > 0) {
       chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
-    } else {
-      // If no losing segments, admin can't win. Give the smallest possible prize.
+    } 
+    // If no segments are explicitly < 1, but there are pushes (multiplier === 1), pick one of those.
+    else if (pushSegments.length > 0) {
+      chosenSegment = pushSegments[Math.floor(Math.random() * pushSegments.length)];
+    }
+    // If there are no losing or push segments, admin cannot be forced to win. 
+    // We must give the user a prize, so we give them the smallest possible win.
+    else if (winningSegments.length > 0) {
       chosenSegment = winningSegments[0];
     }
-  } 
+  }
   // Case 2: User is meant to win (40% chance)
   else {
-    if (hasWinningSegments) {
+    // User wins. We want to give them a "winning" segment (multiplier > 1).
+    if (winningSegments.length > 0) {
       const smallWinSegment = winningSegments[0];
       const bigWinSegment = winningSegments[winningSegments.length - 1];
       const mediumWinSegment = winningSegments.length > 2
@@ -78,10 +92,22 @@ const getSpinResult = (segments: Segment[]): { winningSegment: Segment | undefin
       } else {
         chosenSegment = bigWinSegment;
       }
-    } else {
-      // User was meant to win, but no winning segments are configured. User must lose.
-      chosenSegment = losingSegments[0];
     }
+    // If no winning segments are configured, the user cannot win.
+    // Give them a "push" if possible, otherwise a "loss".
+    else if (pushSegments.length > 0) {
+      chosenSegment = pushSegments[Math.floor(Math.random() * pushSegments.length)];
+    }
+    else if (losingSegments.length > 0) {
+        chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
+    }
+  }
+
+  // If after all this, a segment couldn't be chosen (e.g., empty segments array initially)
+  if (!chosenSegment) {
+    // This should only happen if segments array is empty, which is handled outside.
+    // But as a final safeguard, we return undefined.
+    return { winningSegment: undefined };
   }
 
   return { winningSegment: chosenSegment };
