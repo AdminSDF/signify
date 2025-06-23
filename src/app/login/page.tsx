@@ -5,17 +5,11 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { LoginCredentialsValidator, SignUpCredentialsValidator, type LoginCredentials, type SignUpCredentials } from '@/lib/validators/auth';
-import { LogIn, UserPlus, Repeat } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { initialSettings } from '@/lib/appConfig';
 
 type FormData = LoginCredentials | SignUpCredentials;
 
@@ -23,32 +17,29 @@ export default function LoginPage() {
   const { user, loginWithEmailPassword, signUpWithEmailPassword, loading } = useAuth();
   const router = useRouter();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [isAnimating, setIsAnimating] = useState(false);
 
   const currentValidator = isLoginMode ? LoginCredentialsValidator : SignUpCredentialsValidator;
 
   const form = useForm<FormData>({
     resolver: zodResolver(currentValidator),
-    defaultValues: isLoginMode 
+    defaultValues: isLoginMode
       ? { email: '', password: '' }
       : { displayName: '', email: '', password: '', confirmPassword: '' },
   });
 
   useEffect(() => {
     if (user && !loading) {
-      router.push('/'); 
+      router.push('/');
     }
   }, [user, loading, router]);
-  
-  // Effect to reset form when mode changes, ensuring correct default values and clearing validation
+
   useEffect(() => {
     form.reset(
-      isLoginMode 
-        ? { email: '', password: '' } 
+      isLoginMode
+        ? { email: '', password: '' }
         : { displayName: '', email: '', password: '', confirmPassword: '' }
     );
-  }, [isLoginMode, form.reset]);
-
+  }, [isLoginMode]);
 
   const onLogin: SubmitHandler<LoginCredentials> = async (data) => {
     await loginWithEmailPassword(data);
@@ -58,15 +49,6 @@ export default function LoginPage() {
     await signUpWithEmailPassword(data);
   };
 
-  const handleSwitchMode = () => {
-    if (isAnimating) return;
-    setIsAnimating(true);
-    setTimeout(() => {
-      setIsLoginMode(prev => !prev);
-      setIsAnimating(false);
-    }, 2500); // Duration of the animation
-  };
-  
   const onSubmit = (data: FormData) => {
     if (isLoginMode) {
       onLogin(data as LoginCredentials);
@@ -75,56 +57,60 @@ export default function LoginPage() {
     }
   };
 
+  const handleSwitchToSignUp = () => setIsLoginMode(false);
+  const handleSwitchToLogin = () => setIsLoginMode(true);
 
-  if (loading && !isAnimating) { // Keep showing loader if auth is loading, but not during card animation
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center min-h-screen bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
       </div>
     );
   }
-   // If user is logged in (and not loading), redirect handled by useEffect. 
-   // This prevents briefly showing the login form before redirect.
+
   if (user && !loading) return null;
 
+  const wheelStyle = {
+    backgroundImage: `conic-gradient(
+      from 90deg,
+      #991B1B 0deg 22.5deg, #FEF2F2 22.5deg 45deg,
+      #047857 45deg 67.5deg, #7C3AED 67.5deg 90deg,
+      #DC2626 90deg 112.5deg, #FDE68A 112.5deg 135deg,
+      #1D4ED8 135deg 157.5deg, #047857 157.5deg 180deg,
+      #991B1B 180deg 202.5deg, #FEF2F2 202.5deg 225deg,
+      #047857 225deg 247.5deg, #7C3AED 247.5deg 270deg,
+      #DC2626 270deg 292.5deg, #FDE68A 292.5deg 315deg,
+      #1D4ED8 315deg 337.5deg, #047857 337.5deg 360deg
+    )`
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] p-4">
-      <Card 
-        className={cn(
-          "w-full max-w-sm shadow-xl bg-card text-card-foreground rounded-full",
-          isAnimating && "animate-card-spin-multiple"
-        )}
+    <div className="flex items-center justify-center min-h-screen bg-black p-4">
+      <div
+        className="relative w-[450px] h-[450px] rounded-full border-8 border-red-600 overflow-hidden flex items-center justify-center shadow-2xl"
+        style={wheelStyle}
       >
-        <CardHeader className="items-center text-center border-b pb-4">
-           <Image src={initialSettings.logoUrl} alt="Spinify Logo" width={64} height={64} className="h-16 w-16 mb-3 rounded-full" />
-          <CardTitle className="text-3xl font-bold font-headline text-primary">
-            {isLoginMode ? "Welcome Back!" : "Create Account"}
-          </CardTitle>
-          <CardDescription className="text-muted-foreground text-md mt-1">
-            {isLoginMode ? "Enter your credentials to play." : "Fill in the details to join Spinify."}
-          </CardDescription>
-        </CardHeader>
-        <Form {...form}>
-          {/* Re-keying the form element itself to ensure resolver updates take effect */}
-          <form onSubmit={form.handleSubmit(onSubmit)} key={isLoginMode ? 'loginForm' : 'signupForm'}>
-            <CardContent className="p-6 space-y-4">
+        <div className="absolute w-full h-full bg-black/30 rounded-full backdrop-blur-sm"></div>
+
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-black rounded-full border-4 border-gray-500 z-20"></div>
+
+        <div className="relative z-10 w-full flex flex-col items-center justify-center p-8">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="w-64 space-y-3">
               {!isLoginMode && (
                 <FormField
                   control={form.control}
                   name="displayName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel htmlFor="displayName">Display Name</FormLabel>
                       <FormControl>
                         <Input
-                          id="displayName"
-                          placeholder="Your Name"
+                          placeholder="Name"
                           {...field}
-                          className="text-base"
+                          className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
                     </FormItem>
                   )}
                 />
@@ -134,17 +120,15 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="email">Email</FormLabel>
                     <FormControl>
                       <Input
-                        id="email"
                         type="email"
-                        placeholder="you@example.com"
+                        placeholder="Email"
                         {...field}
-                        className="text-base"
+                        className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
                   </FormItem>
                 )}
               />
@@ -153,17 +137,15 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="password">Password</FormLabel>
                     <FormControl>
-                      <Input 
-                        id="password" 
-                        type="password" 
-                        placeholder="••••••••" 
-                        {...field} 
-                        className="text-base"
+                      <Input
+                        type="password"
+                        placeholder="Password"
+                        {...field}
+                        className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
                   </FormItem>
                 )}
               />
@@ -173,45 +155,42 @@ export default function LoginPage() {
                   name="confirmPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel htmlFor="confirmPassword">Confirm Password</FormLabel>
                       <FormControl>
-                        <Input 
-                          id="confirmPassword" 
-                          type="password" 
-                          placeholder="••••••••" 
-                          {...field} 
-                          className="text-base"
+                        <Input
+                          type="password"
+                          placeholder="Confirm Password"
+                          {...field}
+                          className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
                         />
                       </FormControl>
-                      <FormMessage />
+                       <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
                     </FormItem>
                   )}
                 />
               )}
-            </CardContent>
-            <CardFooter className="flex flex-col gap-3 p-6 pt-0">
-              <Button 
-                type="submit"
-                disabled={loading || isAnimating} 
-                className="w-full py-3 text-lg"
-              >
-                {isLoginMode ? <LogIn className="mr-2 h-5 w-5" /> : <UserPlus className="mr-2 h-5 w-5" />}
-                {isLoginMode ? "Login" : "Sign Up"}
-              </Button>
-              <Button 
-                type="button"
-                onClick={handleSwitchMode} 
-                disabled={isAnimating || loading} 
-                variant="outline"
-                className="w-full py-3 text-lg"
-              >
-                <Repeat className="mr-2 h-5 w-5" />
-                {isLoginMode ? "Switch to Sign Up" : "Switch to Login"}
-              </Button>
-            </CardFooter>
-          </form>
-        </Form>
-      </Card>
+              
+              <div className="pt-8 space-y-3">
+                <Button
+                  type={isLoginMode ? 'submit' : 'button'}
+                  onClick={isLoginMode ? undefined : handleSwitchToLogin}
+                  disabled={loading}
+                  className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
+                >
+                  Login
+                </Button>
+                <Button
+                   type={!isLoginMode ? 'submit' : 'button'}
+                   onClick={!isLoginMode ? undefined : handleSwitchToSignUp}
+                   disabled={loading}
+                   className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
+                >
+                  Sign Up
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </div>
+      </div>
     </div>
   );
 }
