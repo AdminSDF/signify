@@ -19,7 +19,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban, ArrowRightLeft } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, initialWheelConfigs } from '@/lib/appConfig';
+import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig } from '@/lib/appConfig';
 import {
   saveAppConfigurationToFirestore,
   getWithdrawalRequests,
@@ -77,7 +77,10 @@ const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
         return 'N/A';
     }
     if (req.paymentMethod === 'upi') {
-        return req.upiId ? `UPI: ${req.upiId}` : 'UPI: N/A';
+        if (req.upiId) {
+            return `UPI: ${req.upiId}`;
+        }
+        return 'UPI: N/A';
     }
     if (req.paymentMethod === 'bank') {
         const accountDetails = req.bankDetails;
@@ -85,14 +88,13 @@ const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
             return 'Bank: Details missing';
         }
         const holderName = accountDetails.accountHolderName || '';
-        const accNum = accountDetails.accountNumber;
-        const accNumStr = accNum ? String(accNum) : '';
+        const accNum = accountDetails.accountNumber || '';
         
         let lastFour = '****';
-        if (accNumStr.length > 4) {
-            lastFour = accNumStr.slice(-4);
-        } else if (accNumStr.length > 0) {
-            lastFour = accNumStr;
+        if (accNum && accNum.length > 4) {
+            lastFour = accNum.slice(-4);
+        } else if (accNum && accNum.length > 0) {
+            lastFour = accNum;
         }
         
         if (holderName) {
@@ -109,6 +111,8 @@ const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'dateti
     let dateObj: Date;
     if (dateInput instanceof Timestamp) {
       dateObj = dateInput.toDate();
+    } else if (dateInput instanceof Date) {
+      dateObj = dateInput;
     } else {
       dateObj = new Date(dateInput);
     }
@@ -190,21 +194,20 @@ export default function AdminPage() {
   }, [userData, loading, fetchAdminData]);
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    
-    if (type === 'number') {
-        const num = parseFloat(value);
-        const finalValue = isNaN(num) ? 0 : num;
-         setCurrentAppSettings(prev => ({
-          ...prev,
-          [name]: finalValue,
-        }));
-    } else {
-         setCurrentAppSettings(prev => ({
-          ...prev,
-          [name]: value,
-        }));
-    }
+      const { name, value } = e.target;
+      const type = e.target.getAttribute('type');
+
+      setCurrentAppSettings(prev => {
+          let finalValue: string | number = value;
+          if (type === 'number') {
+              const numValue = parseFloat(value);
+              finalValue = isNaN(numValue) ? 0 : numValue;
+          }
+          return {
+            ...prev,
+            [name]: finalValue
+          };
+      });
   };
 
   const handleAddBalancePresetsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,101 +229,121 @@ export default function AdminPage() {
     
     setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: validPresets }));
   };
+  
+  const handleWheelConfigChange = (tierId: string, field: string, value: any) => {
+    setCurrentAppSettings(prev => {
+        const numValue = parseFloat(value);
+        const finalValue = field === 'minWithdrawalAmount' ? (isNaN(numValue) ? 0 : numValue) : value;
+        
+        const updatedTier = {
+            ...prev.wheelConfigs[tierId],
+            [field]: finalValue,
+        };
 
-  const handleWheelConfigChange = (tier: string, field: string, value: any) => {
-      let finalValue = value;
-      if (field === 'minWithdrawalAmount') {
-        const num = parseFloat(value);
-        finalValue = isNaN(num) ? 0 : num;
-      }
-      setCurrentAppSettings(prev => ({
-          ...prev,
-          wheelConfigs: {
-              ...prev.wheelConfigs,
-              [tier]: {
-                  ...prev.wheelConfigs[tier],
-                  [field]: finalValue
-              }
-          }
-      }));
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [tierId]: updatedTier,
+            },
+        };
+    });
+  };
+
+  const handleCostSettingChange = (tierId: string, field: string, value: any) => {
+      setCurrentAppSettings(prev => {
+          const numValue = parseFloat(value);
+          const finalValue = isNaN(numValue) ? 0 : numValue;
+          
+          const updatedCostSettings = {
+              ...prev.wheelConfigs[tierId].costSettings,
+              [field]: finalValue,
+          };
+  
+          const updatedTier = {
+              ...prev.wheelConfigs[tierId],
+              costSettings: updatedCostSettings,
+          };
+  
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tierId]: updatedTier,
+              },
+          };
+      });
+  };
+
+  const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: any) => {
+    setCurrentAppSettings(prev => {
+        const numValue = parseFloat(value);
+        const finalValue = field === 'multiplier' ? (isNaN(numValue) ? 0 : numValue) : value;
+
+        const newSegments = [...prev.wheelConfigs[tierId].segments];
+        const newSegmentData = { ...newSegments[segmentIndex], [field]: finalValue };
+        newSegments[segmentIndex] = newSegmentData;
+
+        const newWheelConfig = {
+            ...prev.wheelConfigs[tierId],
+            segments: newSegments
+        };
+
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [tierId]: newWheelConfig
+            }
+        };
+    });
   };
   
-  const handleCostSettingChange = (tier: string, field: string, value: any) => {
-      const num = parseFloat(value);
-      const finalValue = isNaN(num) ? 0 : num;
-      setCurrentAppSettings(prev => ({
-          ...prev,
-          wheelConfigs: {
-              ...prev.wheelConfigs,
-              [tier]: {
-                  ...prev.wheelConfigs[tier],
-                  costSettings: {
-                      ...prev.wheelConfigs[tier].costSettings,
-                      [field]: finalValue
-                  }
-              }
-          }
-      }));
-  };
-
-  const handleSegmentChange = (tier: string, index: number, field: string, value: any) => {
+  const addSegment = (tierId: string) => {
       setCurrentAppSettings(prev => {
-          const updatedSegments = [...prev.wheelConfigs[tier].segments];
-          let finalValue = value;
-          if (field === 'multiplier') {
-              const num = parseFloat(value);
-              finalValue = isNaN(num) ? 0 : num;
-          }
-          updatedSegments[index] = {
-              ...updatedSegments[index],
-              [field]: finalValue
+          const newSegment: SegmentConfig = {
+              id: `${tierId.charAt(0)}${new Date().getTime()}`,
+              text: 'New Prize',
+              emoji: '🎉',
+              multiplier: 1,
+              color: '0 0% 80%',
+          };
+          
+          const updatedSegments = [...prev.wheelConfigs[tierId].segments, newSegment];
+          
+          const updatedTier = {
+              ...prev.wheelConfigs[tierId],
+              segments: updatedSegments,
           };
           
           return {
               ...prev,
               wheelConfigs: {
                   ...prev.wheelConfigs,
-                  [tier]: {
-                      ...prev.wheelConfigs[tier],
-                      segments: updatedSegments
-                  }
-              }
+                  [tierId]: updatedTier,
+              },
           };
       });
   };
   
-  const addSegment = (tier: string) => {
-      const newSegment: SegmentConfig = {
-          id: `${tier.charAt(0)}${new Date().getTime()}`,
-          text: 'New Prize',
-          emoji: '🎉',
-          multiplier: 1,
-          color: '0 0% 80%',
-      };
-      setCurrentAppSettings(prev => ({
-        ...prev,
-        wheelConfigs: {
-            ...prev.wheelConfigs,
-            [tier]: {
-                ...prev.wheelConfigs[tier],
-                segments: [...prev.wheelConfigs[tier].segments, newSegment]
-            }
-        }
-      }));
-  };
-  
-  const removeSegment = (tier: string, index: number) => {
-      const updatedSegments = currentAppSettings.wheelConfigs[tier].segments.filter((_, i) => i !== index);
-       setCurrentAppSettings(prev => ({
-        ...prev,
-        wheelConfigs: {
-            ...prev.wheelConfigs,
-            [tier]: {
-                ...prev.wheelConfigs[tier],
-                segments: updatedSegments
-            }
-        }
-      }));
+  const removeSegment = (tierId: string, indexToRemove: number) => {
+    setCurrentAppSettings(prev => {
+        const oldSegments = prev.wheelConfigs[tierId].segments;
+        const updatedSegments = oldSegments.slice(0, indexToRemove).concat(oldSegments.slice(indexToRemove + 1));
+        
+        const updatedTier = {
+            ...prev.wheelConfigs[tierId],
+            segments: updatedSegments,
+        };
+        
+        return {
+            ...prev,
+            wheelConfigs: {
+                ...prev.wheelConfigs,
+                [tierId]: updatedTier,
+            },
+        };
+    });
   };
   
   const handleDragStart = (tierId: string, index: number) => {
@@ -341,19 +364,21 @@ export default function AdminPage() {
       const dragIndex = draggedSegment.index;
   
       setCurrentAppSettings(prev => {
-          const segments = [...prev.wheelConfigs[sourceTierId].segments];
-          const [draggedItem] = segments.splice(dragIndex, 1);
-          segments.splice(dropIndex, 0, draggedItem);
+          const segmentsCopy = [...prev.wheelConfigs[sourceTierId].segments];
+          const [draggedItem] = segmentsCopy.splice(dragIndex, 1);
+          segmentsCopy.splice(dropIndex, 0, draggedItem);
+          
+          const updatedTier = {
+              ...prev.wheelConfigs[sourceTierId],
+              segments: segmentsCopy,
+          };
   
           return {
               ...prev,
               wheelConfigs: {
                   ...prev.wheelConfigs,
-                  [sourceTierId]: {
-                      ...prev.wheelConfigs[sourceTierId],
-                      segments: segments
-                  }
-              }
+                  [sourceTierId]: updatedTier,
+              },
           };
       });
   
@@ -529,7 +554,7 @@ export default function AdminPage() {
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
-                              <div><p className="font-semibold">{u.displayName}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
+                              <div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{getUserBalanceForTier(u, tierId)}</TableCell>)}
                           <TableCell>{u.spinsAvailable}</TableCell>
                           <TableCell>{(u.totalWinnings || 0).toFixed(2)}</TableCell>
@@ -735,7 +760,7 @@ export default function AdminPage() {
                         <TableRow key={player.uid}>
                             <TableCell className="font-bold">{index + 1}</TableCell>
                             <TableCell>{player.displayName || player.email}</TableCell>
-                            <TableCell className="text-right font-semibold text-primary">₹{player.totalWinnings.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-semibold text-primary">₹{(player.totalWinnings || 0).toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
                       {!isLoadingData && leaderboard.length === 0 && (<TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-10">Leaderboard is empty.</TableCell></TableRow>)}
@@ -789,3 +814,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
