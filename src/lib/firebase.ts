@@ -75,9 +75,11 @@ export interface UserDocument {
   lastPaidSpinDate: string; // YYYY-MM-DD
   totalWinnings: number;
   totalSpinsPlayed: number;
+  totalDeposited?: number;
+  totalWithdrawn?: number;
   isAdmin?: boolean;
-  isBlocked?: boolean; // For fraud prevention
-  lastLogin?: Timestamp;
+  isBlocked?: boolean;
+  lastActive?: Timestamp;
   upiIdForWithdrawal?: string;
   bankDetailsForWithdrawal?: {
     accountHolderName: string;
@@ -123,9 +125,11 @@ export const createUserData = async (
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
     isAdmin: adminEmails.includes(userEmail),
     isBlocked: false, // Default to not blocked
-    lastLogin: Timestamp.now(),
+    lastActive: Timestamp.now(),
     totalWinnings: 0,
     totalSpinsPlayed: 0,
+    totalDeposited: 0,
+    totalWithdrawn: 0,
   };
   await setDoc(userRef, userData);
 };
@@ -150,11 +154,7 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
 
 export const updateUserData = async (userId: string, data: Partial<UserDocument | { [key: string]: any }>): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
-  const updateData = { ...data };
-  if (data.hasOwnProperty('lastLogin')) {
-    updateData.lastLogin = serverTimestamp() as Timestamp;
-  }
-  await updateDoc(userRef, updateData);
+  await updateDoc(userRef, data);
 };
 
 
@@ -432,8 +432,12 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   const userBalances = userData.balances || {};
   const currentBalance = userBalances[effectiveTierId] || 0;
   const newBalance = currentBalance + amount;
+  const totalDeposited = (userData.totalDeposited || 0) + amount;
   
-  batch.update(userRef, { [`balances.${effectiveTierId}`]: newBalance });
+  batch.update(userRef, { 
+    [`balances.${effectiveTierId}`]: newBalance,
+    totalDeposited: totalDeposited
+  });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
@@ -481,7 +485,12 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
   
   const newBalance = currentBalance - amount;
-  batch.update(userRef, { [`balances.${effectiveTierId}`]: newBalance });
+  const totalWithdrawn = (userData.totalWithdrawn || 0) + amount;
+  
+  batch.update(userRef, { 
+    [`balances.${effectiveTierId}`]: newBalance,
+    totalWithdrawn: totalWithdrawn 
+  });
   
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 

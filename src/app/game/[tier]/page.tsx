@@ -22,6 +22,7 @@ import { WheelTierConfig } from '@/lib/appConfig';
 import {
   updateUserData,
   addTransactionToFirestore,
+  Timestamp,
 } from '@/lib/firebase';
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
@@ -261,7 +262,8 @@ export default function GamePage() {
     const updates: { [key: string]: any } = {
         [`balances.${tier}`]: balanceAfter,
         totalSpinsPlayed: (userData.totalSpinsPlayed ?? 0) + 1,
-        totalWinnings: (userData.totalWinnings ?? 0) + winAmount
+        totalWinnings: (userData.totalWinnings ?? 0) + winAmount,
+        lastActive: Timestamp.now()
     };
 
     if (!isFreeSpin && tier === 'little') {

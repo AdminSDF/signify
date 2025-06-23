@@ -136,7 +136,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const isNewUserSession = Math.abs(creationTime - lastSignInTime) < 5000;
         
         if (!isNewUserSession) {
-          updateUserData(firebaseUser.uid, { lastLogin: Timestamp.now() }).catch(err => console.warn("Failed to update last login time", err));
+          updateUserData(firebaseUser.uid, { lastActive: Timestamp.now() }).catch(err => console.warn("Failed to update last active time", err));
         }
 
       } else {

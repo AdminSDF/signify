@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban } from 'lucide-react';
+import { ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History, PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban, ArrowRightLeft } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, initialWheelConfigs } from '@/lib/appConfig';
 import {
@@ -369,17 +369,21 @@ export default function AdminPage() {
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>User</TableHead>
                    {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId)} Bal (₹)</TableHead>)}
-                   <TableHead>Spins</TableHead><TableHead>Total Winnings (₹)</TableHead><TableHead>Joined On</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                   <TableHead>Spins</TableHead><TableHead>Winnings (₹)</TableHead><TableHead>Deposited (₹)</TableHead><TableHead>Withdrawn (₹)</TableHead><TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={7 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={9 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
                       : allUsers.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{u.displayName?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{(u.balances?.[tierId] ?? 0).toFixed(2)}</TableCell>)}
-                          <TableCell>{u.spinsAvailable}</TableCell><TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
-                          <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleDateString() : 'N/A'}</TableCell>
+                          <TableCell>{u.spinsAvailable}</TableCell>
+                          <TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
+                          <TableCell>{u.totalDeposited?.toFixed(2) ?? '0.00'}</TableCell>
+                          <TableCell>{u.totalWithdrawn?.toFixed(2) ?? '0.00'}</TableCell>
+                          <TableCell>{u.createdAt instanceof Timestamp ? u.createdAt.toDate().toLocaleString() : 'N/A'}</TableCell>
+                          <TableCell>{u.lastActive ? (u.lastActive instanceof Timestamp ? u.lastActive.toDate().toLocaleString() : new Date(u.lastActive as any).toLocaleString()) : 'N/A'}</TableCell>
                           <TableCell>
                              <Badge variant={u.isBlocked ? 'destructive' : 'default'}>{u.isBlocked ? 'Blocked' : 'Active'}</Badge>
                              {u.isAdmin && <Badge variant="secondary" className="ml-2">Admin</Badge>}
@@ -397,7 +401,7 @@ export default function AdminPage() {
                             </div>
                           </TableCell>
                         </TableRow>))}
-                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={7 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
+                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={9 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
 
