@@ -12,7 +12,7 @@ import PrizeDisplay from '@/components/PrizeDisplay';
 import GameAssistant from '@/components/GameAssistant';
 import { useSound } from '@/hooks/useSound';
 import { useToast } from "@/hooks/use-toast";
-import type { SpinHistory } from '@/ai/flows/spinify-tip-generator';
+import type { GenerateTipInput } from '@/ai/flows/spinify-tip-generator';
 import { getAiTipAction } from '@/app/actions/generateTipAction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -35,43 +35,61 @@ const getSpinResult = (betAmount: number, segments: Segment[]): { winAmount: num
   const adminWinChance = 0.6;
   const random = Math.random();
 
-  // 60% chance for admin to win (user gets 0)
-  if (random <= adminWinChance) {
-    return { winAmount: 0, multiplier: 0 };
-  }
-
-  // 40% chance for user to win
-  // Get all unique winning multipliers from the wheel configuration
-  const winningMultipliers = Array.from(new Set(segments.map(s => s.multiplier).filter(m => m && m > 0)));
-
-  if (winningMultipliers.length === 0) {
-    // If admin has configured a wheel with no winning segments, user gets 0.
-    return { winAmount: 0, multiplier: 0 };
-  }
-
-  // Sort multipliers to distinguish between small, medium, big wins
+  const losingMultipliers = Array.from(new Set(segments.map(s => s.multiplier).filter(m => m === 0)));
+  const winningMultipliers = Array.from(new Set(segments.map(s => s.multiplier).filter(m => m > 0)));
   winningMultipliers.sort((a, b) => a - b);
-  
-  const smallWinMultiplier = winningMultipliers[0] || 1;
-  const bigWinMultiplier = winningMultipliers[winningMultipliers.length - 1] || 1;
-  // Pick a middle-tier prize. If only 1 or 2 prize tiers, it picks the smallest.
-  const mediumWinMultiplier = winningMultipliers.length > 2 
-    ? winningMultipliers[Math.floor(winningMultipliers.length / 2)] 
-    : smallWinMultiplier; 
 
-  const winRandom = Math.random();
+  const hasLosingSegments = losingMultipliers.length > 0;
+  const hasWinningSegments = winningMultipliers.length > 0;
+
   let chosenMultiplier: number;
 
-  // Distribute the 40% win chance: 70% small, 20% medium, 10% big
-  if (winRandom <= 0.7) { // 70% chance for a small win
-    chosenMultiplier = smallWinMultiplier;
-  } else if (winRandom <= 0.9) { // 20% chance for a medium win
-    chosenMultiplier = mediumWinMultiplier;
-  } else { // 10% chance for a big win
-    chosenMultiplier = bigWinMultiplier;
+  // Case 1: Admin is meant to win (60% chance)
+  if (random <= adminWinChance) {
+    if (hasLosingSegments) {
+      // If there's a 0x prize, admin wins.
+      chosenMultiplier = 0;
+    } else if (hasWinningSegments) {
+      // If there are no 0x prizes, admin can't win. To protect the admin,
+      // award the smallest possible prize instead of a big one.
+      chosenMultiplier = winningMultipliers[0];
+    } else {
+      // No segments on the wheel at all. This is a config error.
+      // We return a value that will cause the calling function to error out with a clear message.
+      return { winAmount: 0, multiplier: -1 }; // Use -1 to signal error
+    }
+  } 
+  // Case 2: User is meant to win (40% chance)
+  else {
+    if (hasWinningSegments) {
+      // Standard user win logic
+      const smallWinMultiplier = winningMultipliers[0];
+      const bigWinMultiplier = winningMultipliers[winningMultipliers.length - 1];
+      const mediumWinMultiplier = winningMultipliers.length > 2
+        ? winningMultipliers[Math.floor(winningMultipliers.length / 2)]
+        : smallWinMultiplier;
+
+      const winRandom = Math.random();
+      // Distribute the 40% win chance: 70% small, 20% medium, 10% big
+      if (winRandom <= 0.7) {
+        chosenMultiplier = smallWinMultiplier;
+      } else if (winRandom <= 0.9) {
+        chosenMultiplier = mediumWinMultiplier;
+      } else {
+        chosenMultiplier = bigWinMultiplier;
+      }
+    } else if (hasLosingSegments) {
+      // User was meant to win, but no winning prizes are configured.
+      // The user must lose.
+      chosenMultiplier = 0;
+    } else {
+      // No segments on the wheel at all.
+      return { winAmount: 0, multiplier: -1 }; // Use -1 to signal error
+    }
   }
-  
-  return { winAmount: betAmount * chosenMultiplier, multiplier: chosenMultiplier };
+
+  const winAmount = betAmount * chosenMultiplier;
+  return { winAmount, multiplier: chosenMultiplier };
 };
 
 
@@ -86,7 +104,7 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
   const [currentPrize, setCurrentPrize] = useState<Segment | null>(null);
-  const [spinHistory, setSpinHistory] = useState<SpinHistory>([]);
+  const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
   const [isAssistantLoading, setIsAssistantLoading] = useState(true);
@@ -189,7 +207,7 @@ export default function GamePage() {
   
     const fetchAssistantMessage = useCallback(async (
         eventType: 'win' | 'loss' | 'encouragement' | 'initial',
-        history: SpinHistory,
+        history: GenerateTipInput['spinHistory'],
         lastReward?: string
     ) => {
         if(!user) return;
@@ -332,6 +350,11 @@ export default function GamePage() {
     // --- New Spin Logic ---
     const betAmount = isFreeSpin ? 0 : spinCost;
     const { winAmount, multiplier } = getSpinResult(betAmount, wheelConfig.segments);
+
+    if (multiplier === -1) { // Check for the error signal from getSpinResult
+        toast({ title: "Configuration Error", description: "The wheel has no prizes configured. Please contact support.", variant: "destructive" });
+        return;
+    }
     
     // Find all segments that match the winning multiplier
     const possibleSegments = wheelConfig.segments
@@ -339,6 +362,7 @@ export default function GamePage() {
       .filter(s => s.multiplier === multiplier);
 
     if (possibleSegments.length === 0) {
+        // This block should theoretically not be reached with the new getSpinResult logic, but it's a good safeguard.
         toast({ title: "Config Error", description: `Could not find any segment with a multiplier of ${multiplier}x. Please check admin panel.`, variant: "destructive" });
         return;
     }
