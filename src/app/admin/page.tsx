@@ -184,11 +184,7 @@ export default function AdminPage() {
     const type = e.target.getAttribute('type');
 
     setCurrentAppSettings(prev => {
-        let finalValue: string | number = value;
-        if (type === 'number') {
-            const numValue = parseFloat(value);
-            finalValue = isNaN(numValue) ? 0 : numValue;
-        }
+        const finalValue = type === 'number' ? (parseFloat(value) || 0) : value;
         return {
             ...prev,
             [name]: finalValue,
@@ -200,47 +196,49 @@ export default function AdminPage() {
     const value = e.target.value;
     setAddBalancePresetsInput(value);
     
-    const presetsArray = value.split(',');
-    const validPresets: number[] = [];
-
-    for (const s of presetsArray) {
-        const trimmedString = s.trim();
-        if (trimmedString === '') continue;
-        
-        const num = parseFloat(trimmedString);
+    const presetsStringArray = value.split(',');
+    const presetsNumberArray: number[] = [];
+    for (const s of presetsStringArray) {
+        const num = parseFloat(s.trim());
         if (!isNaN(num) && num > 0) {
-            validPresets.push(num);
+            presetsNumberArray.push(num);
         }
     }
     
     setCurrentAppSettings(prev => ({
         ...prev,
-        addBalancePresets: validPresets
+        addBalancePresets: presetsNumberArray
     }));
   };
   
     const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
-        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
-        newSettings.wheelConfigs[tierId][field] = finalValue;
-        setCurrentAppSettings(newSettings);
+        setCurrentAppSettings(prev => {
+            const newAppSettings = JSON.parse(JSON.stringify(prev));
+            const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
+            newAppSettings.wheelConfigs[tierId][field] = finalValue;
+            return newAppSettings;
+        });
     };
 
     const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
-        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        newSettings.wheelConfigs[tierId].costSettings[field] = parseFloat(value) || 0;
-        setCurrentAppSettings(newSettings);
+        setCurrentAppSettings(prev => {
+            const newAppSettings = JSON.parse(JSON.stringify(prev));
+            const finalValue = parseFloat(value) || 0;
+            newAppSettings.wheelConfigs[tierId].costSettings[field] = finalValue;
+            return newAppSettings;
+        });
     };
 
     const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
-        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
-        newSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
-        setCurrentAppSettings(newSettings);
+        setCurrentAppSettings(prev => {
+            const newAppSettings = JSON.parse(JSON.stringify(prev));
+            const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
+            newAppSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
+            return newAppSettings;
+        });
     };
 
     const addSegment = (tierId: string) => {
-        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
         const newSegment: SegmentConfig = {
             id: `${tierId.charAt(0)}${new Date().getTime()}`,
             text: 'New Prize',
@@ -248,14 +246,19 @@ export default function AdminPage() {
             multiplier: 1,
             color: '0 0% 80%',
         };
-        newSettings.wheelConfigs[tierId].segments.push(newSegment);
-        setCurrentAppSettings(newSettings);
+        setCurrentAppSettings(prev => {
+            const newAppSettings = JSON.parse(JSON.stringify(prev));
+            newAppSettings.wheelConfigs[tierId].segments.push(newSegment);
+            return newAppSettings;
+        });
     };
 
     const removeSegment = (tierId: string, indexToRemove: number) => {
-        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
-        newSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
-        setCurrentAppSettings(newSettings);
+        setCurrentAppSettings(prev => {
+            const newAppSettings = JSON.parse(JSON.stringify(prev));
+            newAppSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
+            return newAppSettings;
+        });
     };
   
   const handleDragStart = (tierId: string, index: number) => {
@@ -273,13 +276,15 @@ export default function AdminPage() {
         }
 
         const sourceIndex = draggedSegment.index;
-        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
         
-        const tierSegments = newSettings.wheelConfigs[targetTierId].segments;
-        const [draggedItem] = tierSegments.splice(sourceIndex, 1);
-        tierSegments.splice(dropIndex, 0, draggedItem);
+        setCurrentAppSettings(prev => {
+            const newAppSettings = JSON.parse(JSON.stringify(prev));
+            const segments = newAppSettings.wheelConfigs[targetTierId].segments;
+            const [draggedItem] = segments.splice(sourceIndex, 1);
+            segments.splice(dropIndex, 0, draggedItem);
+            return newAppSettings;
+        });
         
-        setCurrentAppSettings(newSettings);
         setDraggedSegment(null);
     };
 
@@ -319,8 +324,12 @@ export default function AdminPage() {
     setNewNewsItem('');
   };
 
-  const handleRemoveNewsItem = (index: number) => {
-    setCurrentNewsItems(prev => prev.filter((_, i) => i !== index));
+  const handleRemoveNewsItem = (indexToRemove: number) => {
+    setCurrentNewsItems(prev => {
+        const newItems = [...prev];
+        newItems.splice(indexToRemove, 1);
+        return newItems;
+    });
   };
   
   const startEditNewsItem = (index: number) => {
