@@ -212,33 +212,28 @@ export default function AdminPage() {
   };
   
     const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
-        setCurrentAppSettings(prev => {
-            const newAppSettings = JSON.parse(JSON.stringify(prev));
-            const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
-            newAppSettings.wheelConfigs[tierId][field] = finalValue;
-            return newAppSettings;
-        });
+        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
+        newAppSettings.wheelConfigs[tierId][field] = finalValue;
+        setCurrentAppSettings(newAppSettings);
     };
 
     const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
-        setCurrentAppSettings(prev => {
-            const newAppSettings = JSON.parse(JSON.stringify(prev));
-            const finalValue = parseFloat(value) || 0;
-            newAppSettings.wheelConfigs[tierId].costSettings[field] = finalValue;
-            return newAppSettings;
-        });
+        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const finalValue = parseFloat(value) || 0;
+        newAppSettings.wheelConfigs[tierId].costSettings[field] = finalValue;
+        setCurrentAppSettings(newAppSettings);
     };
 
     const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
-        setCurrentAppSettings(prev => {
-            const newAppSettings = JSON.parse(JSON.stringify(prev));
-            const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
-            newAppSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
-            return newAppSettings;
-        });
+        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
+        newAppSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
+        setCurrentAppSettings(newAppSettings);
     };
 
     const addSegment = (tierId: string) => {
+        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
         const newSegment: SegmentConfig = {
             id: `${tierId.charAt(0)}${new Date().getTime()}`,
             text: 'New Prize',
@@ -246,19 +241,14 @@ export default function AdminPage() {
             multiplier: 1,
             color: '0 0% 80%',
         };
-        setCurrentAppSettings(prev => {
-            const newAppSettings = JSON.parse(JSON.stringify(prev));
-            newAppSettings.wheelConfigs[tierId].segments.push(newSegment);
-            return newAppSettings;
-        });
+        newAppSettings.wheelConfigs[tierId].segments.push(newSegment);
+        setCurrentAppSettings(newAppSettings);
     };
 
     const removeSegment = (tierId: string, indexToRemove: number) => {
-        setCurrentAppSettings(prev => {
-            const newAppSettings = JSON.parse(JSON.stringify(prev));
-            newAppSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
-            return newAppSettings;
-        });
+        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        newAppSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
+        setCurrentAppSettings(newAppSettings);
     };
   
   const handleDragStart = (tierId: string, index: number) => {
@@ -277,13 +267,11 @@ export default function AdminPage() {
 
         const sourceIndex = draggedSegment.index;
         
-        setCurrentAppSettings(prev => {
-            const newAppSettings = JSON.parse(JSON.stringify(prev));
-            const segments = newAppSettings.wheelConfigs[targetTierId].segments;
-            const [draggedItem] = segments.splice(sourceIndex, 1);
-            segments.splice(dropIndex, 0, draggedItem);
-            return newAppSettings;
-        });
+        const newAppSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const segments = newAppSettings.wheelConfigs[targetTierId].segments;
+        const [draggedItem] = segments.splice(sourceIndex, 1);
+        segments.splice(dropIndex, 0, draggedItem);
+        setCurrentAppSettings(newAppSettings);
         
         setDraggedSegment(null);
     };
@@ -325,11 +313,7 @@ export default function AdminPage() {
   };
 
   const handleRemoveNewsItem = (indexToRemove: number) => {
-    setCurrentNewsItems(prev => {
-        const newItems = [...prev];
-        newItems.splice(indexToRemove, 1);
-        return newItems;
-    });
+    setCurrentNewsItems(prev => prev.filter((_, index) => index !== indexToRemove));
   };
   
   const startEditNewsItem = (index: number) => {
@@ -492,7 +476,7 @@ export default function AdminPage() {
 
              <TabsContent value="wheel-settings">
                  <Card className="bg-muted/20">
-                     <CardHeader><CardTitle className="flex items-center gap-2"><Wand2 /> Wheel & Segment Settings</CardTitle><CardDescription>Control prizes, costs, and visual appearance for each wheel.</CardDescription></CardHeader>
+                     <CardHeader><CardTitle className="flex items-center gap-2"><Wand2 /> Wheel &amp; Segment Settings</CardTitle><CardDescription>Control prizes, costs, and visual appearance for each wheel.</CardDescription></CardHeader>
                      <CardContent>
                          <Accordion type="single" collapsible className="w-full" defaultValue="item-little">
                              {Object.values(currentAppSettings.wheelConfigs).map((tier) => (
@@ -552,7 +536,7 @@ export default function AdminPage() {
                                          <Button onClick={() => addSegment(tier.id)} variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Add Segment</Button>
                                      </AccordionContent>
                                  </AccordionItem>
-                                )})}
+                                ))}
                          </Accordion>
                      </CardContent>
                  </Card>
@@ -580,13 +564,17 @@ export default function AdminPage() {
                   {currentNewsItems.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
                       {editingNewsItemIndex === index ? (
-                        <><Textarea value={editingNewsItemText} onChange={(e) => setEditingNewsItemText(e.target.value)} className="flex-grow bg-background" rows={2}/>
+                        <>
+                          <Textarea value={editingNewsItemText} onChange={(e) => setEditingNewsItemText(e.target.value)} className="flex-grow bg-background" rows={2}/>
                           <Button onClick={handleSaveEditedNewsItem} size="icon" variant="outline"><Save className="h-4 w-4 text-green-500" /></Button>
-                          <Button onClick={() => setEditingNewsItemIndex(null)} size="icon" variant="ghost"><X className="h-4 w-4" /></Button></>
+                          <Button onClick={() => setEditingNewsItemIndex(null)} size="icon" variant="ghost"><X className="h-4 w-4" /></Button>
+                        </>
                       ) : (
-                        <><Input value={item} readOnly className="flex-grow bg-background/50" />
+                        <>
+                          <Input value={item} readOnly className="flex-grow bg-background/50" />
                           <Button onClick={() => startEditNewsItem(index)} variant="outline" size="icon"><Edit2 className="h-4 w-4 text-blue-500" /></Button>
-                          <Button onClick={() => handleRemoveNewsItem(index)} variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button></>
+                          <Button onClick={() => handleRemoveNewsItem(index)} variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                        </>
                       )}
                     </div>
                   ))}
@@ -721,3 +709,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
