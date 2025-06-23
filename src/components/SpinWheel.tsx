@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import type { SegmentConfig } from '@/lib/appConfig'; // Use the central config type
 
@@ -12,6 +13,7 @@ export interface SpinWheelProps {
   isSpinning: boolean;
   spinDuration?: number;
   onClick?: () => void;
+  logoUrl: string;
 }
 
 // Helper to modify HSL lightness
@@ -30,8 +32,9 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   onSpinComplete,
   targetSegmentIndex,
   isSpinning,
-  spinDuration = 12, // Default duration set to 12 seconds
+  spinDuration = 8, // Default duration set to 8 seconds
   onClick,
+  logoUrl,
 }) => {
   const [accumulatedRotation, setAccumulatedRotation] = useState(0);
   const wheelRef = useRef<SVGSVGElement>(null);
@@ -51,8 +54,8 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       // The wheel needs to rotate such that this targetMiddleAngle is at the top (0 deg pointer).
       const finalOrientationAngle = -(targetMiddleAngle + randomOffsetWithinSegment);
 
-      // Number of full spins for visual effect. e.g., 10 full rotations
-      const fullSpinsDegrees = 360 * 10;
+      // Number of full spins for visual effect. e.g., 7 full rotations
+      const fullSpinsDegrees = 360 * 7;
 
       const currentNormalizedAngle = accumulatedRotation % 360;
       let rotationToNewOrientation = (finalOrientationAngle - currentNormalizedAngle);
@@ -177,20 +180,14 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         ref={wheelRef}
         id="wheel" 
         viewBox="0 0 200 200"
-        className={cn(
-          "w-full h-full rounded-full shadow-2xl"
-        )}
+        className="w-full h-full rounded-full"
         style={{
-          filter: 'url(#dropShadowWheel)',
           transform: `rotate(${accumulatedRotation}deg)` // Initial and resting rotation
         } as React.CSSProperties}
       >
         <defs>
           <filter id="dropShadowPointer" x="-50%" y="-50%" width="200%" height="200%">
             <feDropShadow dx="0" dy="2" stdDeviation="1.5" floodColor="rgba(0,0,0,0.3)" />
-          </filter>
-          <filter id="dropShadowWheel" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="5" stdDeviation="5" floodColor="rgba(0,0,0,0.2)" />
           </filter>
           <filter id="textShadow" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0.5" dy="0.5" stdDeviation="0.5" floodColor="rgba(0,0,0,0.7)" />
@@ -240,6 +237,18 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
           })}
         </g>
       </svg>
+      
+      <div className="absolute top-1/2 left-1/2 z-20 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-[6px] border-primary bg-background shadow-lg sm:h-24 sm:w-24">
+        {logoUrl && (
+          <Image
+            src={logoUrl}
+            alt="Spinify Logo"
+            width={96}
+            height={96}
+            className="h-full w-full rounded-full object-cover"
+          />
+        )}
+      </div>
     </div>
   );
 };

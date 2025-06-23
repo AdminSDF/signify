@@ -531,6 +531,7 @@ export default function GamePage() {
               targetSegmentIndex={targetSegmentIndex}
               isSpinning={isSpinning}
               onClick={user && !isSpinning && !wheelConfig.isLocked ? handleSpinClick : undefined}
+              logoUrl={appSettings.logoUrl}
             />
           </div>
           
