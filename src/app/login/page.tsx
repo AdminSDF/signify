@@ -92,7 +92,7 @@ export default function LoginPage() {
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] p-4">
       <Card 
         className={cn(
-          "w-full max-w-sm shadow-xl bg-card text-card-foreground rounded-lg",
+          "w-full max-w-sm shadow-xl bg-card text-card-foreground rounded-[3rem]",
           isAnimating && "animate-card-spin-multiple"
         )}
       >
