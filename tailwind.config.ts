@@ -89,6 +89,10 @@ export default {
             height: '0',
           },
         },
+        'spin-once': {
+          'from': { transform: 'rotate(0deg)' },
+          'to': { transform: 'rotate(360deg)' },
+        },
         bounceOnce: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-10px)' },
@@ -109,6 +113,7 @@ export default {
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'spin-once': 'spin-once 0.5s ease-in-out',
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
         'card-spin-multiple': 'card-spin-multiple 2.5s ease-in-out forwards',

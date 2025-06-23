@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -10,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { LoginCredentialsValidator, SignUpCredentialsValidator, type LoginCredentials, type SignUpCredentials } from '@/lib/validators/auth';
+import { cn } from '@/lib/utils';
 
 type FormData = LoginCredentials | SignUpCredentials;
 
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const { user, loginWithEmailPassword, signUpWithEmailPassword, loading } = useAuth();
   const router = useRouter();
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const [isSpinning, setIsSpinning] = useState(false); // State to control animation
 
   const currentValidator = isLoginMode ? LoginCredentialsValidator : SignUpCredentialsValidator;
 
@@ -34,12 +35,14 @@ export default function LoginPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    form.reset(
-      isLoginMode
-        ? { email: '', password: '' }
-        : { displayName: '', email: '', password: '', confirmPassword: '' }
-    );
-  }, [isLoginMode]);
+    if (!isSpinning) { // Only reset form when not spinning to prevent flash of empty fields
+      form.reset(
+        isLoginMode
+          ? { email: '', password: '' }
+          : { displayName: '', email: '', password: '', confirmPassword: '' }
+      );
+    }
+  }, [isLoginMode, form, isSpinning]);
 
   const onLogin: SubmitHandler<LoginCredentials> = async (data) => {
     await loginWithEmailPassword(data);
@@ -57,8 +60,17 @@ export default function LoginPage() {
     }
   };
 
-  const handleSwitchToSignUp = () => setIsLoginMode(false);
-  const handleSwitchToLogin = () => setIsLoginMode(true);
+  const handleAnimationAndSwitch = (switchToLogin: boolean) => {
+    if (isSpinning) return;
+    setIsSpinning(true);
+    setTimeout(() => {
+      setIsLoginMode(switchToLogin);
+      setIsSpinning(false);
+    }, 500); // Must match animation duration
+  };
+
+  const handleSwitchToSignUp = () => handleAnimationAndSwitch(false);
+  const handleSwitchToLogin = () => handleAnimationAndSwitch(true);
 
   if (loading) {
     return (
@@ -87,7 +99,10 @@ export default function LoginPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-black p-4">
       <div
-        className="relative w-[450px] h-[450px] rounded-full border-8 border-red-600 overflow-hidden flex items-center justify-center shadow-2xl"
+        className={cn(
+          "relative w-[450px] h-[450px] rounded-full border-8 border-red-600 overflow-hidden flex items-center justify-center shadow-2xl",
+          isSpinning && "animate-spin-once" // Conditionally apply animation
+        )}
         style={wheelStyle}
       >
         <div className="absolute w-full h-full bg-black/30 rounded-full backdrop-blur-sm"></div>
@@ -97,83 +112,91 @@ export default function LoginPage() {
         <div className="relative z-10 w-full flex flex-col items-center justify-center p-8">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="w-64 space-y-3">
-              {!isLoginMode && (
-                <FormField
-                  control={form.control}
-                  name="displayName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          placeholder="Name"
-                          {...field}
-                          className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                        />
-                      </FormControl>
-                      <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                    </FormItem>
+              {/* Hide form fields during spin for a cleaner animation */}
+              {!isSpinning ? (
+                <>
+                  {!isLoginMode && (
+                    <FormField
+                      control={form.control}
+                      name="displayName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="Name"
+                              {...field}
+                              className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
+                            />
+                          </FormControl>
+                          <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                />
-              )}
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="Email"
-                        {...field}
-                        className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                      />
-                    </FormControl>
-                    <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="Password"
-                        {...field}
-                        className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                      />
-                    </FormControl>
-                    <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                  </FormItem>
-                )}
-              />
-              {!isLoginMode && (
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="Confirm Password"
-                          {...field}
-                          className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                        />
-                      </FormControl>
-                       <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                    </FormItem>
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="Email"
+                            {...field}
+                            className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
+                          />
+                        </FormControl>
+                        <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            placeholder="Password"
+                            {...field}
+                            className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
+                          />
+                        </FormControl>
+                        <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
+                      </FormItem>
+                    )}
+                  />
+                  {!isLoginMode && (
+                    <FormField
+                      control={form.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="Confirm Password"
+                              {...field}
+                              className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
+                            />
+                          </FormControl>
+                           <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                />
+                </>
+              ) : (
+                // Placeholder to maintain layout during spin
+                <div className="h-[180px] w-full"></div>
               )}
               
               <div className="pt-8 space-y-3">
                 <Button
                   type={isLoginMode ? 'submit' : 'button'}
                   onClick={isLoginMode ? undefined : handleSwitchToLogin}
-                  disabled={loading}
+                  disabled={loading || isSpinning}
                   className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
                 >
                   Login
@@ -181,7 +204,7 @@ export default function LoginPage() {
                 <Button
                    type={!isLoginMode ? 'submit' : 'button'}
                    onClick={!isLoginMode ? undefined : handleSwitchToSignUp}
-                   disabled={loading}
+                   disabled={loading || isSpinning}
                    className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
                 >
                   Sign Up
