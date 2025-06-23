@@ -31,63 +31,60 @@ const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod 
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
 // This function determines the spin outcome based on the 60/40 rule and available wheel segments
-const getSpinResult = (betAmount: number, segments: Segment[]): { winAmount: number; multiplier: number } => {
+const getSpinResult = (segments: Segment[]): { winningSegment: Segment | undefined } => {
   const adminWinChance = 0.6;
   const random = Math.random();
 
-  const losingMultipliers = Array.from(new Set(segments.map(s => s.multiplier).filter(m => m === 0)));
-  const winningMultipliers = Array.from(new Set(segments.map(s => s.multiplier).filter(m => m > 0)));
-  winningMultipliers.sort((a, b) => a - b);
+  const losingSegments = segments.filter(s => s.multiplier === 0);
+  const winningSegments = segments.filter(s => s.multiplier > 0);
 
-  const hasLosingSegments = losingMultipliers.length > 0;
-  const hasWinningSegments = winningMultipliers.length > 0;
+  // Sort winning segments by multiplier to identify small/medium/big wins
+  winningSegments.sort((a, b) => a.multiplier - b.multiplier);
 
-  let chosenMultiplier: number;
+  const hasLosingSegments = losingSegments.length > 0;
+  const hasWinningSegments = winningSegments.length > 0;
 
-  // This should not happen if the component-level check is in place, but as a safeguard:
   if (!hasLosingSegments && !hasWinningSegments) {
-    return { winAmount: 0, multiplier: -1 }; // Use -1 to signal error
+    return { winningSegment: undefined }; // No segments to choose from
   }
+
+  let chosenSegment: Segment;
 
   // Case 1: Admin is meant to win (60% chance)
   if (random <= adminWinChance) {
     if (hasLosingSegments) {
-      // If there's a 0x prize, admin wins.
-      chosenMultiplier = 0;
+      // Pick a random losing segment
+      chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
     } else {
-      // If there are no 0x prizes, admin can't win. To protect the admin,
-      // award the smallest possible prize instead of a big one.
-      chosenMultiplier = winningMultipliers[0];
+      // If no losing segments, admin can't win. Give the smallest possible prize.
+      chosenSegment = winningSegments[0];
     }
   } 
   // Case 2: User is meant to win (40% chance)
   else {
     if (hasWinningSegments) {
-      // Standard user win logic
-      const smallWinMultiplier = winningMultipliers[0];
-      const bigWinMultiplier = winningMultipliers[winningMultipliers.length - 1];
-      const mediumWinMultiplier = winningMultipliers.length > 2
-        ? winningMultipliers[Math.floor(winningMultipliers.length / 2)]
-        : smallWinMultiplier;
+      const smallWinSegment = winningSegments[0];
+      const bigWinSegment = winningSegments[winningSegments.length - 1];
+      const mediumWinSegment = winningSegments.length > 2
+        ? winningSegments[Math.floor(winningSegments.length / 2)]
+        : smallWinSegment;
 
       const winRandom = Math.random();
       // Distribute the 40% win chance: 70% small, 20% medium, 10% big
       if (winRandom <= 0.7) {
-        chosenMultiplier = smallWinMultiplier;
+        chosenSegment = smallWinSegment;
       } else if (winRandom <= 0.9) {
-        chosenMultiplier = mediumWinMultiplier;
+        chosenSegment = mediumWinSegment;
       } else {
-        chosenMultiplier = bigWinMultiplier;
+        chosenSegment = bigWinSegment;
       }
     } else {
-      // User was meant to win, but no winning prizes are configured.
-      // The user must lose. This path should not be taken if hasLosingSegments is true.
-      chosenMultiplier = 0;
+      // User was meant to win, but no winning segments are configured. User must lose.
+      chosenSegment = losingSegments[0];
     }
   }
 
-  const winAmount = betAmount * chosenMultiplier;
-  return { winAmount, multiplier: chosenMultiplier };
+  return { winningSegment: chosenSegment };
 };
 
 
@@ -346,22 +343,24 @@ export default function GamePage() {
     await logUserActivity(user.uid, user.email, 'spin');
     
     const betAmount = isFreeSpin ? 0 : spinCost;
-    const { winAmount, multiplier } = getSpinResult(betAmount, wheelConfig.segments);
     
-    // Find all segments that match the winning multiplier
-    const possibleSegments = wheelConfig.segments
-      .map((segment, index) => ({ ...segment, originalIndex: index }))
-      .filter(s => s.multiplier === multiplier);
+    const { winningSegment } = getSpinResult(wheelConfig.segments);
 
-    if (possibleSegments.length === 0) {
-        // This block should not be reached with the new component-level check, but it's a good safeguard.
-        toast({ title: "Config Error", description: `Could not find any segment with a multiplier of ${multiplier}x.`, variant: "destructive" });
+    if (!winningSegment) {
+        toast({ title: "Config Error", description: `Could not determine a spin outcome. The wheel might be misconfigured.`, variant: "destructive" });
         return;
     }
 
-    // Randomly pick one of the possible segments
-    const winningSegment = possibleSegments[Math.floor(Math.random() * possibleSegments.length)];
-    const winningSegmentIndex = winningSegment.originalIndex;
+    const { winAmount } = { 
+        winAmount: betAmount * winningSegment.multiplier, 
+    };
+
+    const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
+
+    if (winningSegmentIndex === -1) {
+        toast({ title: "Internal Error", description: `Could not locate the winning segment on the wheel. Please contact support.`, variant: "destructive" });
+        return;
+    }
     
     const winningSegmentForDisplay: Segment = { ...winningSegment, amount: winAmount };
 
