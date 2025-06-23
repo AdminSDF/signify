@@ -1,10 +1,11 @@
+
 'use server';
 /**
- * @fileOverview AI-powered tip generator for the Spinify game.
+ * @fileOverview AI-powered game assistant for the Spinify game.
  *
- * - generateTip - A function that generates a tip based on the player's spin history.
- * - SpinHistory - The input type for the generateTip function, representing the player's spin history.
- * - TipOutput - The return type for the generateTip function, containing the generated tip.
+ * - generateTip - A function that generates a contextual tip or message based on game events.
+ * - GenerateTipInput - The input type for the generateTip function.
+ * - TipOutput - The return type for the generateTip function, containing the generated message.
  */
 
 import {ai} from '@/ai/genkit';
@@ -19,39 +20,66 @@ const SpinHistorySchema = z.array(
 
 export type SpinHistory = z.infer<typeof SpinHistorySchema>;
 
-const TipOutputSchema = z.object({
-  tip: z.string().describe('An AI-generated tip for the player.'),
+const GenerateTipInputSchema = z.object({
+  spinHistory: SpinHistorySchema,
+  eventType: z.enum(['win', 'loss', 'encouragement', 'initial']),
+  lastReward: z.string().optional().describe('The reward from the very last spin, if applicable.'),
 });
+export type GenerateTipInput = z.infer<typeof GenerateTipInputSchema>;
 
+
+const TipOutputSchema = z.object({
+  tip: z.string().describe('An AI-generated tip or message for the player.'),
+});
 export type TipOutput = z.infer<typeof TipOutputSchema>;
 
-export async function generateTip(spinHistory: SpinHistory): Promise<TipOutput> {
-  return generateTipFlow(spinHistory);
+export async function generateTip(input: GenerateTipInput): Promise<TipOutput> {
+  return generateTipFlow(input);
 }
 
-const generateTipPrompt = ai.definePrompt({
-  name: 'generateTipPrompt',
-  input: {schema: SpinHistorySchema},
-  output: {schema: TipOutputSchema},
-  prompt: `You are an AI assistant that provides helpful tips to players of the Spinify game based on their spin history.
-
-  Analyze the following spin history and provide a single, concise tip to help the player improve their chances of winning. The tip should be actionable and based on patterns or trends in their previous spins. Be encouraging and positive.
-
-  Spin History:
-  {{#each this}}
-    Spin {{spinNumber}}: Reward - {{reward}}
-  {{/each}}
-  `,
-});
 
 const generateTipFlow = ai.defineFlow(
   {
     name: 'generateTipFlow',
-    inputSchema: SpinHistorySchema,
+    inputSchema: GenerateTipInputSchema,
     outputSchema: TipOutputSchema,
   },
-  async spinHistory => {
-    const {output} = await generateTipPrompt(spinHistory);
+  async ({ spinHistory, eventType, lastReward }) => {
+    let promptInstruction = `You are a friendly and encouraging Game Assistant for Spinify. Your goal is to keep the player engaged and happy.
+    Your response must be a single, concise, and friendly sentence. Be creative and vary your responses.`;
+
+    switch (eventType) {
+      case 'win':
+        promptInstruction += `\n\nThe player just won: "${lastReward}". Congratulate them and give a very short, positive comment about their luck or strategy.`;
+        break;
+      case 'loss':
+        promptInstruction += `\n\nThe player just lost a spin ("${lastReward}"). Give them an encouraging and optimistic message. Make them feel like a big win is just around the corner.`;
+        break;
+      case 'encouragement':
+        promptInstruction += `\n\nThe player seems to be idle. Generate a fun, engaging, and persuasive message to convince them to spin the wheel again. For example: "The wheel is calling your name!" or "Feeling lucky? A big win could be next!"`;
+        break;
+      case 'initial':
+      default:
+        promptInstruction += `\n\nThe player has just arrived at the game. Give them a warm, welcoming message and a very short tip to get started. For example: "Welcome to the game! Click the wheel to start your winning streak!"`;
+        break;
+    }
+
+    if (spinHistory.length > 0) {
+        promptInstruction += `\n\nFor context, here is their recent spin history (up to the last 5 spins):\n`;
+        spinHistory.slice(-5).forEach(spin => {
+            promptInstruction += `Spin ${spin.spinNumber}: ${spin.reward}\n`;
+        });
+    }
+
+    const { output } = await ai.generate({
+        prompt: promptInstruction,
+        model: 'googleai/gemini-2.0-flash',
+        output: { schema: TipOutputSchema },
+        config: {
+          temperature: 0.8, // A bit more creative
+        }
+    });
+
     return output!;
   }
 );

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -9,11 +9,11 @@ import { ArrowLeft, DollarSign, ShieldAlert } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
 import SpinWheel, { type Segment } from '@/components/SpinWheel';
 import PrizeDisplay from '@/components/PrizeDisplay';
-import TipGeneratorButton from '@/components/TipGeneratorButton';
+import GameAssistant from '@/components/GameAssistant';
 import { useSound } from '@/hooks/useSound';
 import { useToast } from "@/hooks/use-toast";
 import type { SpinHistory } from '@/ai/flows/spinify-tip-generator';
-import { getAiTipAction, type TipGenerationResult } from '@/app/actions/generateTipAction';
+import { getAiTipAction } from '@/app/actions/generateTipAction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,6 @@ import {
 import { Steps } from 'intro.js-react';
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
-const TipModal = dynamic(() => import('@/components/TipModal'), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
 // This function determines the spin outcome based on the 60/40 rule
@@ -65,10 +64,8 @@ export default function GamePage() {
   const [currentPrize, setCurrentPrize] = useState<Segment | null>(null);
   const [spinHistory, setSpinHistory] = useState<SpinHistory>([]);
 
-  const [showTipModal, setShowTipModal] = useState(false);
-  const [generatedTip, setGeneratedTip] = useState<string | null>(null);
-  const [tipLoading, setTipLoading] = useState(false);
-  const [tipError, setTipError] = useState<string | null>(null);
+  const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
+  const [isAssistantLoading, setIsAssistantLoading] = useState(true);
 
   const [showConfetti, setShowConfetti] = useState(false);
   const [spinsAvailable, setSpinsAvailable] = useState<number>(0);
@@ -84,6 +81,8 @@ export default function GamePage() {
 
   const [isClient, setIsClient] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
+  
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user && userData && !authLoading && userData.toursCompleted?.gamePage === false) {
@@ -116,8 +115,8 @@ export default function GamePage() {
       intro: 'After a spin, your prize will be displayed here. We hope you win big!',
     },
     {
-      element: '[data-tour-id="pro-tip-button"]',
-      intro: 'Feeling stuck? Click here to get an AI-powered pro tip based on your recent games!',
+      element: '[data-tour-id="game-assistant"]',
+      intro: 'This is your Game Assistant! It will give you tips and encouragement as you play.',
     },
   ];
   
@@ -163,6 +162,54 @@ export default function GamePage() {
     setLastPaidSpinDate(userData.lastPaidSpinDate || todayStr);
 
   }, [isClient, user, userData, authLoading, tier]);
+  
+    const fetchAssistantMessage = useCallback(async (
+        eventType: 'win' | 'loss' | 'encouragement' | 'initial',
+        history: SpinHistory,
+        lastReward?: string
+    ) => {
+        if(!user) return;
+        setIsAssistantLoading(true);
+        try {
+            const result = await getAiTipAction({ spinHistory: history, eventType, lastReward });
+            if (result.tip) {
+                setAssistantMessage(result.tip);
+            } else if (result.error) {
+                console.warn("Assistant error:", result.error);
+                // Fail silently on the UI for a better user experience
+            }
+        } catch (e) {
+            console.error("Failed to fetch assistant message:", e);
+        } finally {
+            setIsAssistantLoading(false);
+        }
+    }, [user]);
+
+    const resetIdleTimer = useCallback(() => {
+        if (idleTimerRef.current) {
+            clearTimeout(idleTimerRef.current);
+        }
+        idleTimerRef.current = setTimeout(() => {
+            if (!isSpinning) { // Check if not spinning
+                fetchAssistantMessage('encouragement', spinHistory);
+            }
+        }, 25000); // 25 seconds
+    }, [isSpinning, spinHistory, fetchAssistantMessage]);
+
+    // Initial message on load
+    useEffect(() => {
+        fetchAssistantMessage('initial', []);
+    }, [fetchAssistantMessage]);
+
+    // Reset idle timer whenever spin history changes (i.e., after a spin) or spin state changes
+    useEffect(() => {
+        if (user) {
+          resetIdleTimer();
+        }
+        return () => {
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        };
+    }, [spinHistory, resetIdleTimer, user]);
 
 
   const addTransaction = useCallback(async (details: {
@@ -223,6 +270,8 @@ export default function GamePage() {
       toast({ title: "Account Blocked", description: "Your account is blocked. Please contact support.", variant: "destructive" });
       return;
     }
+    
+    resetIdleTimer(); // Reset idle timer on spin attempt
 
     let spinCost = 0;
     let isFreeSpin = false;
@@ -321,7 +370,7 @@ export default function GamePage() {
 
   }, [
     isClient, isSpinning, user, authLoading, userData, wheelConfig, tier, spinsAvailable,
-    userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, 
+    userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, resetIdleTimer,
     startSpinProcess, addTransaction, getLittleTierSpinCost, toast, router
   ]);
 
@@ -332,8 +381,12 @@ export default function GamePage() {
     
     if (!user || !userData || !prizeToDisplay) return;
 
-    const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: prizeToDisplay.amount ? `₹${prizeToDisplay.amount}` : prizeToDisplay.text };
-    setSpinHistory(prev => [...prev, newSpinRecordForAI]);
+    const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: prizeToDisplay.amount ? `₹${prizeToDisplay.amount.toFixed(2)}` : prizeToDisplay.text };
+    const updatedHistory = [...spinHistory, newSpinRecordForAI];
+    setSpinHistory(updatedHistory);
+    
+    const isWin = prizeToDisplay.multiplier !== 0;
+    fetchAssistantMessage(isWin ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
     
     if (prizeToDisplay.amount && prizeToDisplay.amount > 0) {
       playSound('win');
@@ -344,17 +397,8 @@ export default function GamePage() {
     } else {
       playSound('tryAgain');
     }
-  }, [playSound, spinHistory.length, user, userData, currentPrize]);
+  }, [playSound, spinHistory, user, userData, currentPrize, fetchAssistantMessage]);
   
-  const handleGenerateTip = useCallback(async () => {
-    if (!user) { toast({ title: "Login Required", description: "Please log in." }); return; }
-    setTipLoading(true); setTipError(null); setShowTipModal(true);
-    const result: TipGenerationResult = await getAiTipAction(spinHistory);
-    if (result.tip) setGeneratedTip(result.tip);
-    else if (result.error) { setGeneratedTip(null); setTipError(result.error); toast({ variant: "destructive", title: "Tip Failed", description: result.error }); }
-    setTipLoading(false);
-  }, [spinHistory, toast, user]);
-
   const handlePaymentConfirm = useCallback(async () => {
     setShowPaymentModal(false);
     toast({ title: "Action Required", description: `Please go to your profile to add balance to the ${wheelConfig?.name} wallet.` });
@@ -441,27 +485,29 @@ export default function GamePage() {
               onClick={user && !isSpinning ? handleSpinClick : undefined}
             />
           </div>
-
-          <div className="my-8 w-full flex flex-col items-center gap-4">
-          {user && (
-              <div data-tour-id="spin-cost" className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
-                  {tier === 'little' && spinsAvailable > 0
-                      ? <>Free Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle}</>
-                      : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span></>
-                  }
-                  {tier === 'little' && spinsAvailable <= 0 && <>. Paid today: {dailyPaidSpinsUsed}</>}
+          
+          <div className="my-2 w-full flex flex-col items-center gap-4">
+            {user && (
+                <div data-tour-id="spin-cost" className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
+                    {tier === 'little' && spinsAvailable > 0
+                        ? <>Free Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle}</>
+                        : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span></>
+                    }
+                    {tier === 'little' && spinsAvailable <= 0 && <>. Paid today: {dailyPaidSpinsUsed}</>}
+                </div>
+            )}
+              <div data-tour-id="prize-display" className="min-h-[140px]">
+                <PrizeDisplay prize={currentPrize} />
               </div>
-          )}
-            <div data-tour-id="prize-display">
-              <PrizeDisplay prize={currentPrize} />
-            </div>
           </div>
-          <div data-tour-id="pro-tip-button">
-            <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning || !user} />
-          </div>
+          
+          <GameAssistant
+            isLoading={isAssistantLoading}
+            message={assistantMessage}
+          />
+
         </main>
 
-        <TipModal isOpen={showTipModal} onClose={() => setShowTipModal(false)} tip={generatedTip} isLoading={tipLoading} error={tipError} onGenerateTip={handleGenerateTip} />
         <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} appName={appSettings.appName} amount={paymentModalAmount} tierName={wheelConfig.name} />
       </div>
     </>
