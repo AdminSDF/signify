@@ -314,6 +314,14 @@ export default function AdminPage() {
   };
 
   const removeSegment = (tierId: string, indexToRemove: number) => {
+      if (currentAppSettings.wheelConfigs[tierId].segments.length <= 1) {
+          toast({
+              title: "Cannot Delete Last Segment",
+              description: "A wheel must have at least one prize segment.",
+              variant: "destructive",
+          });
+          return;
+      }
       setCurrentAppSettings(prev => {
           const newSegments = prev.wheelConfigs[tierId].segments.filter((_, index) => index !== indexToRemove);
           return {

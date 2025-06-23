@@ -44,19 +44,20 @@ const getSpinResult = (betAmount: number, segments: Segment[]): { winAmount: num
 
   let chosenMultiplier: number;
 
+  // This should not happen if the component-level check is in place, but as a safeguard:
+  if (!hasLosingSegments && !hasWinningSegments) {
+    return { winAmount: 0, multiplier: -1 }; // Use -1 to signal error
+  }
+
   // Case 1: Admin is meant to win (60% chance)
   if (random <= adminWinChance) {
     if (hasLosingSegments) {
       // If there's a 0x prize, admin wins.
       chosenMultiplier = 0;
-    } else if (hasWinningSegments) {
+    } else {
       // If there are no 0x prizes, admin can't win. To protect the admin,
       // award the smallest possible prize instead of a big one.
       chosenMultiplier = winningMultipliers[0];
-    } else {
-      // No segments on the wheel at all. This is a config error.
-      // We return a value that will cause the calling function to error out with a clear message.
-      return { winAmount: 0, multiplier: -1 }; // Use -1 to signal error
     }
   } 
   // Case 2: User is meant to win (40% chance)
@@ -78,13 +79,10 @@ const getSpinResult = (betAmount: number, segments: Segment[]): { winAmount: num
       } else {
         chosenMultiplier = bigWinMultiplier;
       }
-    } else if (hasLosingSegments) {
-      // User was meant to win, but no winning prizes are configured.
-      // The user must lose.
-      chosenMultiplier = 0;
     } else {
-      // No segments on the wheel at all.
-      return { winAmount: 0, multiplier: -1 }; // Use -1 to signal error
+      // User was meant to win, but no winning prizes are configured.
+      // The user must lose. This path should not be taken if hasLosingSegments is true.
+      chosenMultiplier = 0;
     }
   }
 
@@ -347,14 +345,8 @@ export default function GamePage() {
     // Log spin activity
     await logUserActivity(user.uid, user.email, 'spin');
     
-    // --- New Spin Logic ---
     const betAmount = isFreeSpin ? 0 : spinCost;
     const { winAmount, multiplier } = getSpinResult(betAmount, wheelConfig.segments);
-
-    if (multiplier === -1) { // Check for the error signal from getSpinResult
-        toast({ title: "Configuration Error", description: "The wheel has no prizes configured. Please contact support.", variant: "destructive" });
-        return;
-    }
     
     // Find all segments that match the winning multiplier
     const possibleSegments = wheelConfig.segments
@@ -362,8 +354,8 @@ export default function GamePage() {
       .filter(s => s.multiplier === multiplier);
 
     if (possibleSegments.length === 0) {
-        // This block should theoretically not be reached with the new getSpinResult logic, but it's a good safeguard.
-        toast({ title: "Config Error", description: `Could not find any segment with a multiplier of ${multiplier}x. Please check admin panel.`, variant: "destructive" });
+        // This block should not be reached with the new component-level check, but it's a good safeguard.
+        toast({ title: "Config Error", description: `Could not find any segment with a multiplier of ${multiplier}x.`, variant: "destructive" });
         return;
     }
 
@@ -371,13 +363,8 @@ export default function GamePage() {
     const winningSegment = possibleSegments[Math.floor(Math.random() * possibleSegments.length)];
     const winningSegmentIndex = winningSegment.originalIndex;
     
-    // Set the winning segment's amount dynamically for prize display
-    const winningSegmentForDisplay: Segment = {
-        ...winningSegment,
-        amount: winAmount,
-    };
+    const winningSegmentForDisplay: Segment = { ...winningSegment, amount: winAmount };
 
-    // Start UI updates and animations
     startSpinProcess(winningSegmentIndex);
     
     const balanceBefore = userBalance;
@@ -462,6 +449,26 @@ export default function GamePage() {
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // New check for wheel configuration
+  if (!wheelConfig.segments || wheelConfig.segments.length === 0) {
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-md">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Wheel Configuration Error</AlertTitle>
+          <AlertDescription>
+            This wheel has no prizes configured. An admin needs to add prize segments before it can be played.
+          </AlertDescription>
+          {userData?.isAdmin && (
+            <Button onClick={() => router.push('/admin')} className="mt-4">
+              Go to Admin Panel
+            </Button>
+          )}
+        </Alert>
       </div>
     );
   }
