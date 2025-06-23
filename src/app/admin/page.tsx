@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -56,8 +56,9 @@ const getTierName = (tierId: string, wheelConfigs: { [key: string]: WheelTierCon
 };
 
 const getUserBalanceForTier = (user: UserDocument, tierId: string): string => {
-    if (user && user.balances && typeof user.balances[tierId] === 'number') {
-        return user.balances[tierId].toFixed(2);
+    const balance = user?.balances?.[tierId];
+    if (typeof balance === 'number') {
+        return balance.toFixed(2);
     }
     return '0.00';
 };
@@ -230,77 +231,60 @@ export default function AdminPage() {
     setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: validPresets }));
   };
   
-  const handleWheelConfigChange = (tierId: string, field: string, value: any) => {
+  const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
     setCurrentAppSettings(prev => {
-        const numValue = parseFloat(value);
-        const finalValue = field === 'minWithdrawalAmount' ? (isNaN(numValue) ? 0 : numValue) : value;
-        
-        const updatedTier = {
-            ...prev.wheelConfigs[tierId],
-            [field]: finalValue,
-        };
+      const newAppSettings = JSON.parse(JSON.stringify(prev));
+      const tierConfig = newAppSettings.wheelConfigs[tierId];
+      if (!tierConfig) return prev;
 
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [tierId]: updatedTier,
-            },
-        };
+      if (field === 'minWithdrawalAmount') {
+        const numValue = parseFloat(value);
+        tierConfig.minWithdrawalAmount = isNaN(numValue) ? 0 : numValue;
+      } else {
+        tierConfig[field] = value;
+      }
+      return newAppSettings;
     });
   };
 
-  const handleCostSettingChange = (tierId: string, field: string, value: any) => {
+  const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
       setCurrentAppSettings(prev => {
-          const numValue = parseFloat(value);
-          const finalValue = isNaN(numValue) ? 0 : numValue;
-          
-          const updatedCostSettings = {
-              ...prev.wheelConfigs[tierId].costSettings,
-              [field]: finalValue,
-          };
-  
-          const updatedTier = {
-              ...prev.wheelConfigs[tierId],
-              costSettings: updatedCostSettings,
-          };
-  
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: updatedTier,
-              },
-          };
+        const newAppSettings = JSON.parse(JSON.stringify(prev));
+        const costSettings = newAppSettings.wheelConfigs[tierId]?.costSettings;
+        if (!costSettings) return prev;
+
+        const numValue = parseFloat(value);
+        const finalValue = isNaN(numValue) ? 0 : numValue;
+
+        costSettings[field] = finalValue;
+        
+        return newAppSettings;
       });
   };
 
-  const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: any) => {
+  const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
     setCurrentAppSettings(prev => {
-        const numValue = parseFloat(value);
-        const finalValue = field === 'multiplier' ? (isNaN(numValue) ? 0 : numValue) : value;
+      const newAppSettings = JSON.parse(JSON.stringify(prev));
+      const segment = newAppSettings.wheelConfigs[tierId]?.segments[segmentIndex];
+      if (!segment) return prev;
 
-        const newSegments = [...prev.wheelConfigs[tierId].segments];
-        const newSegmentData = { ...newSegments[segmentIndex], [field]: finalValue };
-        newSegments[segmentIndex] = newSegmentData;
-
-        const newWheelConfig = {
-            ...prev.wheelConfigs[tierId],
-            segments: newSegments
-        };
-
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [tierId]: newWheelConfig
-            }
-        };
+      if (field === 'multiplier') {
+          const numValue = parseFloat(value);
+          segment.multiplier = isNaN(numValue) ? 0 : numValue;
+      } else if (field === 'text' || field === 'emoji' || field === 'color') {
+        segment[field] = value;
+      }
+      
+      return newAppSettings;
     });
   };
   
   const addSegment = (tierId: string) => {
       setCurrentAppSettings(prev => {
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const tierConfig = newAppSettings.wheelConfigs[tierId];
+          if (!tierConfig) return prev;
+
           const newSegment: SegmentConfig = {
               id: `${tierId.charAt(0)}${new Date().getTime()}`,
               text: 'New Prize',
@@ -309,40 +293,19 @@ export default function AdminPage() {
               color: '0 0% 80%',
           };
           
-          const updatedSegments = [...prev.wheelConfigs[tierId].segments, newSegment];
-          
-          const updatedTier = {
-              ...prev.wheelConfigs[tierId],
-              segments: updatedSegments,
-          };
-          
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: updatedTier,
-              },
-          };
+          tierConfig.segments.push(newSegment);
+          return newAppSettings;
       });
   };
   
   const removeSegment = (tierId: string, indexToRemove: number) => {
     setCurrentAppSettings(prev => {
-        const oldSegments = prev.wheelConfigs[tierId].segments;
-        const updatedSegments = oldSegments.slice(0, indexToRemove).concat(oldSegments.slice(indexToRemove + 1));
-        
-        const updatedTier = {
-            ...prev.wheelConfigs[tierId],
-            segments: updatedSegments,
-        };
-        
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [tierId]: updatedTier,
-            },
-        };
+      const newAppSettings = JSON.parse(JSON.stringify(prev));
+      const tierConfig = newAppSettings.wheelConfigs[tierId];
+      if (!tierConfig) return prev;
+      
+      tierConfig.segments = tierConfig.segments.filter((_, index) => index !== indexToRemove);
+      return newAppSettings;
     });
   };
   
@@ -360,26 +323,16 @@ export default function AdminPage() {
         return;
       }
   
-      const sourceTierId = draggedSegment.tierId;
-      const dragIndex = draggedSegment.index;
-  
       setCurrentAppSettings(prev => {
-          const segmentsCopy = [...prev.wheelConfigs[sourceTierId].segments];
-          const [draggedItem] = segmentsCopy.splice(dragIndex, 1);
+          const newAppSettings = JSON.parse(JSON.stringify(prev));
+          const tierConfig = newAppSettings.wheelConfigs[targetTierId];
+          if (!tierConfig) return prev;
+
+          const segmentsCopy = tierConfig.segments;
+          const [draggedItem] = segmentsCopy.splice(draggedSegment.index, 1);
           segmentsCopy.splice(dropIndex, 0, draggedItem);
           
-          const updatedTier = {
-              ...prev.wheelConfigs[sourceTierId],
-              segments: segmentsCopy,
-          };
-  
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [sourceTierId]: updatedTier,
-              },
-          };
+          return newAppSettings;
       });
   
       setDraggedSegment(null);
@@ -556,7 +509,7 @@ export default function AdminPage() {
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{getUserBalanceForTier(u, tierId)}</TableCell>)}
-                          <TableCell>{u.spinsAvailable}</TableCell>
+                          <TableCell>{u.spinsAvailable || 0}</TableCell>
                           <TableCell>{(u.totalWinnings || 0).toFixed(2)}</TableCell>
                           <TableCell>{(u.totalDeposited || 0).toFixed(2)}</TableCell>
                           <TableCell>{(u.totalWithdrawn || 0).toFixed(2)}</TableCell>
@@ -814,5 +767,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    
