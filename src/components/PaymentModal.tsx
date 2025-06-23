@@ -1,8 +1,8 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import Image from 'next/image';
 import {
   Dialog,
   DialogContent,
@@ -29,12 +29,70 @@ interface PaymentModalProps {
 }
 
 const upiApps = [
-  { name: 'Google Pay', logoUrl: 'https://placehold.co/80x80.png', dataAiHint: 'google pay logo', scheme: 'gpay://upi/pay' },
-  { name: 'PhonePe', logoUrl: 'https://placehold.co/80x80.png', dataAiHint: 'phonepe logo', scheme: 'phonepe://pay' },
-  { name: 'Paytm', logoUrl: 'https://placehold.co/80x80.png', dataAiHint: 'paytm logo', scheme: 'paytmmp://upi/pay' },
-  { name: 'Amazon Pay', logoUrl: 'https://placehold.co/80x80.png', dataAiHint: 'amazon pay logo', scheme: 'amazonpay://pay' },
-  { name: 'BHIM', logoUrl: 'https://placehold.co/80x80.png', dataAiHint: 'bhim upi logo', scheme: 'bhim://upi/pay' },
-  { name: 'Other Apps', logoUrl: 'https://placehold.co/80x80.png', dataAiHint: 'upi logo', scheme: 'upi://pay' },
+  {
+    name: 'Google Pay',
+    scheme: 'gpay://upi/pay',
+    logo: (
+      <svg className="w-12 h-12" viewBox="0 0 60 60">
+        <rect width="60" height="60" rx="12" fill="#fff" stroke="#e0e0e0" strokeWidth="1"></rect>
+        <path d="M25.26 21.68L29.1 29.5l-3.84 7.82h3.2l2.3-4.87h.08c.55 1.7 1.48 3.23 2.76 4.3l-2.04 4.25h3.3l5.5-11.45V21.68h-9.9v.01zm6.04 7.2l-2.1-4.48h-.06l-2.12 4.48h4.28z" fill="#5f6368"></path>
+        <path d="M22.95 38.38A5.36 5.36 0 0117.6 33a5.36 5.36 0 015.36-5.36c1.63 0 3.03.73 4 1.9l-2.03 1.52a2.33 2.33 0 00-1.93-1c-1.39 0-2.52 1.13-2.52 2.94s1.13 2.94 2.52 2.94c1.6 0 2.22-1.04 2.33-1.63h-2.33v-2.3h5.45c.05.3.08.6.08.92a4.8 4.8 0 01-1.37 3.5 5.2 5.2 0 01-4.14 2.1z" fill="#4285f4"></path>
+      </svg>
+    ),
+  },
+  {
+    name: 'PhonePe',
+    scheme: 'phonepe://pay',
+    logo: (
+      <svg className="w-12 h-12" viewBox="0 0 60 60">
+        <rect width="60" height="60" rx="12" fill="#5f259f"></rect>
+        <path fill="#fff" d="M36.14 28.52h-2.73l-.48-2.11h-3.87l-.48 2.1h-2.74l3.92-10.26h2.43l3.95 10.25zm-4.65-3.82l-1.22-5.32-1.22 5.32h2.44z"></path>
+      </svg>
+    ),
+  },
+  {
+    name: 'Paytm',
+    scheme: 'paytmmp://upi/pay',
+    logo: (
+      <svg className="w-12 h-12" viewBox="0 0 60 60">
+         <rect width="60" height="60" rx="12" fill="#00baf2"></rect>
+         <path fill="#fff" d="M22.14 28.9h2.3v-9.7h3.8v-2.2h-9.9v2.2h3.8v9.7zM30.64 28.9h2.4l3.6-7.9h.1v7.9h2.2v-11.9h-2.5l-3.5 7.7h-.1v-7.7h-2.2v11.9z"></path>
+         <path fill="#0d2e69" d="M42.14 24.3c0-2-1.4-3.4-3.5-3.4s-3.5 1.4-3.5 3.4c0 2 1.4 3.4 3.5 3.4s3.5-1.4 3.5-3.4zm-4.8 0c0-.9.7-1.6 1.3-1.6s1.3.7 1.3 1.6c0 .9-.7 1.6-1.3 1.6s-1.3-.7-1.3-1.6z"></path>
+      </svg>
+    ),
+  },
+  {
+    name: 'Amazon Pay',
+    scheme: 'amazonpay://pay',
+    logo: (
+      <svg className="w-12 h-12" viewBox="0 0 60 60">
+        <rect width="60" height="60" rx="12" fill="#232f3e"></rect>
+        <path fill="#ff9900" d="M26.4 35.4c-4.4 0-8.2-1.4-8.2-4.2 0-2.3 2.5-3.8 6.2-4.1l4.2-0.3c0.8-2.6-1.1-4.2-4.3-4.2 -2.3 0-4.3 0.9-5.7 1.7l-1.6-2.5c1.8-1.1 4.5-2 8-2 6.5 0 9.8 3.6 9.8 7.8v10.5h-3.4v-1.9c-1.3 1.5-3.3 2.2-5.8 2.2zM28 32.8c2.4 0 4.1-1.3 4.1-3.3 0-1.4-1-2.2-2.7-2.2l-4.1 0.3c-1.1 0.1-1.9 0.6-1.9 1.5 0 1.5 1.8 2.7 4.6 2.7z"></path>
+        <path fill="#fff" d="M35.6,39.8c1.8-1.8,1.8-4.6,0-6.4l-3-3c-0.5-0.5-1.2-0.5-1.7,0l-3,3c-1.8,1.8-1.8,4.6,0,6.4l3,3 C31,42.8,35.6,42.8,35.6,39.8z M32.6,36.8c-1.2,1.2-3.1,1.2-4.2,0l-3-3c-1.2-1.2-1.2-3.1,0-4.2l3-3c1.2-1.2,3.1-1.2,4.2,0l3,3 C33.8,33.7,33.8,35.6,32.6,36.8z"></path>
+      </svg>
+    ),
+  },
+  {
+    name: "BHIM",
+    scheme: "bhim://upi/pay",
+    logo: (
+        <svg className="w-12 h-12" viewBox="0 0 60 60">
+            <rect width="60" height="60" rx="12" fill="#003e7b"/>
+            <path d="M38.8,33.5h-5.3v-2.3c1-0.7,1.7-1.8,1.7-3.1c0-2-1.6-3.6-3.6-3.6s-3.6,1.6-3.6,3.6c0,1.3,0.7,2.4,1.7,3.1v2.3h-5.3 c-0.6,0-1,0.4-1,1v5.8c0,0.6,0.4,1,1,1h14.4c0.6,0,1-0.4,1-1v-5.8C39.8,33.9,39.4,33.5,38.8,33.5z M29.9,30.1 c0-1,0.8-1.8,1.8-1.8s1.8,0.8,1.8,1.8c0,1-0.8,1.8-1.8,1.8S29.9,31.1,29.9,30.1z M34.9,38.5h-2.9v-2.1h2.9V38.5z M27.9,38.5h-2.9 v-2.1h2.9V38.5z" fill="#ff6700"/>
+            <path d="M21.5,18.7h17c0.6,0,1,0.4,1,1v4.2h-3.4v-3.2H23.9v10.5h3.9v-3.2h3.4v4.2c0,0.6-0.4,1-1,1h-7.3c-0.6,0-1-0.4-1-1v-12.5 C20.5,19.1,20.9,18.7,21.5,18.7z" fill="#009c48"/>
+        </svg>
+    ),
+  },
+  {
+    name: "Other Apps",
+    scheme: "upi://pay",
+    logo: (
+        <svg className="w-12 h-12" viewBox="0 0 60 60">
+            <rect width="60" height="60" rx="12" fill="#e0e0e0"/>
+            <path d="M22,29h2.5v-8.3h3.4V29H30v1.9h-8V29z M32.1,29h2.1l3-6.7h0.1V29h1.9v-10.2h-2.2l-2.9,6.5h-0.1v-6.5h-1.9V30.9z" fill="#757575"/>
+        </svg>
+    ),
+  },
 ];
 
 
@@ -130,7 +188,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                    rel="noopener noreferrer"
                    className="flex flex-col items-center justify-start gap-2 p-2 rounded-lg hover:bg-muted transition-colors h-24"
                  >
-                   <Image src={app.logoUrl} alt={`${app.name} logo`} width={48} height={48} className="rounded-full" data-ai-hint={app.dataAiHint} />
+                   {app.logo}
                    <span className="text-xs text-center font-medium text-foreground">{app.name}</span>
                  </a>
               ))}
