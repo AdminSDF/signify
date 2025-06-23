@@ -58,7 +58,7 @@ const SiteHeader: React.FC = () => {
             ) : user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                  <Button data-tour-id="header-profile-button" variant="ghost" className="relative h-9 w-9 rounded-full p-0">
                     <Avatar className="h-9 w-9 border-2 border-primary/50">
                       <AvatarImage src={user.photoURL || undefined} alt={user.displayName || user.email || 'User'} />
                       <AvatarFallback>{user.displayName?.[0] || user.email?.[0] || 'U'}</AvatarFallback>

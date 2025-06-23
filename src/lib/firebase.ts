@@ -89,6 +89,11 @@ export interface UserDocument {
   };
   totalPlayTime?: number; // in minutes
   devices?: string[]; // e.g. ['Android', 'iOS', 'Web']
+  toursCompleted?: {
+    welcome?: boolean;
+    gamePage?: boolean;
+    profilePage?: boolean;
+  };
 }
 
 export const createUserData = async (
@@ -133,6 +138,11 @@ export const createUserData = async (
     totalSpinsPlayed: 0,
     totalDeposited: 0,
     totalWithdrawn: 0,
+    toursCompleted: {
+      welcome: false,
+      gamePage: false,
+      profilePage: false,
+    },
   };
   await setDoc(userRef, userData);
 };

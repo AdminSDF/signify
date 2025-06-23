@@ -25,6 +25,7 @@ import {
   logUserActivity,
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
+import { Steps } from 'intro.js-react';
 
 type PaymentMethod = "upi" | "bank";
 
@@ -56,8 +57,45 @@ export default function ProfilePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
 
   const activeWheelConfig = appSettings.wheelConfigs[activeTier];
+
+  useEffect(() => {
+    if (user && userData && !loading && userData.toursCompleted?.profilePage === false) {
+      setTimeout(() => setIsTourOpen(true), 500);
+    }
+  }, [user, userData, loading]);
+
+  const onTourExit = () => {
+    setIsTourOpen(false);
+    if (user) {
+        updateUserData(user.uid, { 'toursCompleted.profilePage': true });
+    }
+  };
+
+  const tourSteps = [
+    {
+      element: '[data-tour-id="profile-avatar"]',
+      intro: 'Here you can see your profile picture and name. Click the camera icon to upload a new photo!',
+    },
+    {
+      element: '[data-tour-id="tier-selector-tabs"]',
+      intro: 'You have a separate balance for each game arena. Click these tabs to switch between your wallets.',
+    },
+    {
+      element: '[data-tour-id="balance-display"]',
+      intro: 'This card shows your current balance for the selected wallet.',
+    },
+    {
+      element: '[data-tour-id="add-balance-section"]',
+      intro: 'Need more funds to play? You can add balance to your wallet from here.',
+    },
+    {
+      element: '[data-tour-id="withdraw-funds-section"]',
+      intro: 'Ready to cash out? You can request a withdrawal of your winnings here. Make sure your payment details below are correct!',
+    },
+  ];
 
   useEffect(() => {
     if (userData) {
@@ -220,12 +258,12 @@ export default function ProfilePage() {
 
     return (
       <div className="space-y-6">
-          <div className="flex items-center p-6 border-2 border-primary rounded-lg bg-primary/10 shadow-inner">
+          <div data-tour-id="balance-display" className="flex items-center p-6 border-2 border-primary rounded-lg bg-primary/10 shadow-inner">
             <DollarSign className="h-8 w-8 mr-4 text-primary" />
             <div><p className="text-sm font-medium text-primary">Current Balance</p><p className="font-bold text-4xl text-primary">₹{balance.toFixed(2)}</p></div>
           </div>
 
-          <Card className="p-4 pt-2 bg-card shadow-md">
+          <Card data-tour-id="add-balance-section" className="p-4 pt-2 bg-card shadow-md">
             <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><ArrowUpCircle className="mr-2 h-6 w-6" />Add Balance</CardTitle></CardHeader>
             <CardContent className="space-y-4 p-2">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
@@ -242,7 +280,7 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          <Card className="p-4 pt-2 bg-card shadow-md">
+          <Card data-tour-id="withdraw-funds-section" className="p-4 pt-2 bg-card shadow-md">
             <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-primary"><ArrowDownCircle className="mr-2 h-6 w-6" />Withdraw Funds</CardTitle></CardHeader>
             <CardContent className="space-y-4 p-2">
                <div>
@@ -260,86 +298,102 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="container mx-auto py-8">
-      <Card className="w-full max-w-lg mx-auto shadow-xl">
-        <CardHeader className="text-center">
-          <div className="relative flex justify-center mb-4 group">
-            <Avatar className="w-24 h-24 border-4 border-primary shadow-md">
-              <AvatarImage src={photoPreview || user.photoURL || undefined} alt={user.displayName || 'User'} />
-              <AvatarFallback>{user.displayName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
-            </Avatar>
-            <label htmlFor="photo-upload" className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-              <Camera className="h-8 w-8 text-white" />
-            </label>
-            <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isUploading} />
-          </div>
-          {selectedFile && (
-            <div className="flex flex-col items-center gap-2 py-2">
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handlePhotoUpload} disabled={isUploading}>{isUploading ? 'Uploading...' : 'Save Photo'}</Button>
-                <Button size="sm" onClick={handleCancelUpload} variant="outline" disabled={isUploading}>Cancel</Button>
-              </div>
+    <>
+      <Steps
+        enabled={isTourOpen}
+        steps={tourSteps}
+        initialStep={0}
+        onExit={onTourExit}
+        options={{
+          tooltipClass: 'custom-tooltip-class',
+          doneLabel: 'Awesome!',
+          nextLabel: 'Next →',
+          prevLabel: '← Back',
+        }}
+      />
+      <div className="container mx-auto py-8">
+        <Card className="w-full max-w-lg mx-auto shadow-xl">
+          <CardHeader className="text-center">
+            <div data-tour-id="profile-avatar" className="relative flex justify-center mb-4 group">
+              <Avatar className="w-24 h-24 border-4 border-primary shadow-md">
+                <AvatarImage src={photoPreview || user.photoURL || undefined} alt={user.displayName || 'User'} />
+                <AvatarFallback>{user.displayName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+              </Avatar>
+              <label htmlFor="photo-upload" className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <Camera className="h-8 w-8 text-white" />
+              </label>
+              <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isUploading} />
             </div>
-          )}
-          <CardTitle className="text-3xl font-bold font-headline text-primary">{user.displayName || 'User Profile'}</CardTitle>
-          <CardDescription className="text-muted-foreground">{user.email}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                {Object.values(appSettings.wheelConfigs).map(tier => (
-                    <TabsTrigger key={tier.id} value={tier.id} className="flex items-center gap-2">
-                        {tierIcons[tier.id]} {tier.name}
-                    </TabsTrigger>
-                ))}
-              </TabsList>
-              {Object.values(appSettings.wheelConfigs).map(tier => (
-                <TabsContent key={tier.id} value={tier.id}>
-                    {renderWalletContent(tier)}
-                </TabsContent>
-              ))}
-            </Tabs>
-
-            <Card className="p-4 pt-2 bg-card shadow-md">
-                <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline">Withdrawal Details</CardTitle></CardHeader>
-                <CardContent className="space-y-4 p-2">
-                     <div>
-                        <Label>Payment Method</Label>
-                        <Select value={selectedPaymentMethod} onValueChange={(v) => setSelectedPaymentMethod(v as PaymentMethod)} disabled={isProcessing}>
-                        <SelectTrigger className="mt-1"><SelectValue placeholder="Select method" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="upi"><div className="flex items-center"><Smartphone className="mr-2 h-4 w-4" />UPI</div></SelectItem>
-                            <SelectItem value="bank"><div className="flex items-center"><Library className="mr-2 h-4 w-4" />Bank Account</div></SelectItem>
-                        </SelectContent>
-                        </Select>
-                    </div>
-                    {selectedPaymentMethod === "upi" && (<div><Label htmlFor="upiIdInput">UPI ID</Label><Input id="upiIdInput" type="text" value={upiIdInput} onChange={(e) => setUpiIdInput(e.target.value)} placeholder="yourname@upi" className="mt-1" disabled={isProcessing} /></div>)}
-                    {selectedPaymentMethod === "bank" && (<div className="space-y-3">
-                        <div><Label htmlFor="accountHolderName">Account Holder Name</Label><Input id="accountHolderName" type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="e.g., John Doe" className="mt-1" disabled={isProcessing} /></div>
-                        <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isProcessing} /></div>
-                        <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isProcessing} /></div>
-                    </div>)}
-                    <CardDescription className="text-xs text-center">Your saved details will be used for all withdrawals.</CardDescription>
-                </CardContent>
-            </Card>
-        </CardContent>
-        <CardFooter className="flex flex-col items-center gap-4 pt-6">
-            {userData?.isAdmin && (
-              <Link href="/admin" passHref className="w-full max-w-xs">
-                <Button variant="secondary" className="w-full"><Shield className="mr-2 h-4 w-4" />Admin Panel</Button>
-              </Link>
+            {selectedFile && (
+              <div className="flex flex-col items-center gap-2 py-2">
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handlePhotoUpload} disabled={isUploading}>{isUploading ? 'Uploading...' : 'Save Photo'}</Button>
+                  <Button size="sm" onClick={handleCancelUpload} variant="outline" disabled={isUploading}>Cancel</Button>
+                </div>
+              </div>
             )}
-        </CardFooter>
-      </Card>
-        <PaymentModal
-          isOpen={showAddBalanceModal}
-          onClose={() => setShowAddBalanceModal(false)}
-          onConfirm={handleConfirmAddBalance}
-          upiId={appSettings.upiId}
-          appName={appSettings.appName}
-          amount={currentAmountForModal}
-          tierName={activeWheelConfig?.name}
-        />
-    </div>
+            <CardTitle className="text-3xl font-bold font-headline text-primary">{user.displayName || 'User Profile'}</CardTitle>
+            <CardDescription className="text-muted-foreground">{user.email}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+              <div data-tour-id="tier-selector-tabs">
+                <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    {Object.values(appSettings.wheelConfigs).map(tier => (
+                        <TabsTrigger key={tier.id} value={tier.id} className="flex items-center gap-2">
+                            {tierIcons[tier.id]} {tier.name}
+                        </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  {Object.values(appSettings.wheelConfigs).map(tier => (
+                    <TabsContent key={tier.id} value={tier.id}>
+                        {renderWalletContent(tier)}
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </div>
+
+              <Card className="p-4 pt-2 bg-card shadow-md">
+                  <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline">Withdrawal Details</CardTitle></CardHeader>
+                  <CardContent className="space-y-4 p-2">
+                      <div>
+                          <Label>Payment Method</Label>
+                          <Select value={selectedPaymentMethod} onValueChange={(v) => setSelectedPaymentMethod(v as PaymentMethod)} disabled={isProcessing}>
+                          <SelectTrigger className="mt-1"><SelectValue placeholder="Select method" /></SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="upi"><div className="flex items-center"><Smartphone className="mr-2 h-4 w-4" />UPI</div></SelectItem>
+                              <SelectItem value="bank"><div className="flex items-center"><Library className="mr-2 h-4 w-4" />Bank Account</div></SelectItem>
+                          </SelectContent>
+                          </Select>
+                      </div>
+                      {selectedPaymentMethod === "upi" && (<div><Label htmlFor="upiIdInput">UPI ID</Label><Input id="upiIdInput" type="text" value={upiIdInput} onChange={(e) => setUpiIdInput(e.target.value)} placeholder="yourname@upi" className="mt-1" disabled={isProcessing} /></div>)}
+                      {selectedPaymentMethod === "bank" && (<div className="space-y-3">
+                          <div><Label htmlFor="accountHolderName">Account Holder Name</Label><Input id="accountHolderName" type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="e.g., John Doe" className="mt-1" disabled={isProcessing} /></div>
+                          <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isProcessing} /></div>
+                          <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isProcessing} /></div>
+                      </div>)}
+                      <CardDescription className="text-xs text-center">Your saved details will be used for all withdrawals.</CardDescription>
+                  </CardContent>
+              </Card>
+          </CardContent>
+          <CardFooter className="flex flex-col items-center gap-4 pt-6">
+              {userData?.isAdmin && (
+                <Link href="/admin" passHref className="w-full max-w-xs">
+                  <Button variant="secondary" className="w-full"><Shield className="mr-2 h-4 w-4" />Admin Panel</Button>
+                </Link>
+              )}
+          </CardFooter>
+        </Card>
+          <PaymentModal
+            isOpen={showAddBalanceModal}
+            onClose={() => setShowAddBalanceModal(false)}
+            onConfirm={handleConfirmAddBalance}
+            upiId={appSettings.upiId}
+            appName={appSettings.appName}
+            amount={currentAmountForModal}
+            tierName={activeWheelConfig?.name}
+          />
+      </div>
+    </>
   );
 }

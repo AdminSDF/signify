@@ -2,6 +2,7 @@
 import type {Metadata} from 'next';
 import { Poppins } from 'next/font/google';
 import './globals.css';
+import 'intro.js/introjs.css';
 import { Toaster } from "@/components/ui/toaster";
 import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';

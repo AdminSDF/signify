@@ -25,6 +25,7 @@ import {
   Timestamp,
   logUserActivity,
 } from '@/lib/firebase';
+import { Steps } from 'intro.js-react';
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const TipModal = dynamic(() => import('@/components/TipModal'), { ssr: false });
@@ -82,6 +83,43 @@ export default function GamePage() {
   const { toast } = useToast();
 
   const [isClient, setIsClient] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
+
+  useEffect(() => {
+    if (user && userData && !authLoading && userData.toursCompleted?.gamePage === false) {
+      setTimeout(() => setIsTourOpen(true), 500);
+    }
+  }, [user, userData, authLoading]);
+
+  const onTourExit = () => {
+    setIsTourOpen(false);
+    if (user) {
+        updateUserData(user.uid, { 'toursCompleted.gamePage': true });
+    }
+  };
+
+  const tourSteps = [
+    {
+      element: '[data-tour-id="balance-card"]',
+      intro: 'This is your balance for the current game arena. Keep an eye on it!',
+    },
+    {
+      element: '[data-tour-id="spin-wheel"]',
+      intro: 'This is the main prize wheel. Click it to spin and test your luck!',
+    },
+    {
+      element: '[data-tour-id="spin-cost"]',
+      intro: 'Each spin costs a certain amount, which is shown here. Some spins might be free!',
+    },
+    {
+      element: '[data-tour-id="prize-display"]',
+      intro: 'After a spin, your prize will be displayed here. We hope you win big!',
+    },
+    {
+      element: '[data-tour-id="pro-tip-button"]',
+      intro: 'Feeling stuck? Click here to get an AI-powered pro tip based on your recent games!',
+    },
+  ];
   
   useEffect(() => {
     setIsClient(true);
@@ -353,59 +391,79 @@ export default function GamePage() {
   const costOfNextPaidSpin = tier === 'little' ? getLittleTierSpinCost(dailyPaidSpinsUsed) : wheelConfig.costSettings.baseCost || 0;
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
-      {showConfetti && <ConfettiRain />}
-      
-      <div className="w-full max-w-4xl flex items-center justify-between">
-         <Link href="/" passHref>
-            <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Selection</Button>
-        </Link>
-        <SpinifyGameHeader />
-        <div style={{width: '112px'}}></div> {/* Spacer */}
-      </div>
-      
-      {isClient && user && (
-        <div className="w-full max-w-md flex justify-center my-6">
-            <Card className="p-4 sm:p-6 w-full shadow-xl bg-card/70 dark:bg-card/50 backdrop-blur-md border-2 border-primary/50 rounded-2xl">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <p className="text-sm font-medium text-foreground/90 tracking-wider uppercase">{wheelConfig.name} Balance</p>
-                        <p className="text-4xl sm:text-5xl font-bold text-white glow mt-1">
-                            ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
-                        </p>
-                    </div>
-                    <DollarSign className="h-12 w-12 sm:h-16 sm:w-16 text-primary/70" />
-                </div>
-            </Card>
+    <>
+      <Steps
+        enabled={isTourOpen}
+        steps={tourSteps}
+        initialStep={0}
+        onExit={onTourExit}
+        options={{
+          tooltipClass: 'custom-tooltip-class',
+          doneLabel: 'Got It!',
+          nextLabel: 'Next →',
+          prevLabel: '← Back',
+        }}
+      />
+      <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
+        {showConfetti && <ConfettiRain />}
+        
+        <div className="w-full max-w-4xl flex items-center justify-between">
+           <Link href="/" passHref>
+              <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Selection</Button>
+          </Link>
+          <SpinifyGameHeader />
+          <div style={{width: '112px'}}></div> {/* Spacer */}
         </div>
-      )}
-      
-      <main className="flex flex-col items-center w-full max-w-2xl">
-        <SpinWheel
-          segments={wheelConfig.segments}
-          onSpinComplete={handleSpinComplete}
-          targetSegmentIndex={targetSegmentIndex}
-          isSpinning={isSpinning}
-          onClick={user && !isSpinning ? handleSpinClick : undefined}
-        />
-
-        <div className="my-8 w-full flex flex-col items-center gap-4">
-        {user && (
-            <div className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
-                {tier === 'little' && spinsAvailable > 0
-                    ? <>Free Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle}</>
-                    : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span></>
-                }
-                {tier === 'little' && spinsAvailable <= 0 && <>. Paid today: {dailyPaidSpinsUsed}</>}
-            </div>
+        
+        {isClient && user && (
+          <div data-tour-id="balance-card" className="w-full max-w-md flex justify-center my-6">
+              <Card className="p-4 sm:p-6 w-full shadow-xl bg-card/70 dark:bg-card/50 backdrop-blur-md border-2 border-primary/50 rounded-2xl">
+                  <div className="flex justify-between items-center">
+                      <div>
+                          <p className="text-sm font-medium text-foreground/90 tracking-wider uppercase">{wheelConfig.name} Balance</p>
+                          <p className="text-4xl sm:text-5xl font-bold text-white glow mt-1">
+                              ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
+                          </p>
+                      </div>
+                      <DollarSign className="h-12 w-12 sm:h-16 sm:w-16 text-primary/70" />
+                  </div>
+              </Card>
+          </div>
         )}
-          <PrizeDisplay prize={currentPrize} />
-        </div>
-        <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning || !user} />
-      </main>
+        
+        <main className="flex flex-col items-center w-full max-w-2xl">
+          <div data-tour-id="spin-wheel">
+            <SpinWheel
+              segments={wheelConfig.segments}
+              onSpinComplete={handleSpinComplete}
+              targetSegmentIndex={targetSegmentIndex}
+              isSpinning={isSpinning}
+              onClick={user && !isSpinning ? handleSpinClick : undefined}
+            />
+          </div>
 
-      <TipModal isOpen={showTipModal} onClose={() => setShowTipModal(false)} tip={generatedTip} isLoading={tipLoading} error={tipError} onGenerateTip={handleGenerateTip} />
-      <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} appName={appSettings.appName} amount={paymentModalAmount} tierName={wheelConfig.name} />
-    </div>
+          <div className="my-8 w-full flex flex-col items-center gap-4">
+          {user && (
+              <div data-tour-id="spin-cost" className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
+                  {tier === 'little' && spinsAvailable > 0
+                      ? <>Free Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle}</>
+                      : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span></>
+                  }
+                  {tier === 'little' && spinsAvailable <= 0 && <>. Paid today: {dailyPaidSpinsUsed}</>}
+              </div>
+          )}
+            <div data-tour-id="prize-display">
+              <PrizeDisplay prize={currentPrize} />
+            </div>
+          </div>
+          <div data-tour-id="pro-tip-button">
+            <TipGeneratorButton onClick={handleGenerateTip} disabled={tipLoading || isSpinning || !user} />
+          </div>
+        </main>
+
+        <TipModal isOpen={showTipModal} onClose={() => setShowTipModal(false)} tip={generatedTip} isLoading={tipLoading} error={tipError} onGenerateTip={handleGenerateTip} />
+        <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} onConfirm={handlePaymentConfirm} upiId={appSettings.upiId} appName={appSettings.appName} amount={paymentModalAmount} tierName={wheelConfig.name} />
+      </div>
+    </>
   );
 }
