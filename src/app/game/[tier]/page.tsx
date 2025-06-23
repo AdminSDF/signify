@@ -7,7 +7,8 @@ import { useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, DollarSign, ShieldAlert } from 'lucide-react';
 import SpinifyGameHeader from '@/components/SpinifyGameHeader';
-import SpinWheel, { type Segment } from '@/components/SpinWheel';
+import SpinWheel from '@/components/SpinWheel';
+import type { SegmentConfig } from '@/lib/appConfig';
 import PrizeDisplay from '@/components/PrizeDisplay';
 import GameAssistant from '@/components/GameAssistant';
 import { useSound } from '@/hooks/useSound';
@@ -30,87 +31,37 @@ import { Steps } from 'intro.js-react';
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
-// This function determines the spin outcome based on the 60/40 rule and available wheel segments.
-// It is designed to be robust and handle any configuration from the admin panel.
-const getSpinResult = (segments: Segment[]): { winningSegment: Segment | undefined } => {
-  // If there are no segments at all, we can't do anything.
+// This function determines the spin outcome based on the probabilities defined in the admin panel.
+const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConfig | undefined } => {
   if (!segments || segments.length === 0) {
     return { winningSegment: undefined };
   }
 
-  const adminWinChance = 0.6; // 60%
-  const random = Math.random();
+  // Calculate the sum of all probabilities from the configuration.
+  const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
 
-  // A "losing" outcome for the user is when their net change is negative.
-  // This happens when multiplier < 1.
-  const losingSegments = segments.filter(s => s.multiplier < 1);
-  
-  // A "push" or "tie" outcome. The user gets their bet back.
-  const pushSegments = segments.filter(s => s.multiplier === 1);
-  
-  // A "winning" outcome for the user. Net change is positive.
-  const winningSegments = segments.filter(s => s.multiplier > 1);
-
-  // Sort winning segments to distinguish small/medium/big wins
-  winningSegments.sort((a, b) => a.multiplier - b.multiplier);
-
-  let chosenSegment: Segment | undefined = undefined;
-
-  // Case 1: Admin is meant to win (60% chance)
-  if (random < adminWinChance) {
-    // Admin wins. We want to give the user a "losing" or "push" segment.
-    // Prioritize segments with multiplier < 1.
-    if (losingSegments.length > 0) {
-      chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
-    } 
-    // If no segments are explicitly < 1, but there are pushes (multiplier === 1), pick one of those.
-    else if (pushSegments.length > 0) {
-      chosenSegment = pushSegments[Math.floor(Math.random() * pushSegments.length)];
-    }
-    // If there are no losing or push segments, admin cannot be forced to win. 
-    // We must give the user a prize, so we give them the smallest possible win to minimize admin loss.
-    else if (winningSegments.length > 0) {
-      chosenSegment = winningSegments[0];
-    }
+  // If no probabilities are set at all, fall back to picking a random segment to avoid errors.
+  if (totalProbability <= 0) {
+    console.warn("No probabilities set for any segment. Falling back to equal distribution.");
+    return { winningSegment: segments[Math.floor(Math.random() * segments.length)] };
   }
-  // Case 2: User is meant to win (40% chance)
-  else {
-    // User wins. We want to give them a "winning" segment (multiplier > 1).
-    if (winningSegments.length > 0) {
-      const smallWinSegment = winningSegments[0];
-      const bigWinSegment = winningSegments[winningSegments.length - 1];
-      const mediumWinSegment = winningSegments.length > 2
-        ? winningSegments[Math.floor(winningSegments.length / 2)]
-        : smallWinSegment;
 
-      const winRandom = Math.random();
-      // Distribute the 40% win chance: 70% small, 20% medium, 10% big
-      if (winRandom <= 0.7) {
-        chosenSegment = smallWinSegment;
-      } else if (winRandom <= 0.9) {
-        chosenSegment = mediumWinSegment;
-      } else {
-        chosenSegment = bigWinSegment;
-      }
-    }
-    // If no winning segments are configured, the user cannot win.
-    // Give them a "push" if possible, otherwise a "loss".
-    else if (pushSegments.length > 0) {
-      chosenSegment = pushSegments[Math.floor(Math.random() * pushSegments.length)];
-    }
-    else if (losingSegments.length > 0) {
-        chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
+  // Generate a random number between 0 and the total probability.
+  let random = Math.random() * totalProbability;
+
+  // Determine the winning segment based on its weighted probability.
+  // We iterate through the segments and subtract their probability from our random number.
+  // The segment that makes the random number drop to 0 or below is the winner.
+  for (const segment of segments) {
+    random -= (segment.probability || 0);
+    if (random <= 0) {
+      return { winningSegment: segment };
     }
   }
 
-  // If after all this, a segment couldn't be chosen (e.g., empty segments array initially)
-  // this is the final safeguard. The initial check should catch this, but it's good to have.
-  if (!chosenSegment && segments.length > 0) {
-    // As a last resort, pick any segment from the wheel. This prevents a crash.
-    chosenSegment = segments[Math.floor(Math.random() * segments.length)];
-  }
-
-  return { winningSegment: chosenSegment };
+  // Fallback in case of floating point inaccuracies, though it's highly unlikely.
+  // This ensures a segment is always returned if probabilities are valid.
+  return { winningSegment: segments[segments.length - 1] };
 };
 
 
@@ -124,7 +75,7 @@ export default function GamePage() {
   
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
-  const [currentPrize, setCurrentPrize] = useState<Segment | null>(null);
+  const [currentPrize, setCurrentPrize] = useState<SegmentConfig | null>(null);
   const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
@@ -376,11 +327,8 @@ export default function GamePage() {
         toast({ title: "Config Error", description: `Could not determine a spin outcome. The wheel might be misconfigured.`, variant: "destructive" });
         return;
     }
-
-    const { winAmount } = { 
-        winAmount: betAmount * (winningSegment.multiplier ?? 0),
-    };
-
+    
+    const winAmount = betAmount * (winningSegment.multiplier ?? 0);
     const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
 
     if (winningSegmentIndex === -1) {
@@ -388,7 +336,7 @@ export default function GamePage() {
         return;
     }
     
-    const winningSegmentForDisplay: Segment = { ...winningSegment, amount: winAmount };
+    const prizeForDisplay: SegmentConfig = { ...winningSegment, amount: winAmount };
 
     startSpinProcess(winningSegmentIndex);
     
@@ -426,7 +374,7 @@ export default function GamePage() {
     await updateUserData(user.uid, updates);
 
     // This needs to be stored locally because the spin complete function needs it
-    setCurrentPrize(winningSegmentForDisplay);
+    setCurrentPrize(prizeForDisplay);
 
   }, [
     isClient, isSpinning, user, authLoading, userData, wheelConfig, tier, spinsAvailable,
@@ -434,7 +382,7 @@ export default function GamePage() {
     startSpinProcess, addTransaction, getLittleTierSpinCost, toast, router
   ]);
 
-  const handleSpinComplete = useCallback(async (winningSegmentFromWheel: Segment) => {
+  const handleSpinComplete = useCallback(async (winningSegmentFromWheel: SegmentConfig) => {
     // The actual prize was already determined in handleSpinClick, this is just for final UI updates
     const prizeToDisplay = currentPrize;
     setIsSpinning(false);
@@ -445,7 +393,7 @@ export default function GamePage() {
     const updatedHistory = [...spinHistory, newSpinRecordForAI];
     setSpinHistory(updatedHistory);
     
-    const isWin = prizeToDisplay.multiplier !== 0;
+    const isWin = prizeToDisplay.multiplier > 0;
     fetchAssistantMessage(isWin ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
     
     if (prizeToDisplay.amount && prizeToDisplay.amount > 0) {
@@ -593,5 +541,3 @@ export default function GamePage() {
     </>
   );
 }
-
-    

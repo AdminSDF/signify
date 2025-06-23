@@ -4,14 +4,10 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import type { SegmentConfig } from '@/lib/appConfig'; // Use the central config type
 
 interface PrizeDisplayProps {
-  prize: {
-    text: string;
-    emoji: string;
-    amount?: number;
-    multiplier?: number;
-  } | null;
+  prize: (SegmentConfig & { amount?: number }) | null; // Allow adding amount dynamically
 }
 
 const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
@@ -35,7 +31,7 @@ const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {
     );
   }
 
-  const isWin = prize.multiplier !== 0;
+  const isWin = prize.multiplier > 0;
 
   return (
     <div className={cn(

@@ -3,20 +3,11 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import type { SegmentConfig } from '@/lib/appConfig'; // Use the central config type
 
-export interface Segment {
-  id: string;
-  text: string;
-  emoji: string;
-  amount?: number; // Can be used for display if needed
-  multiplier?: number; // The core logic may use this
-  color: string; // HSL string e.g., '0 100% 50%' for red
-  textColor?: string; // HSL string for text, defaults to contrast
-}
-
-interface SpinWheelProps {
-  segments: Segment[];
-  onSpinComplete: (winningSegment: Segment) => void;
+export interface SpinWheelProps {
+  segments: SegmentConfig[];
+  onSpinComplete: (winningSegment: SegmentConfig) => void;
   targetSegmentIndex: number | null;
   isSpinning: boolean;
   spinDuration?: number;
