@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import type { SegmentConfig } from '@/lib/appConfig'; // Use the central config type
+import type { SegmentConfig } from '@/lib/appConfig';
 
 export interface SpinWheelProps {
   segments: SegmentConfig[];
@@ -32,29 +32,27 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
   onSpinComplete,
   targetSegmentIndex,
   isSpinning,
-  spinDuration = 8, // Default duration set to 8 seconds
+  spinDuration = 8,
   onClick,
   logoUrl,
 }) => {
   const [accumulatedRotation, setAccumulatedRotation] = useState(0);
   const wheelRef = useRef<SVGSVGElement>(null);
-  const isAnimatingRef = useRef(false); // Ref to track if animation is active for the current spin
+  const isAnimatingRef = useRef(false);
 
   const numSegments = segments.length;
   const anglePerSegment = numSegments > 0 ? 360 / numSegments : 0;
 
   useEffect(() => {
     if (isSpinning && targetSegmentIndex !== null && wheelRef.current && !isAnimatingRef.current) {
-      isAnimatingRef.current = true; // Mark that an animation is starting
+      isAnimatingRef.current = true;
 
       const wheelElement = wheelRef.current;
 
       const randomOffsetWithinSegment = (Math.random() - 0.5) * anglePerSegment * 0.6;
       const targetMiddleAngle = (targetSegmentIndex * anglePerSegment) + (anglePerSegment / 2);
-      // The wheel needs to rotate such that this targetMiddleAngle is at the top (0 deg pointer).
       const finalOrientationAngle = -(targetMiddleAngle + randomOffsetWithinSegment);
-
-      // Number of full spins for visual effect. e.g., 7 full rotations
+      
       const fullSpinsDegrees = 360 * 7;
 
       const currentNormalizedAngle = accumulatedRotation % 360;
@@ -63,11 +61,11 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
       while (rotationToNewOrientation <= 0 && numSegments > 0) {
         rotationToNewOrientation += 360;
       }
-       if (numSegments > 0) {
-         rotationToNewOrientation = (rotationToNewOrientation % 360);
-       } else {
-         rotationToNewOrientation = 0;
-       }
+      if (numSegments > 0) {
+        rotationToNewOrientation = (rotationToNewOrientation % 360);
+      } else {
+        rotationToNewOrientation = 0;
+      }
 
       const totalAdditionalRotation = fullSpinsDegrees + rotationToNewOrientation;
       const newFinalAccumulatedRotation = accumulatedRotation + totalAdditionalRotation;
@@ -82,7 +80,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
             wheelRef.current.style.transition = 'none'; 
         }
         onSpinComplete(segments[targetSegmentIndex]);
-        isAnimatingRef.current = false; // Reset for next spin
+        isAnimatingRef.current = false;
       }, spinDuration * 1000);
 
       return () => {
@@ -97,8 +95,8 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
 
 
   useEffect(() => {
-    if (wheelRef.current && !isSpinning) { // Only apply when not actively spinning
-      wheelRef.current.style.transition = 'none'; // No transition for setting resting state
+    if (wheelRef.current && !isSpinning) {
+      wheelRef.current.style.transition = 'none';
       wheelRef.current.style.transform = `rotate(${accumulatedRotation}deg)`;
     }
   }, [accumulatedRotation, isSpinning]); 
@@ -156,8 +154,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
     <div
       className={cn(
         "relative flex justify-center items-center my-8 select-none w-[320px] h-[320px] sm:w-[420px] sm:h-[420px] md:w-[480px] md:h-[480px] mx-auto",
-        "transition-transform duration-150",
-        onClick && !isSpinning && !isAnimatingRef.current && "cursor-pointer hover:scale-105 active:scale-95 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
+        onClick && !isSpinning && "cursor-pointer"
       )}
       onClick={handleWheelClick}
       role={onClick && !isSpinning ? "button" : undefined}
@@ -181,7 +178,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         viewBox="0 0 200 200"
         className="w-full h-full rounded-full"
         style={{
-          transform: `rotate(${accumulatedRotation}deg)` // Initial and resting rotation
+          transform: `rotate(${accumulatedRotation}deg)`
         } as React.CSSProperties}
       >
         <defs>
@@ -230,7 +227,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         </g>
       </svg>
       
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 h-16 w-16 rounded-full border-[6px] border-primary bg-background shadow-lg sm:h-24 sm:w-24 overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 h-16 w-16 rounded-full border-[6px] border-primary bg-background sm:h-24 sm:w-24 overflow-hidden">
         {logoUrl && (
           <Image
             src={logoUrl}
