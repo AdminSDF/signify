@@ -30,24 +30,48 @@ import { Steps } from 'intro.js-react';
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
-// This function determines the spin outcome based on the 60/40 rule
-const getSpinResult = (betAmount: number): { winAmount: number; multiplier: number } => {
-  const adminWinChance = 0.6; // 60%
+// This function determines the spin outcome based on the 60/40 rule and available wheel segments
+const getSpinResult = (betAmount: number, segments: Segment[]): { winAmount: number; multiplier: number } => {
+  const adminWinChance = 0.6;
   const random = Math.random();
 
+  // 60% chance for admin to win (user gets 0)
   if (random <= adminWinChance) {
-    return { winAmount: 0, multiplier: 0 }; // Admin wins (Loss)
+    return { winAmount: 0, multiplier: 0 };
   }
 
-  // User wins, now determine the prize tier (Small: 70%, Medium: 20%, Big: 10% of wins)
+  // 40% chance for user to win
+  // Get all unique winning multipliers from the wheel configuration
+  const winningMultipliers = Array.from(new Set(segments.map(s => s.multiplier).filter(m => m && m > 0)));
+
+  if (winningMultipliers.length === 0) {
+    // If admin has configured a wheel with no winning segments, user gets 0.
+    return { winAmount: 0, multiplier: 0 };
+  }
+
+  // Sort multipliers to distinguish between small, medium, big wins
+  winningMultipliers.sort((a, b) => a - b);
+  
+  const smallWinMultiplier = winningMultipliers[0] || 1;
+  const bigWinMultiplier = winningMultipliers[winningMultipliers.length - 1] || 1;
+  // Pick a middle-tier prize. If only 1 or 2 prize tiers, it picks the smallest.
+  const mediumWinMultiplier = winningMultipliers.length > 2 
+    ? winningMultipliers[Math.floor(winningMultipliers.length / 2)] 
+    : smallWinMultiplier; 
+
   const winRandom = Math.random();
-  if (winRandom <= 0.7) {
-    return { winAmount: betAmount * 0.5, multiplier: 0.5 }; // Small Win
+  let chosenMultiplier: number;
+
+  // Distribute the 40% win chance: 70% small, 20% medium, 10% big
+  if (winRandom <= 0.7) { // 70% chance for a small win
+    chosenMultiplier = smallWinMultiplier;
+  } else if (winRandom <= 0.9) { // 20% chance for a medium win
+    chosenMultiplier = mediumWinMultiplier;
+  } else { // 10% chance for a big win
+    chosenMultiplier = bigWinMultiplier;
   }
-  if (winRandom <= 0.9) { // 0.7 + 0.2
-    return { winAmount: betAmount * 1.5, multiplier: 1.5 }; // Medium Win
-  }
-  return { winAmount: betAmount * 3, multiplier: 3 }; // Big Win
+  
+  return { winAmount: betAmount * chosenMultiplier, multiplier: chosenMultiplier };
 };
 
 
@@ -307,7 +331,7 @@ export default function GamePage() {
     
     // --- New Spin Logic ---
     const betAmount = isFreeSpin ? 0 : spinCost;
-    const { winAmount, multiplier } = getSpinResult(betAmount);
+    const { winAmount, multiplier } = getSpinResult(betAmount, wheelConfig.segments);
     
     // Find all segments that match the winning multiplier
     const possibleSegments = wheelConfig.segments
