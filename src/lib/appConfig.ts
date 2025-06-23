@@ -6,7 +6,7 @@ export interface SegmentConfig {
   id: string;
   text: string;
   emoji: string;
-  multiplier: number; // Replaced 'amount' with 'multiplier'
+  amount: number; // Replaced 'multiplier' with 'amount'
   probability: number; // Chance of this segment being picked
   color: string;
   textColor?: string;
@@ -49,12 +49,10 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
       tier3Cost: 5,
     },
     segments: [
-      { id: 's-big', text: 'Big Win', emoji: '🎉', multiplier: 3, probability: 5, color: '300 80% 60%', textColor: '0 0% 100%' },
-      { id: 's-med',  text: 'Medium Win',  emoji: '💰', multiplier: 1.5, probability: 10,  color: '270 80% 65%', textColor: '0 0% 100%' },
-      { id: 's-small',  text: 'Small Win',  emoji: '💸', multiplier: 0.5, probability: 25,  color: '0 80% 60%',   textColor: '0 0% 100%' },
-      { id: 's-lose1',   text: 'Try Again', emoji: '🔁', multiplier: 0, probability: 20,   color: '60 90% 55%',  textColor: '0 0% 0%' },
-      { id: 's-lose2',   text: 'Try Again', emoji: '🔁', multiplier: 0, probability: 20,   color: '120 70% 55%', textColor: '0 0% 100%' },
-      { id: 's-lose3',   text: 'Try Again', emoji: '🔁', multiplier: 0, probability: 20,   color: '180 70% 50%', textColor: '0 0% 100%' },
+      { id: 's-big', text: 'Big Win', emoji: '🎉', amount: 20, probability: 5, color: '300 80% 60%', textColor: '0 0% 100%' },
+      { id: 's-med',  text: 'Medium Win',  emoji: '💰', amount: 5, probability: 10,  color: '270 80% 65%', textColor: '0 0% 100%' },
+      { id: 's-small',  text: 'Small Win',  emoji: '💸', amount: 1, probability: 25,  color: '0 80% 60%',   textColor: '0 0% 100%' },
+      { id: 's-lose1',   text: 'Try Again', emoji: '🔁', amount: 0, probability: 60,   color: '60 90% 55%',  textColor: '0 0% 0%' },
     ],
   },
   big: {
@@ -68,12 +66,10 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
       baseCost: 10,
     },
     segments: [
-      { id: 'b-big', text: 'Big Win', emoji: '👑', multiplier: 3, probability: 5, color: '45 100% 50%', textColor: '0 0% 0%' },
-      { id: 'b-med',  text: 'Medium Win', emoji: '🏆', multiplier: 1.5, probability: 10,  color: '50 100% 60%', textColor: '0 0% 0%' },
-      { id: 'b-small',  text: 'Small Win', emoji: '🌟', multiplier: 0.5, probability: 25,  color: '35 100% 55%', textColor: '0 0% 0%' },
-      { id: 'b-lose1',   text: 'Try Again', emoji: '💀', multiplier: 0, probability: 20,   color: '190 20% 25%', textColor: '0 0% 100%' },
-      { id: 'b-lose2',   text: 'Try Again', emoji: '💀', multiplier: 0, probability: 20,   color: '210 30% 35%', textColor: '0 0% 100%' },
-      { id: 'b-lose3',   text: 'Try Again', emoji: '💀', multiplier: 0, probability: 20,   color: '220 15% 15%', textColor: '0 0% 100%' },
+      { id: 'b-big', text: 'Big Win', emoji: '👑', amount: 50, probability: 5, color: '45 100% 50%', textColor: '0 0% 0%' },
+      { id: 'b-med',  text: 'Medium Win', emoji: '🏆', amount: 20, probability: 10,  color: '50 100% 60%', textColor: '0 0% 0%' },
+      { id: 'b-small',  text: 'Small Win', emoji: '🌟', amount: 5, probability: 25,  color: '35 100% 55%', textColor: '0 0% 0%' },
+      { id: 'b-lose1',   text: 'Try Again', emoji: '💀', amount: 0, probability: 60,   color: '190 20% 25%', textColor: '0 0% 100%' },
     ],
   },
   'more-big': {
@@ -87,12 +83,10 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     },
     minWithdrawalAmount: 2000,
     segments: [
-        { id: 'm-big', text: 'Big Win', emoji: '🚀', multiplier: 3, probability: 5, color: '210 100% 50%', textColor: '0 0% 100%' },
-        { id: 'm-med', text: 'Medium Win', emoji: '🌌', multiplier: 1.5, probability: 10, color: '190 100% 45%', textColor: '0 0% 100%' },
-        { id: 'm-small', text: 'Small Win', emoji: '👑', multiplier: 0.5, probability: 25, color: '180 90% 40%', textColor: '0 0% 100%' },
-        { id: 'm-lose1',  text: 'Try Again', emoji: '💀', multiplier: 0, probability: 20,  color: '170 80% 35%', textColor: '0 0% 100%' },
-        { id: 'm-lose2',  text: 'Try Again', emoji: '💀', multiplier: 0, probability: 20,  color: '0 0% 95%', textColor: '0 0% 0%' },
-        { id: 'm-lose3',   text: 'Try Again', emoji: '💀', multiplier: 0, probability: 20,   color: '0 0% 85%', textColor: '0 0% 0%' },
+        { id: 'm-big', text: 'Big Win', emoji: '🚀', amount: 100, probability: 5, color: '210 100% 50%', textColor: '0 0% 100%' },
+        { id: 'm-med', text: 'Medium Win', emoji: '🌌', amount: 40, probability: 10, color: '190 100% 45%', textColor: '0 0% 100%' },
+        { id: 'm-small', text: 'Small Win', emoji: '👑', amount: 10, probability: 25, color: '180 90% 40%', textColor: '0 0% 100%' },
+        { id: 'm-lose1',  text: 'Try Again', emoji: '💀', amount: 0, probability: 60,  color: '170 80% 35%', textColor: '0 0% 100%' },
     ]
   }
 };

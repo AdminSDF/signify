@@ -274,7 +274,7 @@ export default function AdminPage() {
           const newSegments = [...prev.wheelConfigs[tierId].segments];
           newSegments[segmentIndex] = {
               ...newSegments[segmentIndex],
-              [field]: (field === 'multiplier' || field === 'probability') ? parseFloat(value) || 0 : value
+              [field]: (field === 'amount' || field === 'probability') ? parseFloat(value) || 0 : value
           };
 
           return {
@@ -296,7 +296,7 @@ export default function AdminPage() {
               id: `${tierId.charAt(0)}${new Date().getTime()}`,
               text: 'New Prize',
               emoji: '🎉',
-              multiplier: 1,
+              amount: 1,
               probability: 10,
               color: '0 0% 80%',
           };
@@ -724,7 +724,7 @@ export default function AdminPage() {
                                          <Table>
                                             <TableHeader><TableRow>
                                                 <TableHead className="w-20 text-center">#</TableHead>
-                                                <TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Multiplier (x)</TableHead><TableHead>Probability (%)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Actions</TableHead>
+                                                <TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Probability (%)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Actions</TableHead>
                                             </TableRow></TableHeader>
                                             <TableBody onDragOver={handleDragOver}>
                                                 {tier.segments.map((seg, index) => (
@@ -747,7 +747,7 @@ export default function AdminPage() {
                                                         </TableCell>
                                                         <TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell>
                                                         <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
-                                                        <TableCell><Input type="number" value={seg.multiplier} onChange={(e) => handleSegmentChange(tier.id, index, 'multiplier', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
                                                         <TableCell><Input type="number" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
                                                         <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
                                                         <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>

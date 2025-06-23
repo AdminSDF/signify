@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import type { SegmentConfig } from '@/lib/appConfig';
 
 interface PrizeDisplayProps {
-  prize: (SegmentConfig & { amount?: number }) | null;
+  prize: SegmentConfig | null;
 }
 
 const PrizeDisplay: React.FC<PrizeDisplayProps> = ({ prize }) => {

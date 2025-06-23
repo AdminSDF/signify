@@ -34,7 +34,7 @@ const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: f
 
 const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConfig } => {
   if (!segments || segments.length === 0) {
-    // This case should be handled by the UI, but as a fallback:
+    // This case is handled by the UI, but as a fallback:
     throw new Error("Cannot determine spin result from an empty segments array.");
   }
 
@@ -70,8 +70,8 @@ export default function GamePage() {
   
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
-  const [currentPrize, setCurrentPrize] = useState<(SegmentConfig & { amount?: number }) | null>(null);
-  const pendingPrizeRef = useRef<(SegmentConfig & { amount?: number }) | null>(null);
+  const [currentPrize, setCurrentPrize] = useState<SegmentConfig | null>(null);
+  const pendingPrizeRef = useRef<SegmentConfig | null>(null);
   const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
@@ -223,10 +223,8 @@ export default function GamePage() {
 
 
   const addTransaction = useCallback(async (details: {
-    type: 'spin';
     amount: number; // Net amount
     description: string;
-    status?: 'completed' | 'pending' | 'failed';
     spinDetails: { betAmount: number; winAmount: number; };
     balanceBefore: number;
     balanceAfter: number;
@@ -235,10 +233,10 @@ export default function GamePage() {
     try {
       await addTransactionToFirestore({
         userEmail: user.email,
-        type: 'spin',
+        type: details.amount >= 0 ? 'credit' : 'debit',
         amount: details.amount,
         description: details.description,
-        status: details.status || 'completed',
+        status: 'completed',
         tierId: tier,
         spinDetails: details.spinDetails,
         balanceBefore: details.balanceBefore,
@@ -318,13 +316,13 @@ export default function GamePage() {
     const betAmount = isFreeSpin ? 0 : spinCost;
     
     const { winningSegment } = getSpinResult(wheelConfig.segments);
-
+    
     if (!winningSegment) {
         toast({ title: "Config Error", description: `Could not determine a spin outcome. The wheel might be misconfigured.`, variant: "destructive" });
         return;
     }
     
-    const winAmount = betAmount * (winningSegment.multiplier ?? 0);
+    const winAmount = winningSegment.amount ?? 0;
     const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
 
     if (winningSegmentIndex === -1) {
@@ -332,9 +330,7 @@ export default function GamePage() {
         return;
     }
     
-    const prizeForDisplay: (SegmentConfig & { amount: number }) = { ...winningSegment, amount: winAmount };
-    
-    pendingPrizeRef.current = prizeForDisplay;
+    pendingPrizeRef.current = winningSegment;
 
     startSpinProcess(winningSegmentIndex);
     
@@ -343,7 +339,6 @@ export default function GamePage() {
     const balanceAfter = balanceBefore + netChange;
     setUserBalance(balanceAfter);
     
-    const descriptionForHistory = `Spin: Bet ₹${betAmount.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`;
     if (winAmount > 0) {
       toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
     } else {
@@ -351,9 +346,8 @@ export default function GamePage() {
     }
     
     await addTransaction({
-        type: 'spin',
         amount: netChange,
-        description: descriptionForHistory,
+        description: `Spin: Bet ₹${betAmount.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`,
         spinDetails: { betAmount, winAmount },
         balanceBefore,
         balanceAfter,
