@@ -215,127 +215,48 @@ export default function AdminPage() {
     
     setCurrentAppSettings(prev => ({
         ...prev,
-        addBalancePresets: validPresets,
+        addBalancePresets: validPresets
     }));
   };
   
-  const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
-    setCurrentAppSettings(prev => {
-        const numValue = parseFloat(value);
-        const finalValue = (field === 'minWithdrawalAmount' && !isNaN(numValue)) ? numValue : value;
-        
-        const updatedTier = {
-            ...prev.wheelConfigs[tierId],
-            [field]: finalValue,
+    const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
+        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const finalValue = field === 'minWithdrawalAmount' ? (parseFloat(value) || 0) : value;
+        newSettings.wheelConfigs[tierId][field] = finalValue;
+        setCurrentAppSettings(newSettings);
+    };
+
+    const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
+        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        newSettings.wheelConfigs[tierId].costSettings[field] = parseFloat(value) || 0;
+        setCurrentAppSettings(newSettings);
+    };
+
+    const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
+        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const finalValue = field === 'multiplier' ? (parseFloat(value) || 0) : value;
+        newSettings.wheelConfigs[tierId].segments[segmentIndex][field] = finalValue;
+        setCurrentAppSettings(newSettings);
+    };
+
+    const addSegment = (tierId: string) => {
+        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        const newSegment: SegmentConfig = {
+            id: `${tierId.charAt(0)}${new Date().getTime()}`,
+            text: 'New Prize',
+            emoji: '🎉',
+            multiplier: 1,
+            color: '0 0% 80%',
         };
+        newSettings.wheelConfigs[tierId].segments.push(newSegment);
+        setCurrentAppSettings(newSettings);
+    };
 
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [tierId]: updatedTier,
-            },
-        };
-    });
-  };
-
-  const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
-      setCurrentAppSettings(prev => {
-          const numValue = parseFloat(value);
-          const finalValue = isNaN(numValue) ? 0 : numValue;
-          
-          const updatedCostSettings = {
-              ...prev.wheelConfigs[tierId].costSettings,
-              [field]: finalValue,
-          };
-          
-          const updatedTier = {
-              ...prev.wheelConfigs[tierId],
-              costSettings: updatedCostSettings,
-          };
-
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: updatedTier,
-              },
-          };
-      });
-  };
-
-  const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
-    setCurrentAppSettings(prev => {
-        const numValue = parseFloat(value);
-        const finalValue = (field === 'multiplier' && !isNaN(numValue)) ? numValue : value;
-
-        const updatedSegments = prev.wheelConfigs[tierId].segments.map((seg, index) => {
-            if (index === segmentIndex) {
-                return { ...seg, [field]: finalValue };
-            }
-            return seg;
-        });
-
-        const updatedTier = {
-            ...prev.wheelConfigs[tierId],
-            segments: updatedSegments,
-        };
-
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [tierId]: updatedTier,
-            },
-        };
-    });
-  };
-  
-  const addSegment = (tierId: string) => {
-      setCurrentAppSettings(prev => {
-          const newSegment: SegmentConfig = {
-              id: `${tierId.charAt(0)}${new Date().getTime()}`,
-              text: 'New Prize',
-              emoji: '🎉',
-              multiplier: 1,
-              color: '0 0% 80%',
-          };
-
-          const updatedSegments = [...prev.wheelConfigs[tierId].segments, newSegment];
-          
-          const updatedTier = {
-              ...prev.wheelConfigs[tierId],
-              segments: updatedSegments,
-          };
-
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: updatedTier,
-              },
-          };
-      });
-  };
-  
-  const removeSegment = (tierId: string, indexToRemove: number) => {
-    setCurrentAppSettings(prev => {
-        const updatedSegments = prev.wheelConfigs[tierId].segments.filter((_, index) => index !== indexToRemove);
-
-        const updatedTier = {
-            ...prev.wheelConfigs[tierId],
-            segments: updatedSegments,
-        };
-
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [tierId]: updatedTier,
-            },
-        };
-    });
-  };
+    const removeSegment = (tierId: string, indexToRemove: number) => {
+        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
+        newSettings.wheelConfigs[tierId].segments.splice(indexToRemove, 1);
+        setCurrentAppSettings(newSettings);
+    };
   
   const handleDragStart = (tierId: string, index: number) => {
     setDraggedSegment({ tierId, index });
@@ -345,34 +266,22 @@ export default function AdminPage() {
     e.preventDefault();
   };
 
-  const handleDrop = (targetTierId: string, dropIndex: number) => {
-    if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
-      setDraggedSegment(null);
-      return;
-    }
+    const handleDrop = (targetTierId: string, dropIndex: number) => {
+        if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
+            setDraggedSegment(null);
+            return;
+        }
 
-    setCurrentAppSettings(prev => {
-        const currentSegments = prev.wheelConfigs[targetTierId].segments;
-        const newSegments = Array.from(currentSegments);
-        const [draggedItem] = newSegments.splice(draggedSegment.index, 1);
-        newSegments.splice(dropIndex, 0, draggedItem);
+        const sourceIndex = draggedSegment.index;
+        const newSettings = JSON.parse(JSON.stringify(currentAppSettings));
         
-        const updatedTier = {
-            ...prev.wheelConfigs[targetTierId],
-            segments: newSegments,
-        };
+        const tierSegments = newSettings.wheelConfigs[targetTierId].segments;
+        const [draggedItem] = tierSegments.splice(sourceIndex, 1);
+        tierSegments.splice(dropIndex, 0, draggedItem);
         
-        return {
-            ...prev,
-            wheelConfigs: {
-                ...prev.wheelConfigs,
-                [targetTierId]: updatedTier,
-            },
-        };
-    });
-
-    setDraggedSegment(null);
-  };
+        setCurrentAppSettings(newSettings);
+        setDraggedSegment(null);
+    };
 
   const handleDragEnd = () => {
     setDraggedSegment(null);
