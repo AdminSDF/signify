@@ -160,7 +160,6 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         onClick && !isSpinning && !isAnimatingRef.current && "cursor-pointer hover:scale-105 active:scale-95 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
       )}
       onClick={handleWheelClick}
-      style={{ perspective: '1000px' }}
       role={onClick && !isSpinning ? "button" : undefined}
       tabIndex={onClick && !isSpinning ? 0 : -1}
       aria-label="Spinning prize wheel"
@@ -170,7 +169,7 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         className="absolute top-[-22px] left-1/2 -translate-x-1/2 z-10"
         aria-hidden="true"
       >
-        <svg width="36" height="50" viewBox="0 0 36 50" fill="hsl(var(--primary))" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'url(#dropShadowPointer)'}}>
+        <svg width="36" height="50" viewBox="0 0 36 50" fill="hsl(var(--primary))" xmlns="http://www.w3.org/2000/svg">
           <path d="M18 0L0 22L18 50L36 22L18 0Z" />
            <circle cx="18" cy="12" r="5" fill="hsl(var(--background))" />
         </svg>
@@ -186,12 +185,6 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         } as React.CSSProperties}
       >
         <defs>
-          <filter id="dropShadowPointer" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="2" stdDeviation="1.5" floodColor="rgba(0,0,0,0.3)" />
-          </filter>
-          <filter id="textShadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0.5" dy="0.5" stdDeviation="0.5" floodColor="rgba(0,0,0,0.7)" />
-          </filter>
           {gradientDefs}
         </defs>
 
@@ -226,7 +219,6 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
                   fontWeight="bold"
                   fill={`hsl(${effectiveTextColor})`}
                   className="font-body pointer-events-none"
-                  filter="url(#textShadow)"
                 >
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="-0.6em">{segment.emoji}</tspan>
                   <tspan x={100 + 60 * Math.cos(midAngleRad)} dy="1.2em">{segment.text}</tspan>
@@ -238,14 +230,15 @@ const SpinWheel: React.FC<SpinWheelProps> = ({
         </g>
       </svg>
       
-      <div className="absolute top-1/2 left-1/2 z-20 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-[6px] border-primary bg-background shadow-lg sm:h-24 sm:w-24">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 h-16 w-16 rounded-full border-[6px] border-primary bg-background shadow-lg sm:h-24 sm:w-24 overflow-hidden">
         {logoUrl && (
           <Image
             src={logoUrl}
             alt="Spinify Logo"
             width={96}
             height={96}
-            className="h-full w-full rounded-full object-cover"
+            className="h-full w-full object-cover"
+            priority
           />
         )}
       </div>
