@@ -45,6 +45,87 @@ import {
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 
+
+// --- HELPER FUNCTIONS (Moved outside component for stability) ---
+
+const getTierName = (tierId: string, wheelConfigs: { [key: string]: WheelTierConfig }): string => {
+    if (wheelConfigs && wheelConfigs[tierId] && wheelConfigs[tierId].name) {
+        return wheelConfigs[tierId].name;
+    }
+    return tierId;
+};
+
+const getUserBalanceForTier = (user: UserDocument, tierId: string): string => {
+    if (user && user.balances && typeof user.balances[tierId] === 'number') {
+        return user.balances[tierId].toFixed(2);
+    }
+    return '0.00';
+};
+
+const getAvatarFallback = (user: UserDocument): string => {
+    if (user.displayName && user.displayName.length > 0) {
+        return user.displayName[0].toUpperCase();
+    }
+    if (user.email && user.email.length > 0) {
+        return user.email[0].toUpperCase();
+    }
+    return 'U';
+};
+
+const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
+    if (!req) {
+        return 'N/A';
+    }
+    if (req.paymentMethod === 'upi') {
+        return req.upiId ? `UPI: ${req.upiId}` : 'UPI: N/A';
+    }
+    if (req.paymentMethod === 'bank') {
+        const accountDetails = req.bankDetails;
+        if (!accountDetails) {
+            return 'Bank: Details missing';
+        }
+        const holderName = accountDetails.accountHolderName || '';
+        const accNum = accountDetails.accountNumber;
+        const accNumStr = accNum ? String(accNum) : '';
+        
+        let lastFour = '****';
+        if (accNumStr.length > 4) {
+            lastFour = accNumStr.slice(-4);
+        } else if (accNumStr.length > 0) {
+            lastFour = accNumStr;
+        }
+        
+        if (holderName) {
+            return `Bank: ${holderName}, A/C ...${lastFour}`;
+        }
+        return `Bank: A/C ...${lastFour}`;
+    }
+    return 'N/A';
+};
+
+const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'datetime'): string => {
+    if (!dateInput) return 'N/A';
+    
+    let dateObj: Date;
+    if (dateInput instanceof Timestamp) {
+      dateObj = dateInput.toDate();
+    } else {
+      dateObj = new Date(dateInput);
+    }
+  
+    if (isNaN(dateObj.getTime())) {
+      return 'N/A';
+    }
+  
+    if (format === 'date') {
+      return dateObj.toLocaleDateString();
+    }
+    return dateObj.toLocaleString();
+};
+
+
+// --- ADMIN PAGE COMPONENT ---
+
 export default function AdminPage() {
   const { user, userData, loading, appSettings, newsItems, refreshAppConfig } = useAuth();
   const router = useRouter();
@@ -110,15 +191,20 @@ export default function AdminPage() {
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    let finalValue: string | number = value;
+    
     if (type === 'number') {
         const num = parseFloat(value);
-        finalValue = isNaN(num) ? 0 : num;
+        const finalValue = isNaN(num) ? 0 : num;
+         setCurrentAppSettings(prev => ({
+          ...prev,
+          [name]: finalValue,
+        }));
+    } else {
+         setCurrentAppSettings(prev => ({
+          ...prev,
+          [name]: value,
+        }));
     }
-    setCurrentAppSettings(prev => ({
-      ...prev,
-      [name]: finalValue,
-    }));
   };
 
   const handleAddBalancePresetsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,17 +264,29 @@ export default function AdminPage() {
   };
 
   const handleSegmentChange = (tier: string, index: number, field: string, value: any) => {
-      const updatedSegments = [...currentAppSettings.wheelConfigs[tier].segments];
-      let finalValue = value;
-      if (field === 'multiplier') {
-        const num = parseFloat(value);
-        finalValue = isNaN(num) ? 0 : num;
-      }
-      updatedSegments[index] = {
-          ...updatedSegments[index],
-          [field]: finalValue
-      };
-      handleWheelConfigChange(tier, 'segments', updatedSegments);
+      setCurrentAppSettings(prev => {
+          const updatedSegments = [...prev.wheelConfigs[tier].segments];
+          let finalValue = value;
+          if (field === 'multiplier') {
+              const num = parseFloat(value);
+              finalValue = isNaN(num) ? 0 : num;
+          }
+          updatedSegments[index] = {
+              ...updatedSegments[index],
+              [field]: finalValue
+          };
+          
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [tier]: {
+                      ...prev.wheelConfigs[tier],
+                      segments: updatedSegments
+                  }
+              }
+          };
+      });
   };
   
   const addSegment = (tier: string) => {
@@ -199,13 +297,30 @@ export default function AdminPage() {
           multiplier: 1,
           color: '0 0% 80%',
       };
-      const updatedSegments = [...currentAppSettings.wheelConfigs[tier].segments, newSegment];
-      handleWheelConfigChange(tier, 'segments', updatedSegments);
+      setCurrentAppSettings(prev => ({
+        ...prev,
+        wheelConfigs: {
+            ...prev.wheelConfigs,
+            [tier]: {
+                ...prev.wheelConfigs[tier],
+                segments: [...prev.wheelConfigs[tier].segments, newSegment]
+            }
+        }
+      }));
   };
   
   const removeSegment = (tier: string, index: number) => {
       const updatedSegments = currentAppSettings.wheelConfigs[tier].segments.filter((_, i) => i !== index);
-      handleWheelConfigChange(tier, 'segments', updatedSegments);
+       setCurrentAppSettings(prev => ({
+        ...prev,
+        wheelConfigs: {
+            ...prev.wheelConfigs,
+            [tier]: {
+                ...prev.wheelConfigs[tier],
+                segments: updatedSegments
+            }
+        }
+      }));
   };
   
   const handleDragStart = (tierId: string, index: number) => {
@@ -217,22 +332,32 @@ export default function AdminPage() {
   };
 
   const handleDrop = (targetTierId: string, dropIndex: number) => {
-    if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
+      if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
+        setDraggedSegment(null);
+        return;
+      }
+  
+      const sourceTierId = draggedSegment.tierId;
+      const dragIndex = draggedSegment.index;
+  
+      setCurrentAppSettings(prev => {
+          const segments = [...prev.wheelConfigs[sourceTierId].segments];
+          const [draggedItem] = segments.splice(dragIndex, 1);
+          segments.splice(dropIndex, 0, draggedItem);
+  
+          return {
+              ...prev,
+              wheelConfigs: {
+                  ...prev.wheelConfigs,
+                  [sourceTierId]: {
+                      ...prev.wheelConfigs[sourceTierId],
+                      segments: segments
+                  }
+              }
+          };
+      });
+  
       setDraggedSegment(null);
-      return;
-    }
-
-    const sourceTierId = draggedSegment.tierId;
-    const dragIndex = draggedSegment.index;
-
-    const tierConfig = currentAppSettings.wheelConfigs[sourceTierId];
-    const segments = [...tierConfig.segments];
-    
-    const [draggedItem] = segments.splice(dragIndex, 1);
-    segments.splice(dropIndex, 0, draggedItem);
-    
-    handleWheelConfigChange(sourceTierId, 'segments', segments);
-    setDraggedSegment(null);
   };
 
   const handleDragEnd = () => {
@@ -311,36 +436,6 @@ export default function AdminPage() {
     }
   };
 
-  const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
-    if (!req) {
-      return 'N/A';
-    }
-    if (req.paymentMethod === 'upi') {
-      return `UPI: ${req.upiId || 'N/A'}`;
-    }
-    if (req.paymentMethod === 'bank') {
-      const accountDetails = req.bankDetails;
-      if (!accountDetails) {
-        return 'Bank: Details missing';
-      }
-      const holderName = accountDetails.accountHolderName || '';
-      const accNumStr = String(accountDetails.accountNumber || '');
-      let lastFour = '****';
-      if (accNumStr.length > 4) {
-        lastFour = accNumStr.slice(-4);
-      } else if (accNumStr.length > 0) {
-        lastFour = accNumStr;
-      }
-      
-      if (holderName) {
-        return `Bank: ${holderName}, A/C ...${lastFour}`;
-      }
-      return `Bank: A/C ...${lastFour}`;
-    }
-    return 'N/A';
-  };
-
-
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => {
     const paymentMethodDetails = getPaymentDetailsString(request);
     try {
@@ -375,26 +470,6 @@ export default function AdminPage() {
     }
   };
   
-  const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'datetime'): string => {
-    if (!dateInput) return 'N/A';
-    
-    let dateObj: Date;
-    if (dateInput instanceof Timestamp) {
-      dateObj = dateInput.toDate();
-    } else {
-      dateObj = new Date(dateInput);
-    }
-  
-    if (isNaN(dateObj.getTime())) {
-      return 'N/A';
-    }
-  
-    if (format === 'date') {
-      return dateObj.toLocaleDateString();
-    }
-    return dateObj.toLocaleString();
-  };
-
   if (loading) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
@@ -415,24 +490,6 @@ export default function AdminPage() {
         </div>
     );
   }
-  
-  const getTierName = (tierId: string): string => {
-    const configs = appSettings?.wheelConfigs;
-    if (configs) {
-        const specificConfig = configs[tierId];
-        if (specificConfig && specificConfig.name) {
-            return specificConfig.name;
-        }
-    }
-    return tierId;
-  };
-
-  const getUserBalanceForTier = (user: UserDocument, tierId: string): string => {
-    if (user && user.balances && typeof user.balances[tierId] === 'number') {
-        return user.balances[tierId].toFixed(2);
-    }
-    return '0.00';
-  };
 
   return (
     <div className="flex-grow flex flex-col items-center p-4 space-y-8">
@@ -464,20 +521,20 @@ export default function AdminPage() {
               <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><Users /> User Overview</CardTitle><CardDescription>List of all registered users and their balances.</CardDescription></CardHeader>
                 <CardContent>
                    <Table><TableHeader><TableRow><TableHead>User</TableHead>
-                   {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId)} Bal (₹)</TableHead>)}
+                   {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
                    <TableHead>Spins</TableHead><TableHead>Winnings (₹)</TableHead><TableHead>Deposited (₹)</TableHead><TableHead>Withdrawn (₹)</TableHead><TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {isLoadingData ? <TableRow><TableCell colSpan={9 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
                       : allUsers.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
-                               <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{u.displayName?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
+                               <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{getUserBalanceForTier(u, tierId)}</TableCell>)}
                           <TableCell>{u.spinsAvailable}</TableCell>
-                          <TableCell>{u.totalWinnings?.toFixed(2) ?? '0.00'}</TableCell>
-                          <TableCell>{u.totalDeposited?.toFixed(2) ?? '0.00'}</TableCell>
-                          <TableCell>{u.totalWithdrawn?.toFixed(2) ?? '0.00'}</TableCell>
+                          <TableCell>{(u.totalWinnings || 0).toFixed(2)}</TableCell>
+                          <TableCell>{(u.totalDeposited || 0).toFixed(2)}</TableCell>
+                          <TableCell>{(u.totalWithdrawn || 0).toFixed(2)}</TableCell>
                           <TableCell>{formatDisplayDate(u.createdAt)}</TableCell>
                           <TableCell>{formatDisplayDate(u.lastActive)}</TableCell>
                           <TableCell>
@@ -618,7 +675,7 @@ export default function AdminPage() {
                       : addFundRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
-                          <TableCell><Badge variant="outline">{getTierName(req.tierId)}</Badge></TableCell>
+                          <TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell>
                           <TableCell className="text-xs">{req.paymentReference}</TableCell>
                           <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
@@ -637,7 +694,7 @@ export default function AdminPage() {
                       : withdrawalRequests.map((req) => (
                         <TableRow key={req.id}>
                           <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
-                          <TableCell><Badge variant="outline">{getTierName(req.tierId)}</Badge></TableCell>
+                          <TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell>
                           <TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell>
                           <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
@@ -658,7 +715,7 @@ export default function AdminPage() {
                             <TableCell className="font-medium">{t.userEmail}</TableCell>
                             <TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4"/> : <ArrowDownLeft className="h-4 w-4"/>}{t.type}</span></TableCell>
                             <TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</TableCell>
-                             <TableCell>{t.tierId ? <Badge variant="outline">{getTierName(t.tierId)}</Badge> : 'N/A'}</TableCell>
+                             <TableCell>{t.tierId ? <Badge variant="outline">{getTierName(t.tierId, appSettings.wheelConfigs)}</Badge> : 'N/A'}</TableCell>
                             <TableCell>{t.description}</TableCell>
                             <TableCell>{formatDisplayDate(t.date)}</TableCell>
                             <TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell>
