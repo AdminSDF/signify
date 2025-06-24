@@ -33,24 +33,23 @@ const upiApps = [
     name: 'Google Pay',
     scheme: 'gpay://upi/pay',
     logo: (
-      <svg className="w-12 h-12" viewBox="0 0 60 60">
-        <rect width="60" height="60" rx="12" fill="#fff" stroke="#e0e0e0" strokeWidth="1"></rect>
-        <path d="M25.26 21.68L29.1 29.5l-3.84 7.82h3.2l2.3-4.87h.08c.55 1.7 1.48 3.23 2.76 4.3l-2.04 4.25h3.3l5.5-11.45V21.68h-9.9v.01zm6.04 7.2l-2.1-4.48h-.06l-2.12 4.48h4.28z" fill="#5f6368"></path>
-        <path d="M22.95 38.38A5.36 5.36 0 0117.6 33a5.36 5.36 0 015.36-5.36c1.63 0 3.03.73 4 1.9l-2.03 1.52a2.33 2.33 0 00-1.93-1c-1.39 0-2.52 1.13-2.52 2.94s1.13 2.94 2.52 2.94c1.6 0 2.22-1.04 2.33-1.63h-2.33v-2.3h5.45c.05.3.08.6.08.92a4.8 4.8 0 01-1.37 3.5 5.2 5.2 0 01-4.14 2.1z" fill="#4285f4"></path>
-      </svg>
+      <Image
+        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgpwAHxVuKqwIJ1RjMgmxvvzdVqUenACJrhFECisn98PSfeiLFoxMylcCvXcmxbGsP7yYpUZ68scqXlnes8zKoPE3YguFm43k8Ba2gikGznbCchM4eRZAm-8OKQ-8PGEl0pRn7RNtTUhGg9-_TAIrsZTV3PTqCWgJxCx4Sdg5DUq35gxHOP5mTdE4rWcIUN/s400/20250623_144841.png"
+        alt="Google Pay Logo"
+        width={48}
+        height={48}
+        className="w-12 h-12 rounded-lg"
+      />
     ),
   },
   {
     name: 'PhonePe',
     scheme: 'phonepe://pay',
     logo: (
-      <Image
-        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgpwAHxVuKqwIJ1RjMgmxvvzdVqUenACJrhFECisn98PSfeiLFoxMylcCvXcmxbGsP7yYpUZ68scqXlnes8zKoPE3YguFm43k8Ba2gikGznbCchM4eRZAm-8OKQ-8PGEl0pRn7RNtTUhGg9-_TAIrsZTV3PTqCWgJxCx4Sdg5DUq35gxHOP5mTdE4rWcIUN/s400/20250623_144841.png"
-        alt="PhonePe Logo"
-        width={48}
-        height={48}
-        className="w-12 h-12 rounded-lg"
-      />
+      <svg className="w-12 h-12" viewBox="0 0 60 60">
+        <rect width="60" height="60" rx="12" fill="#5f259f"></rect>
+        <text x="30" y="37" fontFamily="sans-serif" fontSize="11" fill="#ffffff" textAnchor="middle" fontWeight="bold">PhonePe</text>
+      </svg>
     ),
   },
   {
