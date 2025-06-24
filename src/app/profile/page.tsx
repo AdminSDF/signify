@@ -150,6 +150,17 @@ export default function ProfilePage() {
 
   const handleWithdrawal = async () => {
     if (!user || !userData || !activeWheelConfig) return;
+    
+    if ((userData.totalDeposited ?? 0) <= 0) {
+      toast({
+        title: "First Deposit Required",
+        description: "To make a withdrawal, you need to add funds to your account at least once. This is a one-time requirement.",
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+
     if (activeWheelConfig.isLocked) {
       toast({ title: "Arena Locked", description: "Withdrawals are disabled for this arena.", variant: "destructive"});
       return;
