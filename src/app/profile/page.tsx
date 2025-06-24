@@ -260,7 +260,11 @@ export default function ProfilePage() {
     }
   };
 
-  const handleCopy = async (textToCopy: string, type: 'Code' | 'Link') => {
+  const handleCopy = async (textToCopy: string | null | undefined, type: 'Code' | 'Link') => {
+    if (!textToCopy) {
+      toast({ title: "Nothing to Copy", description: `Referral ${type} is not available yet.`, variant: "destructive" });
+      return;
+    }
     try {
       await copyToClipboard(textToCopy);
       toast({ title: `${type} Copied!`, description: `Your Referral ${type} is copied to the clipboard.` });
@@ -408,7 +412,7 @@ export default function ProfilePage() {
                     <Label htmlFor="referralCode">Your Referral Code</Label>
                     <div className="flex items-center gap-2 mt-1">
                       <Input id="referralCode" type="text" readOnly value={userData.referralCode || 'N/A'} className="bg-muted"/>
-                      <Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode || '', 'Code')}><Copy className="w-4 h-4" /></Button>
+                      <Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode, 'Code')}><Copy className="w-4 h-4" /></Button>
                     </div>
                   </div>
                   <div>

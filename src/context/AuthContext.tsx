@@ -115,17 +115,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         firestoreUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
-            const latestUserData = docSnap.data() as UserDocument;
-            setUserData(latestUserData);
-            
-            // If user is blocked, log them out immediately.
-            if (latestUserData.isBlocked) {
-              logout(true);
-              return;
-            }
+              const latestUserData = docSnap.data() as UserDocument;
+              
+              // --- MIGRATION LOGIC FOR REFERRAL SYSTEM ---
+              // Checks if referral fields are missing and adds them for existing users.
+              const needsMigration = !latestUserData.referralCode || !latestUserData.hasOwnProperty('referrals') || !latestUserData.hasOwnProperty('referralEarnings');
+              
+              if (needsMigration) {
+                  const migrationData: Partial<UserDocument> = {};
+                  if (!latestUserData.referralCode) {
+                      migrationData.referralCode = firebaseUser.uid;
+                  }
+                  if (!latestUserData.hasOwnProperty('referrals')) {
+                      migrationData.referrals = [];
+                  }
+                  if (!latestUserData.hasOwnProperty('referralEarnings')) {
+                      migrationData.referralEarnings = 0;
+                  }
+
+                  // Update the document. onSnapshot will then re-run with the updated data.
+                  updateUserData(firebaseUser.uid, migrationData).catch(err => {
+                      console.error("Referral system migration for user failed:", err);
+                  });
+                  // We set the current data, but it will be quickly updated by the listener
+                  setUserData(latestUserData);
+              } else {
+                  // Data is fine, just set it.
+                  setUserData(latestUserData);
+              }
+              
+              if (latestUserData.isBlocked) {
+                  logout(true); // If user is blocked, log them out immediately.
+                  return;
+              }
 
           } else {
-            setUserData(null);
+              setUserData(null);
           }
           setUserDataLoading(false);
         }, (error) => {
