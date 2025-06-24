@@ -29,6 +29,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4581112005541316"
+          crossOrigin="anonymous"></script>
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
         <AuthProvider>
