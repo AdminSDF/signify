@@ -28,6 +28,8 @@ import {
   deleteDoc,
   writeBatch,
   onSnapshot, // Export onSnapshot
+  FieldValue,
+  increment,
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
@@ -61,6 +63,8 @@ const APP_CONFIG_DOC_ID = 'main';
 const SUPPORT_TICKETS_COLLECTION = 'supportTickets';
 const ACTIVITY_LOGS_COLLECTION = 'activityLogs';
 const FRAUD_ALERTS_COLLECTION = 'fraudAlerts';
+const SYSTEM_STATS_COLLECTION = 'systemStats';
+const GLOBAL_STATS_DOC_ID = 'global';
 
 
 // --- User Functions ---
@@ -436,6 +440,7 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
+  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
 
   const [userSnap, appConfig] = await Promise.all([
     getDoc(userRef),
@@ -454,6 +459,8 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
     [`balances.${effectiveTierId}`]: newBalance,
     totalDeposited: totalDeposited
   });
+  
+  batch.update(globalStatsRef, { totalDeposited: increment(amount) });
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
@@ -486,6 +493,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
+  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
 
   const [userSnap, appConfig] = await Promise.all([
     getDoc(userRef),
@@ -502,12 +510,19 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   
   const newBalance = currentBalance - amount;
   const totalWithdrawn = (userData.totalWithdrawn || 0) + amount;
+  const gstAmount = amount * 0.02;
+  const netPayableAmount = amount - gstAmount;
   
   batch.update(userRef, { 
     [`balances.${effectiveTierId}`]: newBalance,
     totalWithdrawn: totalWithdrawn 
   });
   
+  batch.update(globalStatsRef, {
+    totalWithdrawn: increment(amount),
+    totalGstCollected: increment(gstAmount),
+  });
+
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
 
@@ -518,7 +533,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
     userEmail: userData.email,
     type: 'debit',
     amount: amount,
-    description: `Withdrawal from ${tierName}: ${paymentMethodDetails} (Req ID: ${requestId.substring(0,6)})`,
+    description: `Withdrawal from ${tierName}. Gross: ₹${amount.toFixed(2)}, GST: -₹${gstAmount.toFixed(2)}. (Req ID: ${requestId.substring(0,6)})`,
     status: 'completed',
     date: Timestamp.now(),
     tierId: effectiveTierId,
@@ -696,14 +711,32 @@ export const getFraudAlerts = async (): Promise<(FraudAlertData & {id: string})[
 export interface GlobalStats {
   totalDeposited: number;
   totalWithdrawn: number;
+  totalGstCollected: number;
   totalWinnings: number;
   currentBalance: number;
 }
 
 export const getGlobalStats = async (): Promise<GlobalStats> => {
-  const stats: GlobalStats = {
+  const statsFromDoc: Omit<GlobalStats, 'totalWinnings' | 'currentBalance'> = {
     totalDeposited: 0,
     totalWithdrawn: 0,
+    totalGstCollected: 0,
+  };
+
+  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
+  const docSnap = await getDoc(globalStatsRef);
+
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    statsFromDoc.totalDeposited = data.totalDeposited || 0;
+    statsFromDoc.totalWithdrawn = data.totalWithdrawn || 0;
+    statsFromDoc.totalGstCollected = data.totalGstCollected || 0;
+  } else {
+    // If the document doesn't exist, create it.
+    await setDoc(globalStatsRef, statsFromDoc);
+  }
+
+  const aggregatedStats = {
     totalWinnings: 0,
     currentBalance: 0,
   };
@@ -713,23 +746,21 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
 
   querySnapshot.forEach(doc => {
     const user = doc.data() as UserDocument;
-    stats.totalDeposited += user.totalDeposited || 0;
-    stats.totalWithdrawn += user.totalWithdrawn || 0;
-    stats.totalWinnings += user.totalWinnings || 0;
+    aggregatedStats.totalWinnings += user.totalWinnings || 0;
     
     if (user.balances) {
       Object.values(user.balances).forEach(balance => {
-        stats.currentBalance += balance || 0;
+        aggregatedStats.currentBalance += balance || 0;
       });
     }
   });
 
-  return stats;
+  return { ...statsFromDoc, ...aggregatedStats };
 };
 
 
 export {
   app, auth, db, storage, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
-  Timestamp, FirebaseUser, onSnapshot
+  Timestamp, FirebaseUser, onSnapshot, FieldValue
 };

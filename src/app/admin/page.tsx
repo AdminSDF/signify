@@ -21,7 +21,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet,
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark,
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig } from '@/lib/appConfig';
@@ -595,14 +595,15 @@ export default function AdminPage() {
                    <div className="pt-6">
                       <h3 className="text-lg font-semibold mb-4">Global Cash Flow</h3>
                       {isLoadingData ? (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+                           <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
                            <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
                            <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
                            <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
                            <Card><CardHeader><Skeleton className="h-5 w-24" /></CardHeader><CardContent><Skeleton className="h-8 w-32" /><Skeleton className="h-4 w-40 mt-2" /></CardContent></Card>
                         </div>
                       ) : globalStats && (
-                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-sm font-medium">Total Deposited</CardTitle>
@@ -620,7 +621,17 @@ export default function AdminPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="text-2xl font-bold">₹{globalStats.totalWithdrawn.toFixed(2)}</div>
-                                    <p className="text-xs text-muted-foreground">Total funds withdrawn by all users.</p>
+                                    <p className="text-xs text-muted-foreground">Total liability removed from users.</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">GST Collected (2%)</CardTitle>
+                                    <Landmark className="h-4 w-4 text-gray-500"/>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">₹{globalStats.totalGstCollected.toFixed(2)}</div>
+                                    <p className="text-xs text-muted-foreground">From all processed withdrawals.</p>
                                 </CardContent>
                             </Card>
                             <Card>
@@ -938,19 +949,28 @@ export default function AdminPage() {
             <TabsContent value="withdrawal-req">
               <Card className="bg-muted/20"><CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                   <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User</TableHead><TableHead>Gross Amt (₹)</TableHead><TableHead>GST (2%)</TableHead><TableHead>Net Pay (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={8} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
-                      : withdrawalRequests.map((req) => (
+                      {isLoadingData ? <TableRow><TableCell colSpan={10} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
+                      : withdrawalRequests.map((req) => {
+                        const gstAmount = req.amount * 0.02;
+                        const netPayable = req.amount - gstAmount;
+                        return (
                         <TableRow key={req.id}>
-                          <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
+                          <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell>
+                          <TableCell>{req.userEmail}</TableCell>
+                          <TableCell>{req.amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-destructive">{gstAmount.toFixed(2)}</TableCell>
+                          <TableCell className="font-semibold text-primary">{netPayable.toFixed(2)}</TableCell>
                           <TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell>
                           <TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell>
                           <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                           <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
                           <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
-                        </TableRow>))}
-                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground h-24">No pending withdrawal requests.</TableCell></TableRow>)}
+                        </TableRow>
+                        )
+                      })}
+                      {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={10} className="text-center text-muted-foreground h-24">No pending withdrawal requests.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
             
