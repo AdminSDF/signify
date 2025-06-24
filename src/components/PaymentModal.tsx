@@ -68,11 +68,13 @@ const upiApps = [
     name: 'Amazon Pay',
     scheme: 'amazonpay://pay',
     logo: (
-      <svg className="w-12 h-12" viewBox="0 0 60 60">
-        <rect width="60" height="60" rx="12" fill="#232f3e"></rect>
-        <path fill="#ff9900" d="M26.4 35.4c-4.4 0-8.2-1.4-8.2-4.2 0-2.3 2.5-3.8 6.2-4.1l4.2-0.3c0.8-2.6-1.1-4.2-4.3-4.2 -2.3 0-4.3 0.9-5.7 1.7l-1.6-2.5c1.8-1.1 4.5-2 8-2 6.5 0 9.8 3.6 9.8 7.8v10.5h-3.4v-1.9c-1.3 1.5-3.3 2.2-5.8 2.2zM28 32.8c2.4 0 4.1-1.3 4.1-3.3 0-1.4-1-2.2-2.7-2.2l-4.1 0.3c-1.1 0.1-1.9 0.6-1.9 1.5 0 1.5 1.8 2.7 4.6 2.7z"></path>
-        <path fill="#fff" d="M35.6,39.8c1.8-1.8,1.8-4.6,0-6.4l-3-3c-0.5-0.5-1.2-0.5-1.7,0l-3,3c-1.8,1.8-1.8,4.6,0,6.4l3,3 C31,42.8,35.6,42.8,35.6,39.8z M32.6,36.8c-1.2,1.2-3.1,1.2-4.2,0l-3-3c-1.2-1.2-1.2-3.1,0-4.2l3-3c1.2-1.2,3.1-1.2,4.2,0l3,3 C33.8,33.7,33.8,35.6,32.6,36.8z"></path>
-      </svg>
+      <Image
+        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgsgJohh97ZSjiCyaGtNy43jwk9bt35M6lDOqnCUuho00sFe-8hi7p9XeuIii41iZc1qsDuiNdhQT4C4sJsfQSdSlzkj1q7SkeWZPS2cePaZ45SF-JAb0Fe2M5fqfOkilsdNbGhW5YnhNyRnGMtpSRYMQ05J700ToVHU9vkyTsVE1xQ6Xp6JLC9P1gvWGNC/s225/images%20%281%29.png"
+        alt="Amazon Pay Logo"
+        width={48}
+        height={48}
+        className="w-12 h-12 rounded-lg"
+      />
     ),
   },
   {
