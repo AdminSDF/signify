@@ -63,8 +63,8 @@ export default function ProfilePage() {
   const [referralLink, setReferralLink] = useState('');
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && userData?.referralCode) {
-      setReferralLink(`${window.location.origin}/login?ref=${userData.referralCode}`);
+    if (userData?.referralCode) {
+      setReferralLink(`https://studio--spinify-m348p.us-central1.hosted.app/login?ref=${userData.referralCode}`);
     }
   }, [userData?.referralCode]);
 
