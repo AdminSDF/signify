@@ -1,8 +1,9 @@
 import React from 'react';
+import DisclaimerMarquee from './DisclaimerMarquee';
 
 const SiteFooter: React.FC = () => {
   return (
-    <footer className="py-6 md:px-8 md:py-0 border-t border-border/40 bg-background">
+    <footer className="border-t border-border/40 bg-background">
       <div className="container flex flex-col items-center justify-center gap-2 py-4 md:h-24 md:flex-row md:py-0">
         <div className="text-center space-y-1">
           <p className="text-balance text-sm leading-loose text-muted-foreground">
@@ -10,6 +11,7 @@ const SiteFooter: React.FC = () => {
           </p>
         </div>
       </div>
+      <DisclaimerMarquee />
     </footer>
   );
 };
