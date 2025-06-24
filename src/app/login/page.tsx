@@ -76,8 +76,8 @@ export default function LoginPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -99,10 +99,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-black p-4">
+    <div className="flex items-center justify-center min-h-screen p-4">
       <div
         className={cn(
-          "relative w-[450px] h-[450px] rounded-full overflow-hidden flex items-center justify-center",
+          "relative w-[450px] h-[450px] rounded-full overflow-hidden flex items-center justify-center border-8 border-gray-400/30",
           isSpinning && "animate-spin-once"
         )}
         style={wheelStyle}
