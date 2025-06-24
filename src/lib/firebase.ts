@@ -714,11 +714,11 @@ export type ActivitySummary = {
 };
 
 export const getActivitySummary = async (days: number = 1): Promise<ActivitySummary> => {
-    const summary: ActivitySummary = {
-        morning: 0,
-        afternoon: 0,
-        evening: 0,
-        night: 0,
+    const uniqueUsers: { [key in ActivityPeriod]: Set<string> } = {
+        morning: new Set(),
+        afternoon: new Set(),
+        evening: new Set(),
+        night: new Set(),
     };
     
     const startDate = new Date();
@@ -734,10 +734,17 @@ export const getActivitySummary = async (days: number = 1): Promise<ActivitySumm
     
     querySnapshot.forEach(doc => {
         const log = doc.data() as ActivityLogData;
-        if(log.period && summary.hasOwnProperty(log.period)) {
-            summary[log.period]++;
+        if(log.period && log.userId && uniqueUsers.hasOwnProperty(log.period)) {
+            uniqueUsers[log.period].add(log.userId);
         }
     });
+
+    const summary: ActivitySummary = {
+        morning: uniqueUsers.morning.size,
+        afternoon: uniqueUsers.afternoon.size,
+        evening: uniqueUsers.evening.size,
+        night: uniqueUsers.night.size,
+    };
     
     return summary;
 };
@@ -813,4 +820,3 @@ export {
   Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion
 };
 
-    

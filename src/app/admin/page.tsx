@@ -134,7 +134,7 @@ const StatCard = ({ title, value, icon }: { title: string, value: number, icon: 
     </CardHeader>
     <CardContent>
       <div className="text-2xl font-bold">{value}</div>
-      <p className="text-xs text-muted-foreground">Total activities (last 24h)</p>
+      <p className="text-xs text-muted-foreground">Unique users (last 24h)</p>
     </CardContent>
   </Card>
 );
@@ -722,7 +722,7 @@ export default function AdminPage() {
             
             <TabsContent value="activity">
               <Card className="bg-muted/20">
-                <CardHeader><CardTitle className="flex items-center gap-2"><BarChart2 /> User Activity</CardTitle><CardDescription>Real-time user activity based on time of day (last 24 hours).</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><BarChart2 /> User Activity</CardTitle><CardDescription>Unique active users based on time of day (last 24 hours).</CardDescription></CardHeader>
                 <CardContent className="space-y-6">
                   {isLoadingData ? (
                      <div className="flex justify-center items-center h-64"><RefreshCcw className="h-8 w-8 animate-spin text-primary" /></div>
@@ -1069,4 +1069,3 @@ export default function AdminPage() {
   );
 }
 
-    
