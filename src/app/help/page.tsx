@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -89,7 +89,6 @@ export default function HelpPage() {
     }
     
     if (!user && !loading) {
-        // Use router in a client component after checks
         // eslint-disable-next-line react-hooks/rules-of-hooks
         useEffect(() => {
             router.push('/login');
@@ -160,3 +159,5 @@ export default function HelpPage() {
         </div>
     );
 }
+
+    

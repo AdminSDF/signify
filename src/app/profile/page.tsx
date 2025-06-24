@@ -23,6 +23,7 @@ import {
   auth,
   updateProfile,
   logUserActivity,
+  UserDocument
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
@@ -480,3 +481,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
