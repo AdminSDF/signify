@@ -338,13 +338,10 @@ export default function GamePage() {
         return;
     }
     
+    // Store the result and cost. NO state updates here.
     pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost };
     
-    if (isFreeSpin) {
-      const newSpins = spinsAvailable - 1;
-      setSpinsAvailable(newSpins); // Optimistically update UI for free spins
-    }
-
+    // Start the animation.
     startSpinProcess(winningSegmentIndex);
 
   }, [
@@ -357,14 +354,19 @@ export default function GamePage() {
     setIsSpinning(false);
     const result = pendingPrizeRef.current;
     if (!result || !user || !userData) {
+      pendingPrizeRef.current = null;
       return;
     }
     
     const { prize, cost } = result;
+    const isFreeSpin = cost === 0;
     const winAmount = prize.amount ?? 0;
+    
     const netChange = winAmount - cost;
     const balanceBefore = userBalance;
     const balanceAfter = balanceBefore + netChange;
+    const spinsBefore = spinsAvailable;
+    const spinsAfter = isFreeSpin ? spinsBefore - 1 : spinsBefore;
 
     try {
         const updates: { [key: string]: any } = {
@@ -374,17 +376,15 @@ export default function GamePage() {
             lastActive: Timestamp.now(),
         };
 
-        if (cost > 0 && tier === 'little') {
+        if (isFreeSpin) {
+          updates.spinsAvailable = spinsAfter;
+        }
+
+        if (!isFreeSpin && tier === 'little') {
             const todayStr = new Date().toLocaleDateString('en-CA');
             const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
             updates.dailyPaidSpinsUsed = newDailySpinsUsed;
             updates.lastPaidSpinDate = todayStr;
-            setDailyPaidSpinsUsed(newDailySpinsUsed);
-            setLastPaidSpinDate(todayStr);
-        }
-
-        if (cost === 0) { // It was a free spin
-            updates.spinsAvailable = spinsAvailable; // The state was already updated, so we save it now
         }
         
         await updateUserData(user.uid, updates);
@@ -396,8 +396,17 @@ export default function GamePage() {
             balanceBefore,
             balanceAfter,
         });
-
+        
         setUserBalance(balanceAfter);
+        if(isFreeSpin) {
+          setSpinsAvailable(spinsAfter);
+        }
+        if (!isFreeSpin && tier === 'little') {
+           const todayStr = new Date().toLocaleDateString('en-CA');
+           const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
+           setDailyPaidSpinsUsed(newDailySpinsUsed);
+           setLastPaidSpinDate(todayStr);
+        }
         setCurrentPrize(prize);
         
         if (winAmount > 0) {
