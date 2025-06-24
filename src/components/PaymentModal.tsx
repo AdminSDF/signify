@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -81,21 +80,26 @@ const upiApps = [
     name: "BHIM",
     scheme: "bhim://upi/pay",
     logo: (
-        <svg className="w-12 h-12" viewBox="0 0 60 60">
-            <rect width="60" height="60" rx="12" fill="#003e7b"/>
-            <path d="M38.8,33.5h-5.3v-2.3c1-0.7,1.7-1.8,1.7-3.1c0-2-1.6-3.6-3.6-3.6s-3.6,1.6-3.6,3.6c0,1.3,0.7,2.4,1.7,3.1v2.3h-5.3 c-0.6,0-1,0.4-1,1v5.8c0,0.6,0.4,1,1,1h14.4c0.6,0,1-0.4,1-1v-5.8C39.8,33.9,39.4,33.5,38.8,33.5z M29.9,30.1 c0-1,0.8-1.8,1.8-1.8s1.8,0.8,1.8,1.8c0,1-0.8,1.8-1.8,1.8S29.9,31.1,29.9,30.1z M34.9,38.5h-2.9v-2.1h2.9V38.5z M27.9,38.5h-2.9 v-2.1h2.9V38.5z" fill="#ff6700"/>
-            <path d="M21.5,18.7h17c0.6,0,1,0.4,1,1v4.2h-3.4v-3.2H23.9v10.5h3.9v-3.2h3.4v4.2c0,0.6-0.4,1-1,1h-7.3c-0.6,0-1-0.4-1-1v-12.5 C20.5,19.1,20.9,18.7,21.5,18.7z" fill="#009c48"/>
-        </svg>
+      <Image
+        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg7Ot3I7AvA-b8urS6AsAiY62IbnEv9SIqnl4DGvZE5hc8xgIn_1xnKxUwuk7A2gfSnmYB-EpynM63dXfn68-r0wlchBmgQsERFHHTIGqwTWkYJbnY7YKKHdFHnen3sXWWqFB7GDOg6u2N6DwyDIelcjiMFV50NQBPmW-hBb_KC7E8du7Tq_4iohyAwsvep/s400/20250623_144600.png"
+        alt="BHIM Logo"
+        width={48}
+        height={48}
+        className="w-12 h-12 rounded-lg"
+      />
     ),
   },
   {
     name: "Other Apps",
     scheme: "upi://pay",
     logo: (
-        <svg className="w-12 h-12" viewBox="0 0 60 60">
-            <rect width="60" height="60" rx="12" fill="#e0e0e0"/>
-            <path d="M22,29h2.5v-8.3h3.4V29H30v1.9h-8V29z M32.1,29h2.1l3-6.7h0.1V29h1.9v-10.2h-2.2l-2.9,6.5h-0.1v-6.5h-1.9V30.9z" fill="#757575"/>
-        </svg>
+      <Image
+        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgpwAHxVuKqwIJ1RjMgmxvvzdVqUenACJrhFECisn98PSfeiLFoxMylcCvXcmxbGsP7yYpUZ68scqXlnes8zKoPE3YguFm43k8Ba2gikGznbCchM4eRZAm-8OKQ-8PGEl0pRn7RNtTUhGg9-_TAIrsZTV3PTqCWgJxCx4Sdg5DUq35gxHOP5mTdE4rWcIUN/s400/20250623_144841.png"
+        alt="Other UPI Apps Logo"
+        width={48}
+        height={48}
+        className="w-12 h-12 rounded-lg"
+      />
     ),
   },
 ];
