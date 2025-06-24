@@ -71,7 +71,7 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
   const [currentPrize, setCurrentPrize] = useState<SegmentConfig | null>(null);
-  const pendingPrizeRef = useRef<SegmentConfig | null>(null);
+  const pendingPrizeRef = useRef<{ prize: SegmentConfig, cost: number } | null>(null);
   const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
@@ -303,17 +303,12 @@ export default function GamePage() {
 
     if (tier === 'little' && spinsAvailable > 0) {
       isFreeSpin = true;
-      const newSpins = spinsAvailable - 1;
-      setSpinsAvailable(newSpins);
-      await updateUserData(user.uid, { spinsAvailable: newSpins });
     } else {
         if (tier === 'little') {
             let currentDailySpins = dailyPaidSpinsUsed;
             const todayString = new Date().toLocaleDateString('en-CA');
             if (lastPaidSpinDate !== todayString) {
                 currentDailySpins = 0;
-                setDailyPaidSpinsUsed(0);
-                setLastPaidSpinDate(todayString);
             }
             spinCost = getLittleTierSpinCost(currentDailySpins);
         } else {
@@ -329,8 +324,6 @@ export default function GamePage() {
     
     await logUserActivity(user.uid, user.email, 'spin');
     
-    const betAmount = isFreeSpin ? 0 : spinCost;
-    
     const { winningSegment } = getSpinResult(wheelConfig.segments);
     
     if (!winningSegment) {
@@ -338,7 +331,6 @@ export default function GamePage() {
         return;
     }
     
-    const winAmount = winningSegment.amount ?? 0;
     const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
 
     if (winningSegmentIndex === -1) {
@@ -346,78 +338,95 @@ export default function GamePage() {
         return;
     }
     
-    pendingPrizeRef.current = winningSegment;
+    pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost };
+    
+    if (isFreeSpin) {
+      const newSpins = spinsAvailable - 1;
+      setSpinsAvailable(newSpins); // Optimistically update UI for free spins
+    }
 
     startSpinProcess(winningSegmentIndex);
-    
-    const balanceBefore = userBalance;
-    const netChange = winAmount - betAmount;
-    const balanceAfter = balanceBefore + netChange;
-    setUserBalance(balanceAfter);
-    
-    await addTransaction({
-        amount: netChange,
-        description: `Spin: Bet ₹${betAmount.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`,
-        spinDetails: { betAmount, winAmount },
-        balanceBefore,
-        balanceAfter,
-    });
-    
-    const updates: { [key: string]: any } = {
-        [`balances.${tier}`]: balanceAfter,
-        totalSpinsPlayed: (userData.totalSpinsPlayed ?? 0) + 1,
-        totalWinnings: (userData.totalWinnings ?? 0) + winAmount,
-        lastActive: Timestamp.now()
-    };
-
-    if (!isFreeSpin && tier === 'little') {
-        const newDailySpinsUsed = dailyPaidSpinsUsed + 1;
-        setDailyPaidSpinsUsed(newDailySpinsUsed);
-        updates.dailyPaidSpinsUsed = newDailySpinsUsed;
-        updates.lastPaidSpinDate = new Date().toLocaleDateString('en-CA');
-    }
-    
-    await updateUserData(user.uid, updates);
 
   }, [
     isClient, isSpinning, user, authLoading, userData, wheelConfig, tier, spinsAvailable,
     userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, resetIdleTimer,
-    startSpinProcess, addTransaction, getLittleTierSpinCost, toast, router
+    startSpinProcess, getLittleTierSpinCost, toast, router
   ]);
 
   const handleSpinComplete = useCallback(async () => {
-    const prizeToDisplay = pendingPrizeRef.current;
-    if (prizeToDisplay) {
-      setCurrentPrize(prizeToDisplay);
-    }
     setIsSpinning(false);
-    
-    if (!user || !userData || !prizeToDisplay) return;
-    
-    const winAmount = prizeToDisplay.amount ?? 0;
-    if (winAmount > 0) {
-      toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
-    } else {
-      toast({ title: "Better luck next time!", description: "You didn't win a prize. Try again!" });
+    const result = pendingPrizeRef.current;
+    if (!result || !user || !userData) {
+      return;
     }
+    
+    const { prize, cost } = result;
+    const winAmount = prize.amount ?? 0;
+    const netChange = winAmount - cost;
+    const balanceBefore = userBalance;
+    const balanceAfter = balanceBefore + netChange;
 
-    const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: prizeToDisplay.amount ? `₹${prizeToDisplay.amount.toFixed(2)}` : prizeToDisplay.text };
-    const updatedHistory = [...spinHistory, newSpinRecordForAI];
-    setSpinHistory(updatedHistory);
-    
-    const hasWonMoney = prizeToDisplay.amount !== undefined && prizeToDisplay.amount > 0;
-    fetchAssistantMessage(hasWonMoney ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
-    
-    if (hasWonMoney) {
-      playSound('win');
-      if (prizeToDisplay.amount >= 10) { 
-        setShowConfetti(true); 
-        setTimeout(() => setShowConfetti(false), 4000); 
-      }
-    } else {
-      playSound('tryAgain');
+    try {
+        const updates: { [key: string]: any } = {
+            [`balances.${tier}`]: balanceAfter,
+            totalSpinsPlayed: (userData.totalSpinsPlayed ?? 0) + 1,
+            totalWinnings: (userData.totalWinnings ?? 0) + winAmount,
+            lastActive: Timestamp.now(),
+        };
+
+        if (cost > 0 && tier === 'little') {
+            const todayStr = new Date().toLocaleDateString('en-CA');
+            const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
+            updates.dailyPaidSpinsUsed = newDailySpinsUsed;
+            updates.lastPaidSpinDate = todayStr;
+            setDailyPaidSpinsUsed(newDailySpinsUsed);
+            setLastPaidSpinDate(todayStr);
+        }
+
+        if (cost === 0) { // It was a free spin
+            updates.spinsAvailable = spinsAvailable; // The state was already updated, so we save it now
+        }
+        
+        await updateUserData(user.uid, updates);
+
+        await addTransaction({
+            amount: netChange,
+            description: `Spin: Bet ₹${cost.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`,
+            spinDetails: { betAmount: cost, winAmount },
+            balanceBefore,
+            balanceAfter,
+        });
+
+        setUserBalance(balanceAfter);
+        setCurrentPrize(prize);
+        
+        if (winAmount > 0) {
+            toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
+            playSound('win');
+            if (winAmount >= 10) { 
+                setShowConfetti(true); 
+                setTimeout(() => setShowConfetti(false), 4000);
+            }
+        } else {
+            toast({ title: "Better luck next time!", description: "You didn't win a prize. Try again!" });
+            playSound('tryAgain');
+        }
+
+        const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: prize.amount ? `₹${prize.amount.toFixed(2)}` : prize.text };
+        const updatedHistory = [...spinHistory, newSpinRecordForAI];
+        setSpinHistory(updatedHistory);
+        fetchAssistantMessage(winAmount > 0 ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
+
+    } catch (error) {
+        console.error("Error during spin completion:", error);
+        toast({ title: "Sync Error", description: "There was an issue saving your spin result. Please refresh.", variant: "destructive" });
+    } finally {
+        pendingPrizeRef.current = null;
     }
-  }, [playSound, spinHistory, user, userData, fetchAssistantMessage, toast]);
+  }, [
+    user, userData, tier, userBalance, dailyPaidSpinsUsed, spinsAvailable, lastPaidSpinDate,
+    playSound, spinHistory, fetchAssistantMessage, toast, addTransaction
+  ]);
   
   const handlePaymentConfirm = useCallback(async () => {
     setShowPaymentModal(false);

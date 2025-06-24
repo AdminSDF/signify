@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -101,7 +102,7 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-black p-4">
       <div
         className={cn(
-          "relative w-[450px] h-[450px] rounded-full border-8 border-red-600 overflow-hidden flex items-center justify-center",
+          "relative w-[450px] h-[450px] rounded-full overflow-hidden flex items-center justify-center",
           isSpinning && "animate-spin-once"
         )}
         style={wheelStyle}
@@ -207,16 +208,16 @@ export default function LoginPage() {
               
               <div className="pt-8 space-y-3">
                 <Button
-                  type={isLoginMode ? 'submit' : 'button'}
-                  onClick={isLoginMode ? undefined : handleSwitchToLogin}
+                  type="submit"
+                  onClick={isLoginMode ? form.handleSubmit(onSubmit) : handleSwitchToLogin}
                   disabled={loading || isSpinning}
                   className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
                 >
                   Login
                 </Button>
                 <Button
-                   type={!isLoginMode ? 'submit' : 'button'}
-                   onClick={!isLoginMode ? undefined : handleSwitchToSignUp}
+                   type="submit"
+                   onClick={!isLoginMode ? form.handleSubmit(onSubmit) : handleSwitchToSignUp}
                    disabled={loading || isSpinning}
                    className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
                 >
