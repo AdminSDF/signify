@@ -625,20 +625,23 @@ export const uploadSupportScreenshot = async (ticketId: string, file: File): Pro
 
 export const createSupportTicket = async (data: { userId: string; userEmail: string; description: string; screenshotFile: File | null; }): Promise<void> => {
     const ticketRef = doc(collection(db, SUPPORT_TICKETS_COLLECTION));
+    
+    let screenshotURL: string | undefined = undefined;
+
+    if (data.screenshotFile) {
+        screenshotURL = await uploadSupportScreenshot(ticketRef.id, data.screenshotFile);
+    }
+    
     const newTicketData: Omit<SupportTicketData, 'id'> = {
         userId: data.userId,
         userEmail: data.userEmail,
         description: data.description,
         status: 'open',
         createdAt: Timestamp.now(),
+        ...(screenshotURL && { screenshotURL: screenshotURL }),
     };
-    
-    await setDoc(ticketRef, newTicketData);
 
-    if (data.screenshotFile) {
-        const screenshotURL = await uploadSupportScreenshot(ticketRef.id, data.screenshotFile);
-        await updateDoc(ticketRef, { screenshotURL: screenshotURL });
-    }
+    await setDoc(ticketRef, newTicketData);
 };
 
 export const getSupportTickets = async (statusFilter?: SupportTicketData['status']): Promise<(SupportTicketData & {id: string})[]> => {
