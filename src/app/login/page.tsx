@@ -4,6 +4,7 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/context/AuthContext';
@@ -231,6 +232,15 @@ function LoginComponent() {
               </div>
             </form>
           </Form>
+
+          {!isSpinning && isLoginMode && (
+            <div className="text-center mt-4">
+              <Link href="/forgot-password" className="text-sm font-medium text-white hover:underline">
+                Forgot Password?
+              </Link>
+            </div>
+          )}
+
         </div>
       </div>
     </div>

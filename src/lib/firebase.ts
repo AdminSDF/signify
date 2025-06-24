@@ -8,7 +8,8 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
   signOut as firebaseSignOut,
-  type User as FirebaseUser
+  type User as FirebaseUser,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -816,7 +817,6 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
 
 export {
   app, auth, db, storage, doc, getDoc, updateDoc, googleProvider, signInWithPopup, firebaseSignOut,
-  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
   Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion
 };
-
