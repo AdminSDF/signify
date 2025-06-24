@@ -44,10 +44,13 @@ const upiApps = [
     name: 'PhonePe',
     scheme: 'phonepe://pay',
     logo: (
-      <svg className="w-12 h-12" viewBox="0 0 60 60">
-        <rect width="60" height="60" rx="12" fill="#5f259f"></rect>
-        <path fill="#fff" d="M36.14 28.52h-2.73l-.48-2.11h-3.87l-.48 2.1h-2.74l3.92-10.26h2.43l3.95 10.25zm-4.65-3.82l-1.22-5.32-1.22 5.32h2.44z"></path>
-      </svg>
+      <Image
+        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgpwAHxVuKqwIJ1RjMgmxvvzdVqUenACJrhFECisn98PSfeiLFoxMylcCvXcmxbGsP7yYpUZ68scqXlnes8zKoPE3YguFm43k8Ba2gikGznbCchM4eRZAm-8OKQ-8PGEl0pRn7RNtTUhGg9-_TAIrsZTV3PTqCWgJxCx4Sdg5DUq35gxHOP5mTdE4rWcIUN/s400/20250623_144841.png"
+        alt="PhonePe Logo"
+        width={48}
+        height={48}
+        className="w-12 h-12 rounded-lg"
+      />
     ),
   },
   {
@@ -93,13 +96,10 @@ const upiApps = [
     name: "Other Apps",
     scheme: "upi://pay",
     logo: (
-      <Image
-        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgpwAHxVuKqwIJ1RjMgmxvvzdVqUenACJrhFECisn98PSfeiLFoxMylcCvXcmxbGsP7yYpUZ68scqXlnes8zKoPE3YguFm43k8Ba2gikGznbCchM4eRZAm-8OKQ-8PGEl0pRn7RNtTUhGg9-_TAIrsZTV3PTqCWgJxCx4Sdg5DUq35gxHOP5mTdE4rWcIUN/s400/20250623_144841.png"
-        alt="Other UPI Apps Logo"
-        width={48}
-        height={48}
-        className="w-12 h-12 rounded-lg"
-      />
+      <svg className="w-12 h-12" viewBox="0 0 60 60">
+        <rect width="60" height="60" rx="12" fill="#fff" stroke="#e0e0e0" strokeWidth="1"></rect>
+        <text x="30" y="37" fontFamily="sans-serif" fontSize="18" fill="#5f6368" textAnchor="middle" fontWeight="bold">UPI</text>
+      </svg>
     ),
   },
 ];
