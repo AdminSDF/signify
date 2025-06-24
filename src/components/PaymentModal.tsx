@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import Image from 'next/image';
 import {
   Dialog,
   DialogContent,
@@ -54,11 +55,13 @@ const upiApps = [
     name: 'Paytm',
     scheme: 'paytmmp://upi/pay',
     logo: (
-      <svg className="w-12 h-12" viewBox="0 0 60 60">
-         <rect width="60" height="60" rx="12" fill="#00baf2"></rect>
-         <path fill="#fff" d="M22.14 28.9h2.3v-9.7h3.8v-2.2h-9.9v2.2h3.8v9.7zM30.64 28.9h2.4l3.6-7.9h.1v7.9h2.2v-11.9h-2.5l-3.5 7.7h-.1v-7.7h-2.2v11.9z"></path>
-         <path fill="#0d2e69" d="M42.14 24.3c0-2-1.4-3.4-3.5-3.4s-3.5 1.4-3.5 3.4c0 2 1.4 3.4 3.5 3.4s3.5-1.4 3.5-3.4zm-4.8 0c0-.9.7-1.6 1.3-1.6s1.3.7 1.3 1.6c0 .9-.7 1.6-1.3 1.6s-1.3-.7-1.3-1.6z"></path>
-      </svg>
+      <Image
+        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEi5p1fz2AkgiC0Ynf9yfNXRrDv_4eGUpZaJGsyUvrmRXwBPApxasiKbLTmtPvgg7IZvwFZeKg0Q08LoJnkqOfyCCHhGD74iBTqAgJN-tUl2JT3Z3lvqK9sUIWMUbRU0CVJGwDKEt00GBqklWXpVK0q-pmtSmVLQKgfCttSWbfUEsxljsu2vppBkR8bBvzlF/s1600/20250623_144523.png"
+        alt="Paytm Logo"
+        width={48}
+        height={48}
+        className="w-12 h-12 rounded-lg"
+      />
     ),
   },
   {
