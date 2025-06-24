@@ -241,7 +241,7 @@ export default function GamePage() {
       await addTransactionToFirestore({
         userEmail: user.email,
         type: details.amount >= 0 ? 'credit' : 'debit',
-        amount: details.amount,
+        amount: Math.abs(details.amount),
         description: details.description,
         status: 'completed',
         tierId: tier,
@@ -282,11 +282,7 @@ export default function GamePage() {
     }
     
     if (wheelConfig.isLocked) {
-      toast({
-        title: "Arena Locked",
-        description: "This arena is temporarily closed for playing.",
-        variant: "destructive"
-      });
+      toast({ title: "Arena Locked", description: "This arena is temporarily closed for playing.", variant: "destructive" });
       return;
     }
 
@@ -304,21 +300,25 @@ export default function GamePage() {
     if (tier === 'little' && spinsAvailable > 0) {
       isFreeSpin = true;
     } else {
-        if (tier === 'little') {
-            let currentDailySpins = dailyPaidSpinsUsed;
-            const todayString = new Date().toLocaleDateString('en-CA');
-            if (lastPaidSpinDate !== todayString) {
-                currentDailySpins = 0;
-            }
-            spinCost = getLittleTierSpinCost(currentDailySpins);
-        } else {
-            spinCost = wheelConfig.costSettings.baseCost || 0;
-        }
+        spinCost = (tier === 'little') ? getLittleTierSpinCost(dailyPaidSpinsUsed) : (wheelConfig.costSettings.baseCost || 0);
 
         if (userBalance < spinCost) {
             setPaymentModalAmount(spinCost > appSettings.minAddBalanceAmount ? spinCost : appSettings.minAddBalanceAmount);
             setShowPaymentModal(true);
             return;
+        }
+    }
+    
+    // --- IMMEDIATE DEDUCTION FROM UI STATE ---
+    if (isFreeSpin) {
+        setSpinsAvailable(prev => prev - 1);
+    } else {
+        setUserBalance(prev => prev - spinCost);
+        if (tier === 'little') {
+            const todayStr = new Date().toLocaleDateString('en-CA');
+            const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
+            setDailyPaidSpinsUsed(newDailySpinsUsed);
+            setLastPaidSpinDate(todayStr);
         }
     }
     
@@ -338,7 +338,7 @@ export default function GamePage() {
         return;
     }
     
-    // Store the result and cost. NO state updates here.
+    // Store the result and cost. The cost is now for logging purposes.
     pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost };
     
     // Start the animation.
@@ -359,54 +359,46 @@ export default function GamePage() {
     }
     
     const { prize, cost } = result;
-    const isFreeSpin = cost === 0;
     const winAmount = prize.amount ?? 0;
     
-    const netChange = winAmount - cost;
-    const balanceBefore = userBalance;
-    const balanceAfter = balanceBefore + netChange;
-    const spinsBefore = spinsAvailable;
-    const spinsAfter = isFreeSpin ? spinsBefore - 1 : spinsBefore;
+    // The current `userBalance` state already reflects the cost deduction.
+    const balanceAfterDeduction = userBalance;
+    const finalBalance = balanceAfterDeduction + winAmount;
+
+    // For logging, we need the balance before any action in this spin.
+    const balanceBeforeSpin = balanceAfterDeduction + cost;
 
     try {
         const updates: { [key: string]: any } = {
-            [`balances.${tier}`]: balanceAfter,
+            [`balances.${tier}`]: finalBalance,
             totalSpinsPlayed: (userData.totalSpinsPlayed ?? 0) + 1,
             totalWinnings: (userData.totalWinnings ?? 0) + winAmount,
             lastActive: Timestamp.now(),
         };
 
-        if (isFreeSpin) {
-          updates.spinsAvailable = spinsAfter;
+        if (cost === 0) { // It was a free spin
+          updates.spinsAvailable = spinsAvailable; // `spinsAvailable` state was already updated
         }
 
-        if (!isFreeSpin && tier === 'little') {
-            const todayStr = new Date().toLocaleDateString('en-CA');
-            const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
-            updates.dailyPaidSpinsUsed = newDailySpinsUsed;
-            updates.lastPaidSpinDate = todayStr;
+        if (cost > 0 && tier === 'little') { // It was a paid 'little' spin
+            updates.dailyPaidSpinsUsed = dailyPaidSpinsUsed; // `dailyPaidSpinsUsed` state was already updated
+            updates.lastPaidSpinDate = lastPaidSpinDate; // `lastPaidSpinDate` state was already updated
         }
         
+        // Single write to Firestore with all consolidated changes.
         await updateUserData(user.uid, updates);
 
         await addTransaction({
-            amount: netChange,
+            amount: winAmount - cost, // Net change
             description: `Spin: Bet ₹${cost.toFixed(2)}, Won ₹${winAmount.toFixed(2)}`,
             spinDetails: { betAmount: cost, winAmount },
-            balanceBefore,
-            balanceAfter,
+            balanceBefore: balanceBeforeSpin,
+            balanceAfter: finalBalance,
         });
         
-        setUserBalance(balanceAfter);
-        if(isFreeSpin) {
-          setSpinsAvailable(spinsAfter);
-        }
-        if (!isFreeSpin && tier === 'little') {
-           const todayStr = new Date().toLocaleDateString('en-CA');
-           const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
-           setDailyPaidSpinsUsed(newDailySpinsUsed);
-           setLastPaidSpinDate(todayStr);
-        }
+        // Sync UI state with final DB value
+        setUserBalance(finalBalance);
+        
         setCurrentPrize(prize);
         
         if (winAmount > 0) {
@@ -580,3 +572,5 @@ export default function GamePage() {
     </>
   );
 }
+
+    
