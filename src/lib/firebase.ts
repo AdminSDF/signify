@@ -30,6 +30,7 @@ import {
   onSnapshot, // Export onSnapshot
   FieldValue,
   increment,
+  arrayUnion,
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
@@ -98,6 +99,10 @@ export interface UserDocument {
     gamePage?: boolean;
     profilePage?: boolean;
   };
+  referralCode?: string;
+  referredBy?: string;
+  referrals?: string[];
+  referralEarnings?: number;
 }
 
 export const createUserData = async (
@@ -105,23 +110,29 @@ export const createUserData = async (
   email: string | null,
   displayName: string | null,
   photoURL: string | null,
-  initialAppSettings: AppSettings
+  initialAppSettings: AppSettings,
+  referredBy?: string | null
 ): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
 
   // Initialize balances for all tiers
   const initialBalances: { [tierId: string]: number } = {};
+  let baseInitialBalance = initialAppSettings.initialBalanceForNewUsers;
+  
+  // Add referral bonus to the initial balance if referred
+  if (referredBy) {
+    baseInitialBalance += initialAppSettings.referralBonusForNewUser;
+  }
+
   Object.keys(initialAppSettings.wheelConfigs).forEach(tierId => {
-    // Give initial balance only to the 'little' tier, others start at 0.
-    initialBalances[tierId] = tierId === 'little' ? initialAppSettings.initialBalanceForNewUsers : 0;
+    initialBalances[tierId] = tierId === 'little' ? baseInitialBalance : 0;
   });
 
-  // Check against a comma-separated list of admin emails, case-insensitively.
   const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL)
     .toLowerCase()
     .split(',')
     .map(e => e.trim())
-    .filter(e => e); // Remove any empty strings from trailing commas
+    .filter(e => e);
 
   const userEmail = email ? email.toLowerCase().trim() : '';
 
@@ -134,9 +145,9 @@ export const createUserData = async (
     balances: initialBalances,
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
-    lastPaidSpinDate: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format
+    lastPaidSpinDate: new Date().toLocaleDateString('en-CA'),
     isAdmin: adminEmails.includes(userEmail),
-    isBlocked: false, // Default to not blocked
+    isBlocked: false,
     lastActive: Timestamp.now(),
     totalWinnings: 0,
     totalSpinsPlayed: 0,
@@ -147,6 +158,10 @@ export const createUserData = async (
       gamePage: false,
       profilePage: false,
     },
+    referralCode: userId, // Use UID as the referral code
+    referrals: [],
+    referralEarnings: 0,
+    ...(referredBy && { referredBy }), // Conditionally add referredBy field
   };
   await setDoc(userRef, userData);
 };
@@ -156,10 +171,9 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
   const docSnap = await getDoc(userRef);
   if (docSnap.exists()) {
     const data = docSnap.data() as UserDocument;
-    // Ensure balances object exists for older users
     if (!data.balances) {
       data.balances = {
-        little: (data as any).balance || 0, // migrate old balance field
+        little: (data as any).balance || 0,
         big: 0,
         'more-big': 0,
       }
@@ -450,6 +464,8 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   if (!userSnap.exists()) throw new Error("User not found for balance update.");
   const userData = userSnap.data() as UserDocument;
   
+  const isFirstDeposit = (userData.totalDeposited || 0) === 0;
+
   const userBalances = userData.balances || {};
   const currentBalance = userBalances[effectiveTierId] || 0;
   const newBalance = currentBalance + amount;
@@ -461,6 +477,38 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   });
   
   batch.update(globalStatsRef, { totalDeposited: increment(amount) });
+  
+  // Referral logic: If it's the first deposit and the user was referred, reward the referrer.
+  if (isFirstDeposit && userData.referredBy) {
+    const referrerRef = doc(db, USERS_COLLECTION, userData.referredBy);
+    const referrerSnap = await getDoc(referrerRef);
+    if (referrerSnap.exists()) {
+        const bonus = appConfig.settings.referralBonusForReferrer;
+        const referrerData = referrerSnap.data() as UserDocument;
+        const referrerLittleTierBalance = referrerData.balances?.little || 0;
+
+        batch.update(referrerRef, {
+            'balances.little': referrerLittleTierBalance + bonus,
+            referralEarnings: increment(bonus)
+        });
+
+        // Add a transaction for the referrer's bonus
+        const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+        const referrerTransactionPayload: TransactionData = {
+            userId: userData.referredBy,
+            userEmail: referrerData.email,
+            type: 'credit',
+            amount: bonus,
+            description: `Referral bonus from ${userData.displayName}`,
+            status: 'completed',
+            date: Timestamp.now(),
+            tierId: 'little',
+            balanceBefore: referrerLittleTierBalance,
+            balanceAfter: referrerLittleTierBalance + bonus
+        };
+        batch.set(referrerTransactionDocRef, referrerTransactionPayload);
+    }
+  }
 
   const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
   const transactionDocRef = doc(transactionCollRef); 
@@ -760,7 +808,8 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
 
 
 export {
-  app, auth, db, storage, doc, getDoc, googleProvider, signInWithPopup, firebaseSignOut,
+  app, auth, db, storage, doc, getDoc, updateDoc, googleProvider, signInWithPopup, firebaseSignOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
-  Timestamp, FirebaseUser, onSnapshot, FieldValue
+  Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion
 };
+

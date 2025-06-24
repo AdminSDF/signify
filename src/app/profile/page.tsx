@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ import {
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
+import { copyToClipboard } from '@/lib/utils';
 
 type PaymentMethod = "upi" | "bank";
 
@@ -58,6 +59,14 @@ export default function ProfilePage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
+  
+  const [referralLink, setReferralLink] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && userData?.referralCode) {
+      setReferralLink(`${window.location.origin}/login?ref=${userData.referralCode}`);
+    }
+  }, [userData?.referralCode]);
 
   const activeWheelConfig = appSettings.wheelConfigs[activeTier];
 
@@ -86,6 +95,10 @@ export default function ProfilePage() {
     {
       element: '[data-tour-id="balance-display"]',
       intro: 'This card shows your current balance for the selected wallet.',
+    },
+    {
+      element: '[data-tour-id="referral-system"]',
+      intro: 'Share your referral code with friends! You get a bonus when they make their first deposit, and they get a bonus for signing up!',
     },
     {
       element: '[data-tour-id="add-balance-section"]',
@@ -247,6 +260,15 @@ export default function ProfilePage() {
     }
   };
 
+  const handleCopy = async (textToCopy: string, type: 'Code' | 'Link') => {
+    try {
+      await copyToClipboard(textToCopy);
+      toast({ title: `${type} Copied!`, description: `Your Referral ${type} is copied to the clipboard.` });
+    } catch (err) {
+      toast({ title: `Copy Failed`, description: `Could not copy the ${type}.`, variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
@@ -378,6 +400,37 @@ export default function ProfilePage() {
                   ))}
                 </Tabs>
               </div>
+
+              <Card data-tour-id="referral-system" className="p-4 pt-2 bg-card shadow-md">
+                <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><UsersIcon className="mr-2 h-6 w-6"/>Referral System</CardTitle></CardHeader>
+                <CardContent className="space-y-4 p-2">
+                  <div>
+                    <Label htmlFor="referralCode">Your Referral Code</Label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input id="referralCode" type="text" readOnly value={userData.referralCode || 'N/A'} className="bg-muted"/>
+                      <Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode || '', 'Code')}><Copy className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="referralLink">Your Referral Link</Label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input id="referralLink" type="text" readOnly value={referralLink} className="bg-muted"/>
+                      <Button variant="outline" size="icon" onClick={() => handleCopy(referralLink, 'Link')}><Share2 className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-center pt-2">
+                      <div>
+                          <p className="text-sm text-muted-foreground">Successful Referrals</p>
+                          <p className="text-2xl font-bold text-primary">{userData.referrals?.length || 0}</p>
+                      </div>
+                      <div>
+                          <p className="text-sm text-muted-foreground">Total Earnings</p>
+                          <p className="text-2xl font-bold text-primary">₹{(userData.referralEarnings || 0).toFixed(2)}</p>
+                      </div>
+                  </div>
+                   <CardDescription className="text-xs text-center">New users get ₹{appSettings.referralBonusForNewUser} bonus. You get ₹{appSettings.referralBonusForReferrer} on their first deposit!</CardDescription>
+                </CardContent>
+              </Card>
 
               <Card className="p-4 pt-2 bg-card shadow-md">
                   <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline">Withdrawal Details</CardTitle></CardHeader>

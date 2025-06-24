@@ -675,11 +675,16 @@ export default function AdminPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                   <Table><TableHeader><TableRow><TableHead>User</TableHead>
-                   {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
-                   <TableHead>Spins</TableHead><TableHead>Winnings (₹)</TableHead><TableHead>Deposited (₹)</TableHead><TableHead>Withdrawn (₹)</TableHead><TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                   <Table>
+                    <TableHeader><TableRow>
+                      <TableHead>User</TableHead>
+                      {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
+                      <TableHead>Spins</TableHead><TableHead>Winnings (₹)</TableHead><TableHead>Deposited (₹)</TableHead><TableHead>Withdrawn (₹)</TableHead>
+                      <TableHead>Referred By</TableHead><TableHead># Refs</TableHead>
+                      <TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead>
+                    </TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={9 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
+                      {isLoadingData ? <TableRow><TableCell colSpan={11 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
                       : allUsers.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
@@ -690,6 +695,8 @@ export default function AdminPage() {
                           <TableCell>{(u.totalWinnings || 0).toFixed(2)}</TableCell>
                           <TableCell>{(u.totalDeposited || 0).toFixed(2)}</TableCell>
                           <TableCell>{(u.totalWithdrawn || 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-xs">{u.referredBy ? u.referredBy.substring(0, 6) + '...' : 'N/A'}</TableCell>
+                          <TableCell>{u.referrals?.length || 0}</TableCell>
                           <TableCell>{formatDisplayDate(u.createdAt)}</TableCell>
                           <TableCell>{formatDisplayDate(u.lastActive)}</TableCell>
                           <TableCell>
@@ -709,7 +716,7 @@ export default function AdminPage() {
                             </div>
                           </TableCell>
                         </TableRow>))}
-                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={9 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
+                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={11 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
             
@@ -894,6 +901,8 @@ export default function AdminPage() {
                     <div className="space-y-1"><Label>Min Add Balance Amount (₹)</Label><Input type="number" name="minAddBalanceAmount" value={currentAppSettings.minAddBalanceAmount} onChange={handleSettingsChange} /></div>
                     <div className="space-y-1"><Label>Add Balance Presets</Label><Input value={addBalancePresetsInput} onChange={handleAddBalancePresetsChange} placeholder="e.g. 100, 200, 500" /><CardDescription className="text-xs">Comma-separated numbers</CardDescription></div>
                     <div className="space-y-1"><Label>News Ticker Speed (seconds)</Label><Input type="number" name="newsTickerSpeed" value={currentAppSettings.newsTickerSpeed} onChange={handleSettingsChange} /></div>
+                    <div className="space-y-1"><Label>Referral Bonus for New User (₹)</Label><Input type="number" name="referralBonusForNewUser" value={currentAppSettings.referralBonusForNewUser} onChange={handleSettingsChange} /></div>
+                    <div className="space-y-1"><Label>Referral Bonus for Referrer (₹)</Label><Input type="number" name="referralBonusForReferrer" value={currentAppSettings.referralBonusForReferrer} onChange={handleSettingsChange} /></div>
                 </CardContent>
               </Card>
             </TabsContent>

@@ -108,6 +108,8 @@ export interface AppSettings {
   minAddBalanceAmount: number;
   addBalancePresets: number[];
   newsTickerSpeed: number;
+  referralBonusForNewUser: number; // Bonus for the person who signs up
+  referralBonusForReferrer: number; // Bonus for the referrer on referee's first deposit
   wheelConfigs: { [key: string]: WheelTierConfig };
 }
 
@@ -121,6 +123,8 @@ export const initialSettings: AppSettings = {
   minAddBalanceAmount: 100,
   addBalancePresets: [100, 200, 500, 1000],
   newsTickerSpeed: 60,
+  referralBonusForNewUser: 10,
+  referralBonusForReferrer: 25,
   wheelConfigs: initialWheelConfigs, // Nesting the wheel configs here
 };
 

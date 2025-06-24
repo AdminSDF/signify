@@ -1,8 +1,8 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,11 +15,19 @@ import { cn } from '@/lib/utils';
 
 type FormData = LoginCredentials | SignUpCredentials;
 
-export default function LoginPage() {
+function LoginComponent() {
   const { user, loginWithEmailPassword, signUpWithEmailPassword, loading, appSettings } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [isSpinning, setIsSpinning] = useState(false); // State to control animation
+  const [isSpinning, setIsSpinning] = useState(false);
+
+  useEffect(() => {
+    const refCode = searchParams.get('ref');
+    if (refCode) {
+      sessionStorage.setItem('referralCode', refCode);
+    }
+  }, [searchParams]);
 
   const currentValidator = isLoginMode ? LoginCredentialsValidator : SignUpCredentialsValidator;
 
@@ -37,7 +45,7 @@ export default function LoginPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (!isSpinning) { // Only reset form when not spinning to prevent flash of empty fields
+    if (!isSpinning) {
       form.reset(
         isLoginMode
           ? { email: '', password: '' }
@@ -102,14 +110,13 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen p-4">
       <div
         className={cn(
-          "relative w-[450px] h-[450px] rounded-full overflow-hidden flex items-center justify-center border-8 border-gray-400/30",
+          "relative w-[450px] h-[450px] rounded-full overflow-hidden flex items-center justify-center border-gray-400/30",
           isSpinning && "animate-spin-once"
         )}
         style={wheelStyle}
       >
         <div className="absolute w-full h-full bg-black/30 rounded-full backdrop-blur-sm"></div>
 
-        {/* Centerpiece with Logo */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full border-4 border-gray-500 z-20 overflow-hidden bg-background">
           {appSettings.logoUrl && (
             <Image
@@ -126,7 +133,6 @@ export default function LoginPage() {
         <div className="relative z-10 w-full flex flex-col items-center justify-center p-8">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="w-64 space-y-3">
-              {/* Hide form fields during spin for a cleaner animation */}
               {!isSpinning ? (
                 <>
                   {!isLoginMode && (
@@ -202,13 +208,12 @@ export default function LoginPage() {
                   )}
                 </>
               ) : (
-                // Placeholder to maintain layout during spin
                 <div className="h-[180px] w-full"></div>
               )}
               
               <div className="pt-8 space-y-3">
                 <Button
-                  type="submit"
+                  type="button"
                   onClick={isLoginMode ? form.handleSubmit(onSubmit) : handleSwitchToLogin}
                   disabled={loading || isSpinning}
                   className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
@@ -216,7 +221,7 @@ export default function LoginPage() {
                   Login
                 </Button>
                 <Button
-                   type="submit"
+                   type="button"
                    onClick={!isLoginMode ? form.handleSubmit(onSubmit) : handleSwitchToSignUp}
                    disabled={loading || isSpinning}
                    className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
@@ -230,4 +235,13 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LoginComponent />
+    </Suspense>
+  )
 }

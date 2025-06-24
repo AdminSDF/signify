@@ -22,6 +22,8 @@ import {
   getUserData,
   onSnapshot, // Import onSnapshot for real-time listening
   logUserActivity, // Import activity logger
+  arrayUnion,
+  updateDoc
 } from '@/lib/firebase';
 import { useToast } from "@/hooks/use-toast";
 import type { LoginCredentials, SignUpCredentials } from '@/lib/validators/auth';
@@ -160,6 +162,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signUpWithEmailPassword = async ({ email, password, displayName }: SignUpCredentials) => {
     setFbAuthLoading(true);
     let currentAppSettings = appConfig.settings;
+    const referredBy = sessionStorage.getItem('referralCode');
 
     if (fbAppConfigLoading) {
         console.log("App config was loading during signup, attempting to fetch fresh config...");
@@ -193,14 +196,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await updateProfile(userCredential.user, { displayName });
         profileUpdated = true;
         const photoURL = userCredential.user.photoURL || currentAppSettings.logoUrl || DEFAULT_LOGO_URL;
+        
         await createFirestoreUser(
           userCredential.user.uid,
           userCredential.user.email,
           displayName,
           photoURL,
-          currentAppSettings 
+          currentAppSettings,
+          referredBy // Pass referral code to create user function
         );
-        // Log login activity after successful signup and data creation
+
+        // If the user was referred, update the referrer's document
+        if (referredBy) {
+          try {
+            const referrerRef = doc(db, 'users', referredBy);
+            await updateDoc(referrerRef, {
+              referrals: arrayUnion(userCredential.user.uid)
+            });
+          } catch (refError) {
+            console.error("Failed to update referrer's document:", refError);
+          } finally {
+            sessionStorage.removeItem('referralCode'); // Clear code after use
+          }
+        }
+        
         await logUserActivity(userCredential.user.uid, userCredential.user.email, 'login');
         toast({ title: "Sign Up Successful", description: "Welcome! You are now logged in." });
         router.push('/');
