@@ -33,13 +33,14 @@ const upiApps = [
     name: 'Google Pay',
     scheme: 'gpay://upi/pay',
     logo: (
-      <Image
-        src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgpwAHxVuKqwIJ1RjMgmxvvzdVqUenACJrhFECisn98PSfeiLFoxMylcCvXcmxbGsP7yYpUZ68scqXlnes8zKoPE3YguFm43k8Ba2gikGznbCchM4eRZAm-8OKQ-8PGEl0pRn7RNtTUhGg9-_TAIrsZTV3PTqCWgJxCx4Sdg5DUq35gxHOP5mTdE4rWcIUN/s400/20250623_144841.png"
-        alt="Google Pay Logo"
-        width={48}
-        height={48}
-        className="w-12 h-12 rounded-lg"
-      />
+       <svg className="w-12 h-12" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#4285f4" d="M312.982 225.428h138.032v61.188H312.982z"/>
+        <path fill="#34a853" d="M312.982 318.918h138.032v61.188H312.982z"/>
+        <path d="m201.378 193.128 66.388 66.388-66.388 66.388-23.013-23.013c-25.202-25.202-25.202-66.097 0-91.299l23.013-18.464z" fill="#fbbc05"/>
+        <path d="m201.378 193.128-66.388-66.388 23.013-23.013c25.202-25.202 66.097-25.202 91.3 0l18.463 18.464-66.388 70.937z" fill="#ea4335"/>
+        <path fill="#ea4335" d="M60.986 225.428h138.032v61.188H60.986z"/>
+        <path d="M60.986 225.428c0-50.373 40.815-91.188 91.188-91.188h2.36v152.376h-2.36c-50.373 0-91.188-40.815-91.188-91.188z" fill="#4285f4"/>
+      </svg>
     ),
   },
   {
