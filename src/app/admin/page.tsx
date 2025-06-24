@@ -414,6 +414,10 @@ export default function AdminPage() {
     }
   };
 
+  const handleHardRefresh = () => {
+    window.location.reload();
+  };
+
   const handleAddNewsItem = () => {
     if (newNewsItem.trim() === '') return;
     setCurrentNewsItems(prev => [...prev, newNewsItem.trim()]);
@@ -535,6 +539,7 @@ export default function AdminPage() {
            <div className="flex gap-4 mt-4">
              <Link href="/" passHref><Button variant="outline"><Home className="mr-2 h-4 w-4" />Back to App</Button></Link>
              <Button onClick={handleSaveConfiguration} size="lg"><Save className="mr-2 h-4 w-4" />Save All Changes</Button>
+             <Button onClick={handleHardRefresh} variant="outline" size="lg"><RefreshCcw className="mr-2 h-4 w-4" />Hard Refresh</Button>
            </div>
         </CardHeader>
         <CardContent className="p-6">
