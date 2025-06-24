@@ -771,85 +771,105 @@ export default function AdminPage() {
               </Card>
             </TabsContent>
 
-             <TabsContent value="wheel-settings">
-                 <Card className="bg-muted/20">
-                     <CardHeader><CardTitle className="flex items-center gap-2"><Wand2 /> Wheel &amp; Segment Settings</CardTitle><CardDescription>Control prizes, costs, and visual appearance for each wheel.</CardDescription></CardHeader>
-                     <CardContent>
-                         <Accordion type="single" collapsible className="w-full" defaultValue="item-little">
-                             {Object.values(currentAppSettings.wheelConfigs).map((tier) => (
-                                 <AccordionItem value={`item-${tier.id}`} key={tier.id}>
-                                     <AccordionTrigger className="text-xl font-semibold">{tier.name}</AccordionTrigger>
-                                     <AccordionContent className="space-y-6 p-4">
-                                        <div className="border p-4 rounded-md space-y-4">
-                                            <h3 className="font-semibold text-lg">Arena Settings</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div><Label>Name</Label><Input value={tier.name} onChange={(e) => handleWheelConfigChange(tier.id, 'name', e.target.value)} /></div>
-                                                <div><Label>Description</Label><Input value={tier.description} onChange={(e) => handleWheelConfigChange(tier.id, 'description', e.target.value)} /></div>
-                                                <div><Label>Min Withdrawal (₹)</Label><Input type="number" value={tier.minWithdrawalAmount} onChange={(e) => handleWheelConfigChange(tier.id, 'minWithdrawalAmount', e.target.value)} /></div>
-                                            </div>
-                                            <div className="flex items-center space-x-2 pt-2">
-                                                <Switch id={`lock-switch-${tier.id}`} checked={tier.isLocked} onCheckedChange={(checked) => handleToggleLock(tier.id, checked)} />
-                                                <Label htmlFor={`lock-switch-${tier.id}`} className="text-destructive font-semibold">Lock this game arena</Label>
-                                            </div>
-                                        </div>
+            <TabsContent value="wheel-settings">
+              <Card className="bg-muted/20">
+                <CardHeader><CardTitle className="flex items-center gap-2"><Wand2 /> Wheel &amp; Segment Settings</CardTitle><CardDescription>Control prizes, costs, and visual appearance for each wheel.</CardDescription></CardHeader>
+                <CardContent>
+                    <Accordion type="single" collapsible className="w-full" defaultValue="item-little">
+                        {Object.values(currentAppSettings.wheelConfigs).map((tier) => {
+                          const totalProbability = tier.segments.reduce((sum, seg) => sum + (seg.probability || 0), 0);
+                          return (
+                            <AccordionItem value={`item-${tier.id}`} key={tier.id}>
+                                <AccordionTrigger className="text-xl font-semibold">{tier.name}</AccordionTrigger>
+                                <AccordionContent className="space-y-6 p-4">
+                                  <div className="border p-4 rounded-md space-y-4">
+                                      <h3 className="font-semibold text-lg">Arena Settings</h3>
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                          <div><Label>Name</Label><Input value={tier.name} onChange={(e) => handleWheelConfigChange(tier.id, 'name', e.target.value)} /></div>
+                                          <div><Label>Description</Label><Input value={tier.description} onChange={(e) => handleWheelConfigChange(tier.id, 'description', e.target.value)} /></div>
+                                          <div><Label>Min Withdrawal (₹)</Label><Input type="number" value={tier.minWithdrawalAmount} onChange={(e) => handleWheelConfigChange(tier.id, 'minWithdrawalAmount', e.target.value)} /></div>
+                                      </div>
+                                      <div className="flex items-center space-x-2 pt-2">
+                                          <Switch id={`lock-switch-${tier.id}`} checked={tier.isLocked} onCheckedChange={(checked) => handleToggleLock(tier.id, checked)} />
+                                          <Label htmlFor={`lock-switch-${tier.id}`} className="text-destructive font-semibold">Lock this game arena</Label>
+                                      </div>
+                                  </div>
 
-                                        <div className="border p-4 rounded-md space-y-4">
-                                            <h3 className="font-semibold text-lg">Spin Cost Settings</h3>
-                                            {tier.costSettings.type === 'fixed' ? (
-                                                  <div className="md:col-span-3"><Label>Spin Cost (₹)</Label><Input type="number" value={tier.costSettings.baseCost} onChange={(e) => handleCostSettingChange(tier.id, 'baseCost', e.target.value)} /></div>
-                                              ) : (
-                                                  <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-5 gap-2">
-                                                      <div><Label>Tier 1 Limit</Label><Input type="number" value={tier.costSettings.tier1Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Limit', e.target.value)} /></div>
-                                                      <div><Label>Tier 1 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier1Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Cost', e.target.value)} /></div>
-                                                      <div><Label>Tier 2 Limit</Label><Input type="number" value={tier.costSettings.tier2Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Limit', e.target.value)} /></div>
-                                                      <div><Label>Tier 2 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier2Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Cost', e.target.value)} /></div>
-                                                      <div><Label>Tier 3 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier3Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier3Cost', e.target.value)} /></div>
-                                                  </div>
-                                              )}
-                                        </div>
+                                  <div className="border p-4 rounded-md space-y-4">
+                                      <h3 className="font-semibold text-lg">Spin Cost Settings</h3>
+                                      {tier.costSettings.type === 'fixed' ? (
+                                            <div className="md:col-span-3"><Label>Spin Cost (₹)</Label><Input type="number" value={tier.costSettings.baseCost} onChange={(e) => handleCostSettingChange(tier.id, 'baseCost', e.target.value)} /></div>
+                                        ) : (
+                                            <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-5 gap-2">
+                                                <div><Label>Tier 1 Limit</Label><Input type="number" value={tier.costSettings.tier1Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Limit', e.target.value)} /></div>
+                                                <div><Label>Tier 1 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier1Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier1Cost', e.target.value)} /></div>
+                                                <div><Label>Tier 2 Limit</Label><Input type="number" value={tier.costSettings.tier2Limit} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Limit', e.target.value)} /></div>
+                                                <div><Label>Tier 2 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier2Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier2Cost', e.target.value)} /></div>
+                                                <div><Label>Tier 3 Cost (₹)</Label><Input type="number" value={tier.costSettings.tier3Cost} onChange={(e) => handleCostSettingChange(tier.id, 'tier3Cost', e.target.value)} /></div>
+                                            </div>
+                                        )}
+                                  </div>
 
-                                         <h4 className="font-semibold text-lg border-b pb-2">Segments (Prizes &amp; Probabilities)</h4>
-                                         <Table>
-                                            <TableHeader><TableRow>
-                                                <TableHead className="w-20 text-center">#</TableHead>
-                                                <TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Probability (%)</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Actions</TableHead>
-                                            </TableRow></TableHeader>
-                                            <TableBody onDragOver={handleDragOver}>
-                                                {tier.segments.map((seg, index) => (
-                                                    <TableRow 
-                                                        key={seg.id}
-                                                        draggable
-                                                        onDragStart={() => handleDragStart(tier.id, index)}
-                                                        onDrop={() => handleDrop(tier.id, index)}
-                                                        onDragEnd={handleDragEnd}
-                                                        className={cn(
-                                                            "cursor-move",
-                                                            draggedSegment?.tierId === tier.id && draggedSegment?.index === index && "opacity-50 bg-primary/20"
-                                                        )}
-                                                    >
-                                                        <TableCell className="text-center font-medium text-muted-foreground">
-                                                            <div className="flex items-center justify-center gap-2">
-                                                                <GripVertical className="h-5 w-5 text-muted-foreground" />
-                                                                {index + 1}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell>
-                                                        <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
-                                                        <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
-                                                        <TableCell><Input type="number" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
-                                                        <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
-                                                        <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                         </Table>
-                                         <Button onClick={() => addSegment(tier.id)} variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Add Segment</Button>
-                                     </AccordionContent>
-                                 </AccordionItem>
-                                ))}
-                         </Accordion>
-                     </CardContent>
-                 </Card>
+                                    <h4 className="font-semibold text-lg border-b pb-2 flex justify-between items-center">
+                                      <span>Segments (Prizes &amp; Probabilities)</span>
+                                      {totalProbability > 0 && (
+                                        <span className="text-sm font-normal text-muted-foreground">
+                                            Total Weight: <span className="font-semibold text-foreground">{totalProbability}</span>
+                                        </span>
+                                      )}
+                                    </h4>
+                                    <Table>
+                                      <TableHeader><TableRow>
+                                          <TableHead className="w-16 text-center">#</TableHead>
+                                          <TableHead>Emoji</TableHead>
+                                          <TableHead>Text</TableHead>
+                                          <TableHead>Amount (₹)</TableHead>
+                                          <TableHead>Probability Weight</TableHead>
+                                          <TableHead className="text-right">Actual Chance</TableHead>
+                                          <TableHead>Color (HSL)</TableHead>
+                                          <TableHead>Actions</TableHead>
+                                      </TableRow></TableHeader>
+                                      <TableBody onDragOver={handleDragOver}>
+                                          {tier.segments.map((seg, index) => {
+                                            const actualChance = totalProbability > 0 ? ((seg.probability / totalProbability) * 100) : 0;
+                                            return (
+                                              <TableRow 
+                                                  key={seg.id}
+                                                  draggable
+                                                  onDragStart={() => handleDragStart(tier.id, index)}
+                                                  onDrop={() => handleDrop(tier.id, index)}
+                                                  onDragEnd={handleDragEnd}
+                                                  className={cn(
+                                                      "cursor-move",
+                                                      draggedSegment?.tierId === tier.id && draggedSegment?.index === index && "opacity-50 bg-primary/20"
+                                                  )}
+                                              >
+                                                  <TableCell className="text-center font-medium text-muted-foreground">
+                                                      <div className="flex items-center justify-center gap-2">
+                                                          <GripVertical className="h-5 w-5 text-muted-foreground" />
+                                                          {index + 1}
+                                                      </div>
+                                                  </TableCell>
+                                                  <TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell>
+                                                  <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
+                                                  <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
+                                                  <TableCell><Input type="number" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
+                                                  <TableCell className="text-right font-mono text-sm text-muted-foreground">{actualChance.toFixed(2)}%</TableCell>
+                                                  <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
+                                                  <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                                              </TableRow>
+                                            )
+                                          })}
+                                      </TableBody>
+                                    </Table>
+                                    <Button onClick={() => addSegment(tier.id)} variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Add Segment</Button>
+                                </AccordionContent>
+                            </AccordionItem>
+                          )
+                      })}
+                    </Accordion>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="game-settings">
