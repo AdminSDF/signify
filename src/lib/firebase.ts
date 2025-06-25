@@ -32,6 +32,7 @@ import {
   FieldValue,
   increment,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
@@ -82,6 +83,7 @@ export interface UserDocument {
   lastPaidSpinDate: string; // YYYY-MM-DD
   totalWinnings: number;
   totalSpinsPlayed: number;
+  totalWins: number; // New field to track wins
   totalDeposited?: number;
   totalWithdrawn?: number;
   isAdmin?: boolean;
@@ -104,6 +106,10 @@ export interface UserDocument {
   referredBy?: string;
   referrals?: string[];
   referralEarnings?: number;
+  // Dynamic Winning Chance Fields
+  tags: string[]; // e.g., ["new", "high-loss", "vip"]
+  manualWinRateOverride?: number | null; // Admin-set override (0 to 1)
+  recentSpinHistory: ('win' | 'loss')[]; // To track last few spins
 }
 
 export const createUserData = async (
@@ -152,6 +158,7 @@ export const createUserData = async (
     lastActive: Timestamp.now(),
     totalWinnings: 0,
     totalSpinsPlayed: 0,
+    totalWins: 0,
     totalDeposited: 0,
     totalWithdrawn: 0,
     toursCompleted: {
@@ -163,6 +170,10 @@ export const createUserData = async (
     referrals: [],
     referralEarnings: 0,
     ...(referredBy && { referredBy }), // Conditionally add referredBy field
+    // Dynamic winning chance fields
+    tags: ['new'], // All new users start with the 'new' tag
+    manualWinRateOverride: null,
+    recentSpinHistory: [],
   };
   await setDoc(userRef, userData);
 };
@@ -819,5 +830,5 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
 export {
   app, auth, db, storage, doc, getDoc, updateDoc, googleProvider, signInWithPopup, firebaseSignOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
-  Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion
+  Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion, arrayRemove
 };

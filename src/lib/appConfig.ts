@@ -116,6 +116,12 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
 
 export const DEFAULT_LOGO_URL = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh-PsVQj50OZx4UwZAuk7W0JDqdVv7XtdPtA6RdvBPdJhIDzCnNnM8sfdKkZD8MTbpZIk3-E4aJA9oehwoZnTEmDhH1c7B89EJINSQngImBFvAUFPTcFAGAj0vXi9UNeBOMDOSJtw4a0GUGMNakf-z7TTS9S-vziyAbW8LpcrcIA9R7SNSj0G3ECbtMlJuT/s1600/file_00000000f80061f882df150eb41a6b72.png";
 
+export interface WinRateRule {
+  id: string; // e.g., 'rule-new-user'
+  tag: string; // e.g., 'new', 'high-loss'
+  rate: number; // 0 to 1
+  priority: number; // lower is higher priority
+}
 
 // General App Settings Interface
 export interface AppSettings {
@@ -130,6 +136,9 @@ export interface AppSettings {
   referralBonusForNewUser: number; // Bonus for the person who signs up
   referralBonusForReferrer: number; // Bonus for the referrer on referee's first deposit
   wheelConfigs: { [key: string]: WheelTierConfig };
+  // Dynamic Winning Chance Settings
+  defaultWinRate: number; // Default chance to win (0 to 1)
+  winRateRules: WinRateRule[];
 }
 
 // Initial structure / fallback for general settings if Firestore is unavailable.
@@ -145,6 +154,11 @@ export const initialSettings: AppSettings = {
   referralBonusForNewUser: 10,
   referralBonusForReferrer: 25,
   wheelConfigs: initialWheelConfigs, // Nesting the wheel configs here
+  defaultWinRate: 0.4, // 40% default win rate
+  winRateRules: [
+    { id: 'rule-new', tag: 'new', rate: 0.6, priority: 1 }, // 60% win rate for new users
+    { id: 'rule-high-loss', tag: 'high-loss', rate: 0.5, priority: 2 }, // 50% for high-loss users
+  ]
 };
 
 // --- Other constants ---

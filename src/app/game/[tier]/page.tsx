@@ -25,38 +25,71 @@ import {
   addTransactionToFirestore,
   Timestamp,
   logUserActivity,
+  arrayRemove
 } from '@/lib/firebase';
 import { Steps } from 'intro.js-react';
+import { UserDocument } from '@/lib/firebase';
+import { AppSettings } from '@/lib/appConfig';
+
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
 
-const getSpinResult = (segments: SegmentConfig[]): { winningSegment: SegmentConfig } => {
-  if (!segments || segments.length === 0) {
-    // This case is handled by the UI, but as a fallback:
-    throw new Error("Cannot determine spin result from an empty segments array.");
+const determineSpinOutcome = (
+  user: UserDocument,
+  appSettings: AppSettings,
+  segments: SegmentConfig[]
+): { winningSegment: SegmentConfig, isWin: boolean } => {
+  
+  // 1. Calculate effective win rate
+  let effectiveWinRate = appSettings.defaultWinRate;
+  
+  // Check for manual override first
+  if (typeof user.manualWinRateOverride === 'number' && user.manualWinRateOverride !== null) {
+      effectiveWinRate = user.manualWinRateOverride;
+  } else {
+      // Check tag-based rules, sorted by priority
+      const sortedRules = [...appSettings.winRateRules].sort((a, b) => a.priority - b.priority);
+      for (const rule of sortedRules) {
+          if ((user.tags || []).includes(rule.tag)) {
+              effectiveWinRate = rule.rate;
+              break; // Stop at the first matching rule with highest priority
+          }
+      }
   }
 
-  const totalProbability = segments.reduce((sum, segment) => sum + (segment.probability || 0), 0);
+  // 2. Decide if it's a win or loss
+  const isWin = Math.random() < effectiveWinRate;
 
-  if (totalProbability <= 0) {
-    console.warn("No probabilities set for any segment. Falling back to equal distribution.");
-    const randomIndex = Math.floor(Math.random() * segments.length);
-    return { winningSegment: segments[randomIndex] };
-  }
+  // 3. Select a segment based on the outcome
+  const winningSegments = segments.filter(s => s.amount > 0);
+  const losingSegments = segments.filter(s => s.amount <= 0);
 
-  let random = Math.random() * totalProbability;
+  let chosenSegment: SegmentConfig;
 
-  for (const segment of segments) {
-    random -= (segment.probability || 0);
-    if (random <= 0) {
-      return { winningSegment: segment };
+  if (isWin) {
+    if (winningSegments.length > 0) {
+      chosenSegment = winningSegments[Math.floor(Math.random() * winningSegments.length)];
+    } else {
+      // Edge case: No winning segments defined, so it's a loss
+      chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
+    }
+  } else {
+    if (losingSegments.length > 0) {
+      chosenSegment = losingSegments[Math.floor(Math.random() * losingSegments.length)];
+    } else {
+      // Edge case: No losing segments defined, so it's a win
+      chosenSegment = winningSegments[Math.floor(Math.random() * winningSegments.length)];
     }
   }
   
-  // Fallback in case of floating point inaccuracies
-  return { winningSegment: segments[segments.length - 1] };
+  if (!chosenSegment) {
+    // Ultimate fallback
+    return { winningSegment: segments[0], isWin: segments[0].amount > 0 };
+  }
+
+  return { winningSegment: chosenSegment, isWin: chosenSegment.amount > 0 };
 };
 
 
@@ -71,7 +104,7 @@ export default function GamePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
   const [currentPrize, setCurrentPrize] = useState<SegmentConfig | null>(null);
-  const pendingPrizeRef = useRef<{ prize: SegmentConfig, cost: number } | null>(null);
+  const pendingPrizeRef = useRef<{ prize: SegmentConfig, cost: number, isWin: boolean } | null>(null);
   const [spinHistory, setSpinHistory] = useState<GenerateTipInput['spinHistory']>([]);
 
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
@@ -324,8 +357,9 @@ export default function GamePage() {
     
     await logUserActivity(user.uid, user.email, 'spin');
     
-    const { winningSegment } = getSpinResult(wheelConfig.segments);
-    
+    // --- NEW DYNAMIC SPIN LOGIC ---
+    const { winningSegment, isWin } = determineSpinOutcome(userData, appSettings, wheelConfig.segments);
+
     if (!winningSegment) {
         toast({ title: "Config Error", description: `Could not determine a spin outcome. The wheel might be misconfigured.`, variant: "destructive" });
         return;
@@ -339,7 +373,7 @@ export default function GamePage() {
     }
     
     // Store the result and cost. The cost is now for logging purposes.
-    pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost };
+    pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost, isWin };
     
     // Start the animation.
     startSpinProcess(winningSegmentIndex);
@@ -358,33 +392,46 @@ export default function GamePage() {
       return;
     }
     
-    const { prize, cost } = result;
+    const { prize, cost, isWin } = result;
     const winAmount = prize.amount ?? 0;
     
-    // The current `userBalance` state already reflects the cost deduction.
-    const balanceAfterDeduction = userBalance;
+    const balanceAfterDeduction = userBalance; // Already reflects cost deduction from UI state
     const finalBalance = balanceAfterDeduction + winAmount;
-
-    // For logging, we need the balance before any action in this spin.
     const balanceBeforeSpin = balanceAfterDeduction + cost;
 
-    try {
-        const updates: { [key: string]: any } = {
-            [`balances.${tier}`]: finalBalance,
-            totalSpinsPlayed: (userData.totalSpinsPlayed ?? 0) + 1,
-            totalWinnings: (userData.totalWinnings ?? 0) + winAmount,
-            lastActive: Timestamp.now(),
-        };
+    // Prepare updates for Firestore
+    const totalSpinsPlayed = (userData.totalSpinsPlayed ?? 0) + 1;
+    const totalWins = (userData.totalWins ?? 0) + (isWin ? 1 : 0);
+    const recentSpinHistory = [...(userData.recentSpinHistory || []), isWin ? 'win' : 'loss'].slice(-20); // Keep last 20
 
-        if (cost === 0) { // It was a free spin
-          updates.spinsAvailable = spinsAvailable; // `spinsAvailable` state was already updated
-        }
+    const updates: { [key: string]: any } = {
+        [`balances.${tier}`]: finalBalance,
+        totalSpinsPlayed,
+        totalWins,
+        recentSpinHistory,
+        totalWinnings: (userData.totalWinnings ?? 0) + winAmount,
+        lastActive: Timestamp.now(),
+    };
 
-        if (cost > 0 && tier === 'little') { // It was a paid 'little' spin
-            updates.dailyPaidSpinsUsed = dailyPaidSpinsUsed; // `dailyPaidSpinsUsed` state was already updated
-            updates.lastPaidSpinDate = lastPaidSpinDate; // `lastPaidSpinDate` state was already updated
-        }
+    // --- AUTOMATION & TAGGING LOGIC ---
+    const userTags = new Set(userData.tags || []);
+    // Remove 'new' tag after 50 spins
+    if (userTags.has('new') && totalSpinsPlayed > 50) {
+        userTags.delete('new');
+        updates.tags = arrayRemove('new');
+    }
+    // You can add more rules here e.g. for 'high-loss' or 'vip' tags based on win ratio or deposit amount
+    
+    if (cost === 0) { // It was a free spin
+        updates.spinsAvailable = spinsAvailable; // `spinsAvailable` state was already updated
+    }
+
+    if (cost > 0 && tier === 'little') { // It was a paid 'little' spin
+        updates.dailyPaidSpinsUsed = dailyPaidSpinsUsed; // state was already updated
+        updates.lastPaidSpinDate = lastPaidSpinDate; // state was already updated
+    }
         
+    try {
         // Single write to Firestore with all consolidated changes.
         await updateUserData(user.uid, updates);
 
@@ -401,7 +448,7 @@ export default function GamePage() {
         
         setCurrentPrize(prize);
         
-        if (winAmount > 0) {
+        if (isWin) {
             toast({ title: "Congratulations!", description: `You won ₹${winAmount.toFixed(2)}.` });
             playSound('win');
             if (winAmount >= 10) { 
@@ -416,7 +463,7 @@ export default function GamePage() {
         const newSpinRecordForAI = { spinNumber: spinHistory.length + 1, reward: prize.amount ? `₹${prize.amount.toFixed(2)}` : prize.text };
         const updatedHistory = [...spinHistory, newSpinRecordForAI];
         setSpinHistory(updatedHistory);
-        fetchAssistantMessage(winAmount > 0 ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
+        fetchAssistantMessage(isWin ? 'win' : 'loss', updatedHistory, newSpinRecordForAI.reward);
 
     } catch (error) {
         console.error("Error during spin completion:", error);

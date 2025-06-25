@@ -16,15 +16,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark,
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig } from '@/lib/appConfig';
+import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule } from '@/lib/appConfig';
 import {
   saveAppConfigurationToFirestore,
   getWithdrawalRequests,
@@ -57,6 +57,7 @@ import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Slider } from '@/components/ui/slider';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
@@ -168,6 +169,11 @@ export default function AdminPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
   const [userSortBy, setUserSortBy] = useState('totalWinnings_desc');
+  
+  const [editingUser, setEditingUser] = useState<(UserDocument & {id: string}) | null>(null);
+  const [manualWinRate, setManualWinRate] = useState<number>(50);
+  const [userTagsInput, setUserTagsInput] = useState<string>('');
+
 
   const pendingWithdrawalsCount = useMemo(() => withdrawalRequests.filter(req => req.status === 'pending').length, [withdrawalRequests]);
   const pendingAddFundsCount = useMemo(() => addFundRequests.filter(req => req.status === 'pending').length, [addFundRequests]);
@@ -182,6 +188,17 @@ export default function AdminPage() {
       setAddBalancePresetsInput(appSettings.addBalancePresets?.join(', ') || '');
     }
   }, [appSettings, newsItems, loading]);
+  
+  useEffect(() => {
+    if(editingUser) {
+        const rate = editingUser.manualWinRateOverride === null || editingUser.manualWinRateOverride === undefined 
+                     ? 50 // A neutral default if not set
+                     : editingUser.manualWinRateOverride * 100;
+        setManualWinRate(rate);
+        setUserTagsInput((editingUser.tags || []).join(', '));
+    }
+  }, [editingUser]);
+
 
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
@@ -246,6 +263,60 @@ export default function AdminPage() {
     }));
   };
   
+  const handleDefaultWinRateChange = (value: string) => {
+    const rate = parseFloat(value);
+    if (isNaN(rate)) return;
+    setCurrentAppSettings(prev => ({...prev, defaultWinRate: rate / 100}));
+  };
+  
+  const handleWinRateRuleChange = (index: number, field: keyof WinRateRule, value: string | number) => {
+    const updatedRules = [...currentAppSettings.winRateRules];
+    if (typeof updatedRules[index][field] === 'number') {
+      updatedRules[index][field] = parseFloat(value as string) || 0;
+    } else {
+      (updatedRules[index][field] as string) = value as string;
+    }
+    // special handling for rate as it's percentage based in UI
+    if (field === 'rate') {
+      updatedRules[index].rate = (value as number) / 100;
+    }
+
+    setCurrentAppSettings(prev => ({...prev, winRateRules: updatedRules}));
+  };
+
+  const addWinRateRule = () => {
+    const newRule: WinRateRule = { id: `rule-${Date.now()}`, tag: 'new-tag', rate: 0.5, priority: 99 };
+    setCurrentAppSettings(prev => ({...prev, winRateRules: [...prev.winRateRules, newRule]}));
+  };
+  
+  const removeWinRateRule = (id: string) => {
+    setCurrentAppSettings(prev => ({
+      ...prev,
+      winRateRules: prev.winRateRules.filter(rule => rule.id !== id)
+    }));
+  };
+  
+  const handleSaveUserChanges = async () => {
+    if (!editingUser) return;
+    try {
+      const tags = userTagsInput.split(',').map(t => t.trim()).filter(Boolean);
+      const rateValue = manualWinRate === 50 ? null : manualWinRate / 100;
+
+      await updateUserData(editingUser.id, {
+        manualWinRateOverride: rateValue,
+        tags: tags,
+      });
+
+      toast({ title: 'User Updated', description: `Changes for ${editingUser.displayName} have been saved.`});
+      setEditingUser(null);
+      fetchAdminData(); // Refresh data to show changes
+    } catch (error: any) {
+      console.error("Error updating user:", error);
+      toast({ title: 'Update Failed', description: error.message, variant: 'destructive'});
+    }
+  };
+
+
   const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
     setCurrentAppSettings(prev => ({
       ...prev,
@@ -540,9 +611,10 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-11 gap-2 mb-6 h-auto flex-wrap">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-12 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="activity"><Activity className="mr-2 h-4 w-4"/>Activity</TabsTrigger>
+              <TabsTrigger value="winning-rules"><BrainCircuit className="mr-2 h-4 w-4"/>Winning Rules</TabsTrigger>
               
               <TabsTrigger value="fraud-alerts" className="relative">
                 <ShieldAlert className="mr-2 h-4 w-4"/>Fraud Alerts
@@ -679,9 +751,9 @@ export default function AdminPage() {
                    <Table>
                     <TableHeader><TableRow>
                       <TableHead>User</TableHead>
+                      <TableHead>Spins (W/L)</TableHead>
                       {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
-                      <TableHead>Spins</TableHead><TableHead>Winnings (₹)</TableHead><TableHead>Deposited (₹)</TableHead><TableHead>Withdrawn (₹)</TableHead>
-                      <TableHead>Referred By</TableHead><TableHead># Refs</TableHead>
+                      <TableHead>Tags</TableHead>
                       <TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead>
                     </TableRow></TableHeader>
                     <TableBody>
@@ -691,13 +763,9 @@ export default function AdminPage() {
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
+                          <TableCell>{u.totalSpinsPlayed || 0} ({u.totalWins || 0}/{ (u.totalSpinsPlayed || 0) - (u.totalWins || 0) })</TableCell>
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{getUserBalanceForTier(u, tierId)}</TableCell>)}
-                          <TableCell>{u.spinsAvailable || 0}</TableCell>
-                          <TableCell>{(u.totalWinnings || 0).toFixed(2)}</TableCell>
-                          <TableCell>{(u.totalDeposited || 0).toFixed(2)}</TableCell>
-                          <TableCell>{(u.totalWithdrawn || 0).toFixed(2)}</TableCell>
-                          <TableCell className="text-xs">{u.referredBy ? u.referredBy.substring(0, 6) + '...' : 'N/A'}</TableCell>
-                          <TableCell>{u.referrals?.length || 0}</TableCell>
+                          <TableCell><div className="flex flex-wrap gap-1 max-w-xs">{u.tags?.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div></TableCell>
                           <TableCell>{formatDisplayDate(u.createdAt)}</TableCell>
                           <TableCell>{formatDisplayDate(u.lastActive)}</TableCell>
                           <TableCell>
@@ -706,7 +774,8 @@ export default function AdminPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Label htmlFor={`block-switch-${u.id}`} className="text-xs text-muted-foreground">{u.isBlocked ? 'Unblock' : 'Block'}</Label>
+                               <Button variant="outline" size="sm" onClick={() => setEditingUser(u)}><Pencil className="mr-2 h-3 w-3" />Manage</Button>
+                              <Label htmlFor={`block-switch-${u.id}`} className="text-xs text-muted-foreground sr-only">{u.isBlocked ? 'Unblock' : 'Block'}</Label>
                               <Switch
                                 id={`block-switch-${u.id}`}
                                 checked={u.isBlocked || false}
@@ -758,6 +827,54 @@ export default function AdminPage() {
                   ) : (
                     <div className="text-center text-muted-foreground py-10">No activity data available.</div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="winning-rules">
+              <Card className="bg-muted/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><BrainCircuit /> Dynamic Winning Rules</CardTitle>
+                  <CardDescription>
+                    Control the probability of winning for different user groups. Rules are applied by priority (lower number = higher priority).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div>
+                    <Label htmlFor="defaultWinRate">Default Win Rate (%)</Label>
+                    <Input
+                      id="defaultWinRate"
+                      type="number"
+                      value={(currentAppSettings.defaultWinRate * 100).toFixed(0)}
+                      onChange={(e) => handleDefaultWinRateChange(e.target.value)}
+                      className="max-w-xs mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">The base chance for a user to win if no other rules apply.</p>
+                  </div>
+                  <div className="border-t pt-4">
+                    <h3 className="font-semibold text-lg mb-2">Tag-Based Rules</h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Priority</TableHead>
+                          <TableHead>Tag Name</TableHead>
+                          <TableHead>Win Rate (%)</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {currentAppSettings.winRateRules.sort((a,b) => a.priority - b.priority).map((rule, index) => (
+                          <TableRow key={rule.id}>
+                            <TableCell><Input type="number" value={rule.priority} onChange={(e) => handleWinRateRuleChange(index, 'priority', e.target.value)} className="w-20" /></TableCell>
+                            <TableCell><Input value={rule.tag} onChange={(e) => handleWinRateRuleChange(index, 'tag', e.target.value)} /></TableCell>
+                            <TableCell><Input type="number" value={(rule.rate * 100).toFixed(0)} onChange={(e) => handleWinRateRuleChange(index, 'rate', e.target.value)} className="w-24" /></TableCell>
+                            <TableCell><Button variant="destructive" size="icon" onClick={() => removeWinRateRule(rule.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <Button onClick={addWinRateRule} variant="outline" className="mt-4"><PlusCircle className="mr-2 h-4 w-4" /> Add Rule</Button>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -831,11 +948,7 @@ export default function AdminPage() {
 
                                     <h4 className="font-semibold text-lg border-b pb-2 flex justify-between items-center">
                                       <span>Segments (Prizes &amp; Probabilities)</span>
-                                      {totalProbability > 0 && (
-                                        <span className="text-sm font-normal text-muted-foreground">
-                                            Total Weight: <span className="font-semibold text-foreground">{totalProbability}</span>
-                                        </span>
-                                      )}
+                                      <CardDescription className="text-xs">Note: Segment probabilities are now only for selecting a prize *after* a win is determined. The actual chance to win is set in 'Winning Rules'.</CardDescription>
                                     </h4>
                                     <Table>
                                       <TableHeader><TableRow>
@@ -843,14 +956,12 @@ export default function AdminPage() {
                                           <TableHead>Emoji</TableHead>
                                           <TableHead>Text</TableHead>
                                           <TableHead>Amount (₹)</TableHead>
-                                          <TableHead>Probability Weight</TableHead>
-                                          <TableHead className="text-right">Actual Chance</TableHead>
+                                          <TableHead>Selection Weight</TableHead>
                                           <TableHead>Color (HSL)</TableHead>
                                           <TableHead>Actions</TableHead>
                                       </TableRow></TableHeader>
                                       <TableBody onDragOver={handleDragOver}>
                                           {tier.segments.map((seg, index) => {
-                                            const actualChance = totalProbability > 0 ? ((seg.probability / totalProbability) * 100) : 0;
                                             return (
                                               <TableRow 
                                                   key={seg.id}
@@ -873,7 +984,6 @@ export default function AdminPage() {
                                                   <TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell>
                                                   <TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell>
                                                   <TableCell><Input type="number" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell>
-                                                  <TableCell className="text-right font-mono text-sm text-muted-foreground">{actualChance.toFixed(2)}%</TableCell>
                                                   <TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell>
                                                   <TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                                               </TableRow>
@@ -1066,6 +1176,37 @@ export default function AdminPage() {
           </Tabs>
         </CardContent>
       </Card>
+      
+      {/* Dialog for Editing User */}
+      <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage User: {editingUser?.displayName}</DialogTitle>
+            <DialogDescription>{editingUser?.email}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-6">
+             <div className="grid grid-cols-2 gap-4 text-center">
+                <div><Label>Total Spins</Label><p className="font-bold text-2xl">{editingUser?.totalSpinsPlayed || 0}</p></div>
+                <div><Label>Win/Loss</Label><p className="font-bold text-2xl">{editingUser?.totalWins || 0} / {(editingUser?.totalSpinsPlayed || 0) - (editingUser?.totalWins || 0)}</p></div>
+             </div>
+             <div className="space-y-2">
+                <Label htmlFor="tags">User Tags</Label>
+                <Input id="tags" value={userTagsInput} onChange={(e) => setUserTagsInput(e.target.value)} placeholder="e.g. new,vip,high-loss"/>
+                <CardDescription className="text-xs">Comma-separated tags. These affect auto win rates.</CardDescription>
+             </div>
+             <div className="space-y-2">
+                <Label htmlFor="winRate">Manual Win Rate Override: <span className="font-bold text-primary">{manualWinRate}%</span></Label>
+                <Slider id="winRate" min={0} max={100} step={1} value={[manualWinRate]} onValueChange={(value) => setManualWinRate(value[0])} />
+                <CardDescription className="text-xs">Set to 50% to disable and use tag-based rules. Otherwise, this rate will override all other rules.</CardDescription>
+             </div>
+          </div>
+          <DialogFooter>
+             <Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
+             <Button onClick={handleSaveUserChanges}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
