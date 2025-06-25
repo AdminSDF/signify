@@ -133,6 +133,34 @@ export default function GamePage() {
     }
   }, [user, userData, authLoading]);
 
+  // Live Activity Tracking
+  useEffect(() => {
+    if (!user) return;
+
+    // Set user as online and in the current game when component mounts
+    updateUserData(user.uid, {
+      isOnline: true,
+      currentGame: tier,
+      lastActive: Timestamp.now()
+    }).catch(err => console.error("Failed to set user as online:", err));
+
+    // Set up a heartbeat to update lastActive every 2 minutes
+    const heartbeatInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        updateUserData(user.uid, { lastActive: Timestamp.now() })
+          .catch(err => console.warn("Heartbeat update failed:", err));
+      }
+    }, 120000); // 2 minutes
+
+    // Cleanup function on component unmount
+    return () => {
+      clearInterval(heartbeatInterval);
+      // Set user as offline when they leave the game
+      updateUserData(user.uid, { isOnline: false, currentGame: null })
+        .catch(err => console.error("Failed to set user as offline:", err));
+    };
+  }, [user, tier]);
+
   const onTourExit = () => {
     setIsTourOpen(false);
     if (user) {

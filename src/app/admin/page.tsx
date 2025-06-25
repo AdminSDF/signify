@@ -21,7 +21,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule } from '@/lib/appConfig';
@@ -35,8 +35,6 @@ import {
   updateAddFundRequestStatus,
   approveAddFundAndUpdateBalance,
   approveWithdrawalAndUpdateBalance,
-  getAllUsers,
-  UserDocument,
   updateUserData,
   getAllTransactions,
   TransactionData,
@@ -52,16 +50,20 @@ import {
   FraudAlertData,
   getGlobalStats,
   GlobalStats,
+  db,
+  UserDocument
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Slider } from '@/components/ui/slider';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
-const getTierName = (tierId: string, wheelConfigs: { [key: string]: WheelTierConfig }): string => {
+const getTierName = (tierId: string | null | undefined, wheelConfigs: { [key: string]: WheelTierConfig }): string => {
+    if (!tierId) return 'N/A';
     if (wheelConfigs && wheelConfigs[tierId] && wheelConfigs[tierId].name) {
         return wheelConfigs[tierId].name;
     }
@@ -127,7 +129,7 @@ const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'dateti
     return dateObj.toLocaleString();
 };
 
-const StatCard = ({ title, value, icon }: { title: string, value: number, icon: React.ReactNode }) => (
+const StatCard = ({ title, value, icon, description }: { title: string, value: string | number, icon: React.ReactNode, description?: string }) => (
   <Card>
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-sm font-medium">{title}</CardTitle>
@@ -135,7 +137,7 @@ const StatCard = ({ title, value, icon }: { title: string, value: number, icon: 
     </CardHeader>
     <CardContent>
       <div className="text-2xl font-bold">{value}</div>
-      <p className="text-xs text-muted-foreground">Unique users (last 24h)</p>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
     </CardContent>
   </Card>
 );
@@ -167,6 +169,7 @@ export default function AdminPage() {
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
   const [userSortBy, setUserSortBy] = useState('totalWinnings_desc');
   
@@ -198,16 +201,38 @@ export default function AdminPage() {
         setUserTagsInput((editingUser.tags || []).join(', '));
     }
   }, [editingUser]);
+  
+   // Real-time user listener
+  useEffect(() => {
+    if (!userData?.isAdmin || !db) return;
 
+    const usersCollectionRef = collection(db, 'users');
+    const q = query(usersCollectionRef);
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const usersData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as UserDocument & { id: string }));
+      setAllUsers(usersData);
+      setIsUsersLoading(false);
+    }, (error) => {
+      console.error("Error listening to users collection:", error);
+      toast({ title: "Real-time Error", description: "Could not get live user data.", variant: "destructive" });
+      setIsUsersLoading(false);
+    });
+
+    return () => unsubscribe();
+    
+  }, [userData?.isAdmin, toast]);
 
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
-      const [withdrawals, adds, users, transactions, leaderboardUsers, tickets, summary, alerts, stats] = await Promise.all([
+      // User data is now handled by the real-time listener, so we fetch everything else.
+      const [withdrawals, adds, transactions, leaderboardUsers, tickets, summary, alerts, stats] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
-        getAllUsers(100, { field, direction }),
         getAllTransactions(),
         getLeaderboardUsers(20),
         getSupportTickets(),
@@ -217,7 +242,6 @@ export default function AdminPage() {
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
-      setAllUsers(users);
       setAllTransactions(transactions);
       setLeaderboard(leaderboardUsers);
       setSupportTickets(tickets);
@@ -230,13 +254,51 @@ export default function AdminPage() {
     } finally {
       setIsLoadingData(false);
     }
-  }, [toast, userSortBy]);
+  }, [toast]);
+  
+  // Memoize sorted users to prevent re-sorting on every render
+  const sortedUsers = useMemo(() => {
+      if (allUsers.length === 0) return [];
+      const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
+      
+      return [...allUsers].sort((a, b) => {
+          const valA = a[field as keyof UserDocument] ?? 0;
+          const valB = b[field as keyof UserDocument] ?? 0;
+
+          // Handle Timestamps
+          if (valA instanceof Timestamp && valB instanceof Timestamp) {
+              return direction === 'desc' ? valB.toMillis() - valA.toMillis() : valA.toMillis() - valB.toMillis();
+          }
+          // Handle numbers
+          if (typeof valA === 'number' && typeof valB === 'number') {
+              return direction === 'desc' ? valB - valA : valA - valB;
+          }
+          // Fallback for other types (though not used in current sorting options)
+          return 0;
+      });
+  }, [allUsers, userSortBy]);
+  
+  // Memoize live stats to prevent re-calculating on every render
+  const liveStats = useMemo(() => {
+    const onlineUsers = allUsers.filter(u => u.isOnline);
+    const gameBreakdown = onlineUsers.reduce((acc, user) => {
+      const game = user.currentGame || 'Idle';
+      acc[game] = (acc[game] || 0) + 1;
+      return acc;
+    }, {} as {[key: string]: number});
+    
+    return {
+      onlineCount: onlineUsers.length,
+      gameBreakdown
+    };
+  }, [allUsers]);
+
 
   useEffect(() => {
     if (userData?.isAdmin && !loading) {
       fetchAdminData();
     }
-  }, [userData, loading, fetchAdminData]);
+  }, [userData?.isAdmin, loading, fetchAdminData]);
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -309,7 +371,7 @@ export default function AdminPage() {
 
       toast({ title: 'User Updated', description: `Changes for ${editingUser.displayName} have been saved.`});
       setEditingUser(null);
-      fetchAdminData(); // Refresh data to show changes
+      // No need to fetch data, real-time listener will update it.
     } catch (error: any) {
       console.error("Error updating user:", error);
       toast({ title: 'Update Failed', description: error.message, variant: 'destructive'});
@@ -463,7 +525,7 @@ export default function AdminPage() {
     try {
       await updateUserData(userId, { isBlocked: !currentStatus });
       toast({ title: "User Status Updated", description: `User has been ${!currentStatus ? 'blocked' : 'unblocked'}.` });
-      fetchAdminData(); // Refresh user list
+      // No need to fetch data, real-time listener will update it.
     } catch (error: any) {
       console.error("Error updating user status:", error);
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
@@ -664,8 +726,40 @@ export default function AdminPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><Users /> Cash Flow & User Overview</CardTitle>
                   <CardDescription>Key financial metrics and a list of all registered users.</CardDescription>
+                  
+                  <div className="pt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                     <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                           <CardTitle className="text-sm font-medium">Live Analytics</CardTitle>
+                           <Activity className="h-4 w-4 text-muted-foreground"/>
+                        </CardHeader>
+                        <CardContent>
+                           <div className="text-2xl font-bold">{liveStats.onlineCount}</div>
+                           <p className="text-xs text-muted-foreground">Users currently online</p>
+                           <div className="mt-2 text-xs space-y-1">
+                            {Object.entries(liveStats.gameBreakdown).map(([game, count]) => (
+                              <div key={game} className="flex justify-between">
+                                <span>{getTierName(game, appSettings.wheelConfigs) || 'Idle'}:</span>
+                                <span className="font-semibold">{count} user(s)</span>
+                              </div>
+                            ))}
+                           </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                           <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                           <Users2 className="h-4 w-4 text-muted-foreground"/>
+                        </CardHeader>
+                        <CardContent>
+                           <div className="text-2xl font-bold">{allUsers.length}</div>
+                           <p className="text-xs text-muted-foreground">Total registered users</p>
+                        </CardContent>
+                    </Card>
+                  </div>
+                  
 
-                   <div className="pt-6">
+                   <div className="pt-6 border-t mt-6">
                       <h3 className="text-lg font-semibold mb-4">Global Cash Flow</h3>
                       {isLoadingData ? (
                         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
@@ -751,18 +845,37 @@ export default function AdminPage() {
                    <Table>
                     <TableHeader><TableRow>
                       <TableHead>User</TableHead>
+                      <TableHead>Live Status</TableHead>
                       <TableHead>Spins (W/L)</TableHead>
                       {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
                       <TableHead>Tags</TableHead>
                       <TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead>
                     </TableRow></TableHeader>
                     <TableBody>
-                      {isLoadingData ? <TableRow><TableCell colSpan={11 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
-                      : allUsers.map((u) => (
+                      {isUsersLoading ? <TableRow><TableCell colSpan={12 + Object.keys(appSettings.wheelConfigs).length} className="text-center"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
+                      : sortedUsers.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium"><div className="flex items-center gap-2">
                                <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
                               <div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
+                          <TableCell>
+                            {u.isOnline ? (
+                              <div className="flex items-center gap-2 text-green-600 font-medium">
+                                <span className="relative flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                </span>
+                                <span>{getTierName(u.currentGame, appSettings.wheelConfigs)}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <span className="relative flex h-3 w-3">
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-400"></span>
+                                </span>
+                                <span>Offline</span>
+                              </div>
+                            )}
+                           </TableCell>
                           <TableCell>{u.totalSpinsPlayed || 0} ({u.totalWins || 0}/{ (u.totalSpinsPlayed || 0) - (u.totalWins || 0) })</TableCell>
                           {Object.keys(appSettings.wheelConfigs).map(tierId => <TableCell key={tierId}>{getUserBalanceForTier(u, tierId)}</TableCell>)}
                           <TableCell><div className="flex flex-wrap gap-1 max-w-xs">{u.tags?.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}</div></TableCell>
@@ -786,7 +899,7 @@ export default function AdminPage() {
                             </div>
                           </TableCell>
                         </TableRow>))}
-                      {!isLoadingData && allUsers.length === 0 && (<TableRow><TableCell colSpan={11 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
+                      {!isUsersLoading && sortedUsers.length === 0 && (<TableRow><TableCell colSpan={12 + Object.keys(appSettings.wheelConfigs).length} className="text-center text-muted-foreground h-24">No users found.</TableCell></TableRow>)}
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
             
@@ -799,10 +912,10 @@ export default function AdminPage() {
                   ) : activitySummary && activityChartData.length > 0 ? (
                     <>
                       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <StatCard title="Morning" value={activitySummary.morning} icon={<Sunrise className="h-4 w-4 text-muted-foreground" />} />
-                        <StatCard title="Afternoon" value={activitySummary.afternoon} icon={<Sun className="h-4 w-4 text-muted-foreground" />} />
-                        <StatCard title="Evening" value={activitySummary.evening} icon={<Sunset className="h-4 w-4 text-muted-foreground" />} />
-                        <StatCard title="Night" value={activitySummary.night} icon={<Moon className="h-4 w-4 text-muted-foreground" />} />
+                        <StatCard title="Morning" value={activitySummary.morning} icon={<Sunrise className="h-4 w-4 text-muted-foreground" />} description="Unique users (last 24h)" />
+                        <StatCard title="Afternoon" value={activitySummary.afternoon} icon={<Sun className="h-4 w-4 text-muted-foreground" />} description="Unique users (last 24h)" />
+                        <StatCard title="Evening" value={activitySummary.evening} icon={<Sunset className="h-4 w-4 text-muted-foreground" />} description="Unique users (last 24h)" />
+                        <StatCard title="Night" value={activitySummary.night} icon={<Moon className="h-4 w-4 text-muted-foreground" />} description="Unique users (last 24h)" />
                       </div>
                       <ResponsiveContainer width="100%" height={300}>
                         <PieChart>

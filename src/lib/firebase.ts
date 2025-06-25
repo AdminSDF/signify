@@ -89,6 +89,8 @@ export interface UserDocument {
   isAdmin?: boolean;
   isBlocked?: boolean;
   lastActive?: Timestamp;
+  isOnline?: boolean;
+  currentGame?: string | null;
   upiIdForWithdrawal?: string;
   bankDetailsForWithdrawal?: {
     accountHolderName: string;
@@ -156,6 +158,8 @@ export const createUserData = async (
     isAdmin: adminEmails.includes(userEmail),
     isBlocked: false,
     lastActive: Timestamp.now(),
+    isOnline: false,
+    currentGame: null,
     totalWinnings: 0,
     totalSpinsPlayed: 0,
     totalWins: 0,
