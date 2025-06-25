@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -35,6 +35,7 @@ const tierIcons: { [key: string]: React.ReactNode } = {
   little: <Gem className="mr-2 h-5 w-5" />,
   big: <Crown className="mr-2 h-5 w-5" />,
   'more-big': <Rocket className="mr-2 h-5 w-5" />,
+  'stall-machine': <Star className="mr-2 h-5 w-5" />,
 };
 
 export default function ProfilePage() {
@@ -391,7 +392,7 @@ export default function ProfilePage() {
           <CardContent className="space-y-6">
               <div data-tour-id="tier-selector-tabs">
                 <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     {Object.values(appSettings.wheelConfigs).map(tier => (
                         <TabsTrigger key={tier.id} value={tier.id} className="flex items-center gap-2">
                             {tierIcons[tier.id]} {tier.name}
@@ -481,5 +482,3 @@ export default function ProfilePage() {
     </>
   );
 }
-
-    

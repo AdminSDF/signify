@@ -14,7 +14,7 @@ export interface SegmentConfig {
 
 // Interface for a full wheel configuration
 export interface WheelTierConfig {
-  id: 'little' | 'big' | 'more-big';
+  id: 'little' | 'big' | 'more-big' | 'stall-machine';
   name: string;
   description: string;
   themeClass: string;
@@ -92,7 +92,26 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
         { id: 'm-small', text: 'Small Win', emoji: '👑', amount: 10, probability: 25, color: '180 90% 40%', textColor: '0 0% 100%' },
         { id: 'm-lose1',  text: 'Try Again', emoji: '💀', amount: 0, probability: 60,  color: '170 80% 35%', textColor: '0 0% 100%' },
     ]
-  }
+  },
+  'stall-machine': {
+    id: 'stall-machine',
+    name: 'Stall Machine',
+    description: 'Classic slot machine fun. Match the symbols to win!',
+    themeClass: 'theme-stall-machine',
+    isLocked: false,
+    minWithdrawalAmount: 1500,
+    costSettings: {
+      type: 'fixed',
+      baseCost: 15,
+    },
+    segments: [
+      { id: 'sm-777', text: 'JACKPOT', emoji: '🎰', amount: 1500, probability: 2, color: '0 80% 60%', textColor: '0 0% 100%' },
+      { id: 'sm-bar', text: 'BAR', emoji: '🍫', amount: 500, probability: 8, color: '40 90% 55%', textColor: '40 90% 10%' },
+      { id: 'sm-bell', text: 'BELL', emoji: '🔔', amount: 100, probability: 15, color: '50 100% 65%', textColor: '50 100% 10%' },
+      { id: 'sm-cherry', text: 'CHERRY', emoji: '🍒', amount: 50, probability: 25, color: '0 70% 45%', textColor: '0 0% 100%' },
+      { id: 'sm-lose', text: 'Try Again', emoji: '💀', amount: 0, probability: 50, color: '240 10% 25%', textColor: '0 0% 90%' },
+    ],
+  },
 };
 
 export const DEFAULT_LOGO_URL = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh-PsVQj50OZx4UwZAuk7W0JDqdVv7XtdPtA6RdvBPdJhIDzCnNnM8sfdKkZD8MTbpZIk3-E4aJA9oehwoZnTEmDhH1c7B89EJINSQngImBFvAUFPTcFAGAj0vXi9UNeBOMDOSJtw4a0GUGMNakf-z7TTS9S-vziyAbW8LpcrcIA9R7SNSj0G3ECbtMlJuT/s1600/file_00000000f80061f882df150eb41a6b72.png";

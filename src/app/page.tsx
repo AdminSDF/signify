@@ -128,10 +128,11 @@ export default function GameSelectionPage() {
           <p className="text-lg text-muted-foreground mt-2">Select a wheel and spin to win!</p>
         </div>
 
-        <div data-tour-id="game-cards-grid" className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 w-full max-w-6xl">
+        <div data-tour-id="game-cards-grid" className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full max-w-7xl">
           {wheelConfigs.little && renderCard(wheelConfigs.little)}
           {wheelConfigs.big && renderCard(wheelConfigs.big)}
           {wheelConfigs['more-big'] && renderCard(wheelConfigs['more-big'])}
+          {wheelConfigs['stall-machine'] && renderCard(wheelConfigs['stall-machine'])}
         </div>
       </div>
     </>

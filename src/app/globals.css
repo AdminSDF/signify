@@ -169,6 +169,65 @@ body {
     --ring: 190 100% 50%;
   }
 
+  .theme-stall-machine {
+    --background: 240 10% 15%; /* Dark cool gray */
+    --foreground: 35 100% 90%; /* Light cream */
+
+    --card: 240 10% 20%; 
+    --card-foreground: 35 100% 90%;
+
+    --popover: 240 10% 15%;
+    --popover-foreground: 35 100% 90%;
+
+    --primary: 40 90% 55%; /* Gold */
+    --primary-foreground: 40 90% 10%; /* Dark brown for text on gold */
+
+    --secondary: 0 70% 45%; /* Deep Red */
+    --secondary-foreground: 0 0% 100%; /* White */
+    
+    --muted: 240 10% 25%; 
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 0 80% 60%; /* Brighter Red */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 10% 30%;
+    --input: 240 10% 22%;
+    --ring: 40 90% 55%;
+
+    --chart-1: 40 90% 55%;
+    --chart-2: 0 70% 45%;
+    --chart-3: 35 100% 90%;
+    --chart-4: 0 80% 60%;
+    --chart-5: 240 5% 65%;
+
+    --radius: 0.8rem;
+  }
+
+  .dark .theme-stall-machine {
+    /* Same as light mode for this specific theme */
+    --background: 240 10% 15%;
+    --foreground: 35 100% 90%;
+    --card: 240 10% 20%;
+    --card-foreground: 35 100% 90%;
+    --popover: 240 10% 15%;
+    --popover-foreground: 35 100% 90%;
+    --primary: 40 90% 55%;
+    --primary-foreground: 40 90% 10%;
+    --secondary: 0 70% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 10% 25%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 0 80% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 240 10% 30%;
+    --input: 240 10% 22%;
+    --ring: 40 90% 55%;
+  }
+
 }
 
 @layer base {
