@@ -2,7 +2,16 @@
 
 import React from 'react';
 import DisclaimerMarquee from './DisclaimerMarquee';
-import FooterAd from './FooterAd';
+import dynamic from 'next/dynamic';
+
+// Dynamically import the FooterAd component with SSR turned off.
+// This prevents it from being rendered on the server, thus avoiding hydration errors.
+const FooterAd = dynamic(() => import('./FooterAd'), { 
+  ssr: false,
+  // Render a placeholder with a fixed height to prevent layout shift while the ad loads.
+  loading: () => <div className="my-4" style={{ height: '90px' }} />
+});
+
 
 const SiteFooter: React.FC = () => {
   return (
