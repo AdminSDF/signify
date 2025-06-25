@@ -15,9 +15,11 @@ const FooterAd = () => {
   return (
     <div className="my-4 flex justify-center overflow-x-auto">
         <ins className="adsbygoogle"
-            style={{display:"inline-block",width:"728px",height:"90px"}}
-            data-ad-client="ca-pub-1425274923062587"
-            data-ad-slot="2603795181"></ins>
+             style={{display:"block"}}
+             data-ad-client="ca-pub-1425274923062587"
+             data-ad-slot="9499288281"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
     </div>
   );
 };
