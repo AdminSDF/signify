@@ -13,7 +13,7 @@ const FooterAd = () => {
   }, []);
 
   return (
-    <div className="my-4 flex justify-center overflow-x-auto">
+    <div className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
         <ins className="adsbygoogle"
              style={{display:"block"}}
              data-ad-client="ca-pub-1425274923062587"
