@@ -35,7 +35,7 @@ export default function RootLayout({
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
           crossOrigin="anonymous"
-          strategy="beforeInteractive"
+          strategy="lazyOnload"
         />
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
