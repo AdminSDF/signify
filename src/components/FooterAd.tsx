@@ -3,30 +3,27 @@
 import React, { useEffect, useRef } from 'react';
 
 const FooterAd = () => {
-  const adInsRef = useRef<HTMLModElement>(null);
+  const adPushed = useRef(false);
 
   useEffect(() => {
-    const adContainer = adInsRef.current;
-    
-    // We check if the ad container (<ins> tag) is there and if it's empty.
-    // AdSense will fill the container, so if it's not empty, we don't push again.
-    // This is more robust against React 18's Strict Mode re-renders.
-    if (adContainer && adContainer.innerHTML.trim() === "") {
-      try {
-        // @ts-ignore
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-      } catch (err) {
-        // The error is often "TagError: adsbygoogle.push() error: All ins elements in the DOM with class=adsbygoogle already have ads in them."
-        // We can safely ignore it in many cases, but it's better to prevent the call.
-        console.error("AdSense error:", err);
-      }
+    // Only attempt to push the ad if it hasn't been pushed before.
+    // This is to prevent errors caused by React's Strict Mode re-renders in development.
+    if (adPushed.current) {
+      return;
     }
-  }, []); // Empty dependency array ensures it runs once after mount.
+
+    try {
+      // @ts-ignore
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      adPushed.current = true; // Mark as pushed to prevent re-execution
+    } catch (err) {
+      console.error("AdSense error:", err);
+    }
+  }, []); // Empty dependency array ensures it runs once per component mount.
 
   return (
     <div className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
         <ins 
-             ref={adInsRef}
              className="adsbygoogle"
              style={{display:"block"}}
              data-ad-client="ca-pub-1425274923062587"
