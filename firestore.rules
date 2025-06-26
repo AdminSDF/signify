@@ -4,101 +4,123 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Helper function to check if a user is an admin
     function isAdmin() {
-      // Checks if the requesting user has the admin flag in their own user document.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
-
+    
+    // Helper function to check if the user is authenticated
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // --- USER DATA ---
     match /users/{userId} {
-      // Any signed-in user can read another user's public profile.
-      // A user can only create their own document.
-      // A user can update their own document, or an admin can.
-      allow get: if isSignedIn();
-      // NOTE: The list rule is needed for the findUserByEmail feature. 
-      // This is not ideal for security as it allows broader queries on the users collection.
-      allow list: if isSignedIn();
-      allow create: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId || isAdmin();
-    }
-
-    match /users/{userId}/notifications/{notificationId} {
-      // Users can only access their own notifications.
-      allow read, write: if request.auth.uid == userId;
+      // Any signed-in user can read another user's public data
+      allow read: if isSignedIn();
+      // A user can update their own profile, but not critical fields like isAdmin or balances.
+      // Admins can update anything.
+      allow update: if (request.auth.uid == userId && !("isAdmin" in request.resource.data) && !("balances" in request.resource.data)) || isAdmin();
+      // User creation is handled by server-side logic (auth functions). Deletion is admin-only.
+      allow create: if isSignedIn();
+      allow delete: if isAdmin();
     }
     
-    match /transactions/{transactionId} {
-      // User can create and read their own transactions.
-      // Admin can read all transactions for auditing.
-      allow create: if request.resource.data.userId == request.auth.uid;
-      allow read: if resource.data.userId == request.auth.uid || isAdmin();
-      allow list: if isAdmin();
-      allow update, delete: if isAdmin();
+    // Notifications are a subcollection of users
+    match /users/{userId}/notifications/{notificationId} {
+      // A user can read and update (mark as read) their own notifications.
+      allow read, update: if request.auth.uid == userId;
+      // Notifications are created by the server/backend logic.
+      allow create, delete: if false; 
     }
 
-    match /{requestCollection=withdrawalRequests,addFundRequests}/{requestId} {
-       // User can create their own requests.
-       // User and Admin can read requests.
-       // Only Admin can update/delete requests.
-       allow create: if request.resource.data.userId == request.auth.uid;
-       allow read: if resource.data.userId == request.auth.uid || isAdmin();
-       allow update, delete: if isAdmin();
-    }
-
-    match /appConfiguration/{docId} {
-      // App configuration is public to read.
-      // Only Admin can write to it.
+    // --- APP CONFIGURATION ---
+    match /appConfiguration/main {
+      // Any client can read the app configuration.
       allow read: if true;
+      // Only admins can write/update the configuration.
       allow write: if isAdmin();
     }
 
-    match /supportTickets/{ticketId} {
-      // User can create their own tickets.
-      // User and Admin can read them.
-      // Only Admin can update them.
-       allow create: if request.resource.data.userId == request.auth.uid;
-       allow read: if resource.data.userId == request.auth.uid || isAdmin();
-       allow update: if isAdmin();
+    // --- TRANSACTIONS & REQUESTS ---
+    match /transactions/{transactionId} {
+      // Users can only read their own transactions. Admins can read all.
+      allow read: if (isSignedIn() && request.auth.uid == resource.data.userId) || isAdmin();
+      // Transactions are immutable and created by the server logic.
+      allow create: if isSignedIn();
+      allow update, delete: if false;
     }
 
-    match /activityLogs/{logId} {
-      // Any signed-in user can create an activity log for themselves.
-      // Only admin can read logs.
-      allow create: if request.resource.data.userId == request.auth.uid;
-      allow read, list: if isAdmin();
+    match /withdrawalRequests/{requestId} {
+      // A user can create their own request.
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      // Users can read their own requests, admins can read any.
+      allow read: if (isSignedIn() && request.auth.uid == resource.data.userId) || isAdmin();
+      // Only admins can update (approve/reject) requests.
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
-    match /fraudAlerts/{alertId} {
-      // Only Admin can access fraud alerts.
-       allow read, write: if isAdmin();
+    match /addFundRequests/{requestId} {
+      // A user can create their own request.
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      // Users can read their own requests, admins can read any.
+      allow read: if (isSignedIn() && request.auth.uid == resource.data.userId) || isAdmin();
+      // Only admins can update (approve/reject) requests.
+      allow update: if isAdmin();
+      allow delete: if false;
     }
     
-    match /systemStats/{docId} {
-      // Only Admin can access system stats.
-       allow read, write: if isAdmin();
+    // --- SUPPORT & LOGS ---
+    match /supportTickets/{ticketId} {
+      // A user can create their own ticket.
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      // Admins can read/update any ticket.
+      allow read, update: if isAdmin();
+      allow delete: if false;
     }
-
+    
+    match /activityLogs/{logId} {
+      // Created by server, cannot be read or written by clients.
+      allow read, write: if false;
+    }
+    
+    match /fraudAlerts/{alertId} {
+      // Only admins can read, only server can write.
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    // --- REWARDS & TOURNAMENTS ---
     match /userRewards/{userId} {
-      // User can read and write to their own rewards document. Admin can too.
-      allow read, write: if request.auth.uid == userId || isAdmin();
+      // A user can read and update their own reward data (for claiming).
+      allow read, update: if request.auth.uid == userId;
+      // Created on user signup.
+      allow create: if request.auth.uid == userId;
+      allow delete: if false;
     }
 
     match /tournaments/{tournamentId} {
-      // Any signed-in user can read tournament info.
-      // Only Admin can create/update tournaments.
-      allow read: if isSignedIn();
+      // Anyone can read tournament info.
+      allow read: if true;
+      // Only admins can create or modify tournaments.
       allow write: if isAdmin();
     }
     
     match /userTournaments/{userTournamentId} {
-      // User can create/update their own tournament entry.
-      // User can read their own entry, Admin can read any.
-      allow create, update: if request.resource.data.userId == request.auth.uid;
-      allow read: if resource.data.userId == request.auth.uid || isAdmin();
-      allow list: if isAdmin();
+      // Anyone can read participant scores.
+      allow read: if true;
+      // A user can join a tournament (create their entry).
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      // Score updates should be handled server-side to prevent cheating.
+      allow update: if false; 
+      allow delete: if false;
+    }
+    
+    // --- SYSTEM STATS ---
+    match /systemStats/global {
+      // Cannot be read or written by clients.
+      allow read, write: if false;
     }
   }
 }
