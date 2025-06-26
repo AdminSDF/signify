@@ -3,26 +3,31 @@
 import React, { useEffect, useRef } from 'react';
 
 const FooterAd = () => {
+  const adContainerRef = useRef<HTMLDivElement>(null);
   const adPushed = useRef(false);
 
   useEffect(() => {
-    // Only attempt to push the ad if it hasn't been pushed before.
-    // This is to prevent errors caused by React's Strict Mode re-renders in development.
-    if (adPushed.current) {
+    if (adPushed.current || !adContainerRef.current) {
       return;
+    }
+
+    // Check if an ad has already been loaded in this container by AdSense
+    if (adContainerRef.current.querySelector('.adsbygoogle-processing') || adContainerRef.current.innerHTML.trim() !== '') {
+        // If an ad is already there or being processed, don't push another one.
+        return;
     }
 
     try {
       // @ts-ignore
       (window.adsbygoogle = window.adsbygoogle || []).push({});
-      adPushed.current = true; // Mark as pushed to prevent re-execution
+      adPushed.current = true;
     } catch (err) {
       console.error("AdSense error:", err);
     }
-  }, []); // Empty dependency array ensures it runs once per component mount.
+  }, []);
 
   return (
-    <div className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
+    <div ref={adContainerRef} className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
         <ins 
              className="adsbygoogle"
              style={{display:"block"}}
