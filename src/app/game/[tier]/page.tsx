@@ -25,6 +25,7 @@ import {
   addTransactionToFirestore,
   Timestamp,
   logUserActivity,
+  arrayUnion,
   arrayRemove
 } from '@/lib/firebase';
 import { Steps } from 'intro.js-react';
@@ -445,10 +446,20 @@ export default function GamePage() {
     const userTags = new Set(userData.tags || []);
     // Remove 'new' tag after 50 spins
     if (userTags.has('new') && totalSpinsPlayed > 50) {
-        userTags.delete('new');
         updates.tags = arrayRemove('new');
     }
-    // You can add more rules here e.g. for 'high-loss' or 'vip' tags based on win ratio or deposit amount
+    
+    // Auto-tagging for 'high-loss' users
+    const winRatio = totalWins / totalSpinsPlayed;
+    if (totalSpinsPlayed > 20) { // Check only after a reasonable number of spins
+        if (winRatio < 0.25 && !userTags.has('high-loss')) {
+            // Add 'high-loss' tag if win ratio is below 25%
+            updates.tags = arrayUnion('high-loss');
+        } else if (winRatio > 0.35 && userTags.has('high-loss')) {
+            // Remove 'high-loss' tag if win ratio recovers above 35%
+            updates.tags = arrayRemove('high-loss');
+        }
+    }
     
     if (cost === 0) { // It was a free spin
         updates.spinsAvailable = spinsAvailable; // `spinsAvailable` state was already updated
