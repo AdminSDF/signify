@@ -108,7 +108,15 @@ export default {
           '60%': { transform: 'rotate(1080deg) scale(1.05)' },
           '80%': { transform: 'rotate(1440deg) scale(1)' },
           '100%': { transform: 'rotate(1800deg) scale(1)' },
-        }
+        },
+        'fade-in': {
+          from: { opacity: '0', transform: 'translateY(10px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-out': {
+            from: { opacity: '1', transform: 'translateY(0)' },
+            to: { opacity: '0', transform: 'translateY(10px)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -117,8 +125,12 @@ export default {
         'bounce-once': 'bounceOnce 0.5s ease-in-out',
         'glow-pulse': 'glowPulse 2s infinite ease-in-out',
         'card-spin-multiple': 'card-spin-multiple 2.5s ease-in-out forwards',
+        'fade-in': 'fade-in 0.4s ease-out forwards',
+        'fade-out': 'fade-out 0.3s ease-out forwards',
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
+
+    

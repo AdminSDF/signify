@@ -10,9 +10,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { LoginCredentialsValidator, SignUpCredentialsValidator, type LoginCredentials, type SignUpCredentials } from '@/lib/validators/auth';
 import { cn } from '@/lib/utils';
+import { User, Mail, Lock, Loader2 } from 'lucide-react';
 
 type FormData = LoginCredentials | SignUpCredentials;
 
@@ -21,7 +24,8 @@ function LoginComponent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [isSpinning, setIsSpinning] = useState(false);
+  
+  const [formContainerClass, setFormContainerClass] = useState('animate-fade-in');
 
   useEffect(() => {
     const refCode = searchParams.get('ref');
@@ -29,7 +33,7 @@ function LoginComponent() {
       sessionStorage.setItem('referralCode', refCode);
     }
   }, [searchParams]);
-
+  
   const currentValidator = isLoginMode ? LoginCredentialsValidator : SignUpCredentialsValidator;
 
   const form = useForm<FormData>({
@@ -44,16 +48,19 @@ function LoginComponent() {
       router.push('/');
     }
   }, [user, loading, router]);
-
-  useEffect(() => {
-    if (!isSpinning) {
-      form.reset(
-        isLoginMode
+  
+  const handleModeSwitch = (newMode: boolean) => {
+    setFormContainerClass('animate-fade-out');
+    setTimeout(() => {
+        setIsLoginMode(newMode);
+        form.reset(
+          newMode
           ? { email: '', password: '' }
           : { displayName: '', email: '', password: '', confirmPassword: '' }
-      );
-    }
-  }, [isLoginMode, form, isSpinning]);
+        );
+        setFormContainerClass('animate-fade-in');
+    }, 300); // Must match fade-out duration
+  }
 
   const onLogin: SubmitHandler<LoginCredentials> = async (data) => {
     await loginWithEmailPassword(data);
@@ -64,6 +71,7 @@ function LoginComponent() {
   };
 
   const onSubmit = (data: FormData) => {
+    if (loading) return;
     if (isLoginMode) {
       onLogin(data as LoginCredentials);
     } else {
@@ -71,178 +79,123 @@ function LoginComponent() {
     }
   };
 
-  const handleAnimationAndSwitch = (switchToLogin: boolean) => {
-    if (isSpinning) return;
-    setIsSpinning(true);
-    setTimeout(() => {
-      setIsLoginMode(switchToLogin);
-      setIsSpinning(false);
-    }, 500); // Must match animation duration
-  };
-
-  const handleSwitchToSignUp = () => handleAnimationAndSwitch(false);
-  const handleSwitchToLogin = () => handleAnimationAndSwitch(true);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  if (user && !loading) return null;
-
-  const wheelStyle = {
-    backgroundImage: `conic-gradient(
-      from 90deg,
-      #991B1B 0deg 22.5deg, #FEF2F2 22.5deg 45deg,
-      #047857 45deg 67.5deg, #7C3AED 67.5deg 90deg,
-      #DC2626 90deg 112.5deg, #FDE68A 112.5deg 135deg,
-      #1D4ED8 135deg 157.5deg, #047857 157.5deg 180deg,
-      #991B1B 180deg 202.5deg, #FEF2F2 202.5deg 225deg,
-      #047857 225deg 247.5deg, #7C3AED 247.5deg 270deg,
-      #DC2626 270deg 292.5deg, #FDE68A 292.5deg 315deg,
-      #1D4ED8 315deg 337.5deg, #047857 337.5deg 360deg
-    )`
-  };
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
-      <div
-        className={cn(
-          "relative w-[450px] h-[450px] rounded-full overflow-hidden flex items-center justify-center border-gray-400/30",
-          isSpinning && "animate-spin-once"
-        )}
-        style={wheelStyle}
-      >
-        <div className="absolute w-full h-full bg-black/30 rounded-full backdrop-blur-sm"></div>
-
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full border-4 border-gray-500 z-20 overflow-hidden bg-background">
-          {appSettings.logoUrl && (
+    <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-background via-secondary to-accent">
+      <Card className="w-full max-w-md shadow-2xl border-primary/20 bg-card/80 backdrop-blur-lg animate-fade-in">
+        <CardHeader className="text-center space-y-2">
+           {appSettings.logoUrl && (
             <Image
               src={appSettings.logoUrl}
               alt="Spinify Logo"
-              width={80}
-              height={80}
-              className="h-full w-full object-cover"
+              width={64}
+              height={64}
+              className="h-16 w-16 mx-auto rounded-full border-2 border-primary shadow-lg"
               priority
             />
           )}
-        </div>
-
-        <div className="relative z-10 w-full flex flex-col items-center justify-center p-8">
+          <div className={formContainerClass}>
+            <CardTitle className="text-3xl font-bold font-headline text-primary">
+              {isLoginMode ? 'Welcome Back!' : 'Create an Account'}
+            </CardTitle>
+            <CardDescription className="text-muted-foreground pt-1">
+              {isLoginMode ? 'Log in to continue your adventure.' : 'Get started with Spinify today!'}
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className={cn("transition-opacity duration-300", formContainerClass)}>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="w-64 space-y-3">
-              {!isSpinning ? (
-                <>
-                  {!isLoginMode && (
-                    <FormField
-                      control={form.control}
-                      name="displayName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              placeholder="Name"
-                              {...field}
-                              className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                            />
-                          </FormControl>
-                          <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                        </FormItem>
-                      )}
-                    />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {!isLoginMode && (
+                <FormField
+                  control={form.control}
+                  name="displayName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                          <Input placeholder="Enter your name" {...field} className="pl-10" />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="Email"
-                            {...field}
-                            className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                          />
-                        </FormControl>
-                        <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            type="password"
-                            placeholder="Password"
-                            {...field}
-                            className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                          />
-                        </FormControl>
-                        <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                      </FormItem>
-                    )}
-                  />
-                  {!isLoginMode && (
-                    <FormField
-                      control={form.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input
-                              type="password"
-                              placeholder="Confirm Password"
-                              {...field}
-                              className="bg-white/95 text-red-900 placeholder:text-red-900/60 font-semibold rounded-full border-2 border-red-200/50 text-center text-lg"
-                            />
-                          </FormControl>
-                           <FormMessage className="text-white bg-black/60 rounded px-2 text-xs text-center" />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-                </>
-              ) : (
-                <div className="h-[180px] w-full"></div>
+                />
               )}
-              
-              <div className="pt-8 space-y-3">
-                <Button
-                  type="button"
-                  onClick={isLoginMode ? form.handleSubmit(onSubmit) : handleSwitchToLogin}
-                  disabled={loading || isSpinning}
-                  className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
-                >
-                  Login
-                </Button>
-                <Button
-                   type="button"
-                   onClick={!isLoginMode ? form.handleSubmit(onSubmit) : handleSwitchToSignUp}
-                   disabled={loading || isSpinning}
-                   className="w-full bg-white text-red-900 font-bold text-lg rounded-full hover:bg-red-100 border-2 border-red-200"
-                >
-                  Sign Up
-                </Button>
-              </div>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                   <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input type="email" placeholder="you@example.com" {...field} className="pl-10" />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                   <FormItem>
+                     <div className="flex justify-between items-center">
+                        <FormLabel>Password</FormLabel>
+                        {isLoginMode && (
+                            <Link href="/forgot-password" className="text-sm font-medium text-primary hover:underline underline-offset-4">
+                                Forgot?
+                            </Link>
+                        )}
+                     </div>
+                    <FormControl>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input type="password" placeholder="••••••••" {...field} className="pl-10" />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {!isLoginMode && (
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                       <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                          <Input type="password" placeholder="••••••••" {...field} className="pl-10" />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              <Button type="submit" disabled={loading} className="w-full text-lg py-6 mt-2">
+                {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : (isLoginMode ? 'Log In' : 'Create Account')}
+              </Button>
             </form>
           </Form>
-
-          {!isSpinning && isLoginMode && (
-            <div className="text-center mt-4">
-              <Link href="/forgot-password" className="text-sm font-medium text-white hover:underline">
-                Forgot Password?
-              </Link>
-            </div>
-          )}
-
-        </div>
-      </div>
+        </CardContent>
+        <CardFooter className="flex justify-center">
+           <div className={cn("text-sm text-muted-foreground", formContainerClass)}>
+             {isLoginMode ? "Don't have an account?" : "Already have an account?"}
+             <Button variant="link" className="font-semibold text-primary" onClick={() => handleModeSwitch(!isLoginMode)}>
+               {isLoginMode ? 'Sign up' : 'Log in'}
+             </Button>
+           </div>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
@@ -255,3 +208,5 @@ export default function LoginPage() {
     </Suspense>
   )
 }
+
+    
