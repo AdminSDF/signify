@@ -1,14 +1,13 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star, CalendarDays, Swords } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -30,12 +29,21 @@ import {
   UserTournamentData,
   getAllTournaments,
   Tournament,
+  findUserByEmail,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  removeFriend,
+  cancelFriendRequest,
+  getFriendsAndRequests,
+  FriendAndRequestData,
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
 import { copyToClipboard } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 type PaymentMethod = "upi" | "bank";
@@ -46,6 +54,135 @@ const tierIcons: { [key: string]: React.ReactNode } = {
   'more-big': <Rocket className="mr-2 h-5 w-5" />,
   'stall-machine': <Star className="mr-2 h-5 w-5" />,
 };
+
+const FriendsTabContent: React.FC = () => {
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const [friendData, setFriendData] = useState<FriendAndRequestData>({ friends: [], incoming: [], outgoing: [] });
+    const [isLoading, setIsLoading] = useState(true);
+    const [searchEmail, setSearchEmail] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
+
+    const fetchData = useCallback(async () => {
+        if (!user) return;
+        setIsLoading(true);
+        try {
+            const data = await getFriendsAndRequests(user.uid);
+            setFriendData(data);
+        } catch (error) {
+            console.error("Error fetching friends data:", error);
+            toast({ title: 'Error', description: 'Could not load friends list.', variant: 'destructive' });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user, toast]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const handleSendRequest = async () => {
+        if (!user || !searchEmail) return;
+        setIsSearching(true);
+        try {
+            const result = await sendFriendRequest(user.uid, searchEmail);
+            if(result.success) {
+                toast({ title: 'Request Sent!', description: `Friend request sent to ${searchEmail}.` });
+                setSearchEmail('');
+                fetchData(); // Refresh data
+            } else {
+                toast({ title: 'Could Not Send Request', description: result.error, variant: 'destructive' });
+            }
+        } catch (error: any) {
+            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+        } finally {
+            setIsSearching(false);
+        }
+    };
+    
+    const handleAccept = async (requestingUserId: string) => {
+        if (!user) return;
+        await acceptFriendRequest(user.uid, requestingUserId);
+        toast({ title: "Friend Added!" });
+        fetchData();
+    };
+
+    const handleReject = async (requestingUserId: string) => {
+        if (!user) return;
+        await rejectFriendRequest(user.uid, requestingUserId);
+        toast({ title: "Request Rejected" });
+        fetchData();
+    };
+
+    const handleCancel = async (receivingUserId: string) => {
+        if (!user) return;
+        await cancelFriendRequest(user.uid, receivingUserId);
+        toast({ title: "Request Cancelled" });
+        fetchData();
+    };
+
+    const handleRemove = async (friendId: string) => {
+        if (!user) return;
+        await removeFriend(user.uid, friendId);
+        toast({ title: "Friend Removed" });
+        fetchData();
+    };
+
+    const renderUserCard = (u: UserDocument, actions: React.ReactNode) => (
+      <div key={u.uid} className="flex items-center justify-between p-2 border rounded-md">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-10 w-10"><AvatarImage src={u.photoURL || undefined} /><AvatarFallback>{u.displayName?.[0]}</AvatarFallback></Avatar>
+          <div>
+            <p className="font-semibold">{u.displayName}</p>
+            <p className="text-xs text-muted-foreground">{u.email}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">{actions}</div>
+      </div>
+    );
+    
+    return (
+        <div className="space-y-6">
+            <Card className="p-4 pt-2 bg-card shadow-md">
+                <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><UserPlus className="mr-2 h-6 w-6"/>Add a Friend</CardTitle></CardHeader>
+                <CardContent className="space-y-2 p-2">
+                   <Label htmlFor="friend-email">Find by Email</Label>
+                   <div className="flex gap-2">
+                       <Input id="friend-email" type="email" placeholder="friend@example.com" value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} disabled={isSearching} />
+                       <Button onClick={handleSendRequest} disabled={isSearching || !searchEmail}>
+                         {isSearching ? 'Sending...' : <Send className="h-4 w-4" />}
+                       </Button>
+                   </div>
+                </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Incoming Requests ({friendData.incoming.length})</h3>
+                {isLoading ? <Skeleton className="h-16 w-full" /> : friendData.incoming.length > 0 ? (
+                    friendData.incoming.map(u => renderUserCard(u, <>
+                        <Button size="sm" onClick={() => handleAccept(u.uid)}><UserCheck className="mr-2 h-4 w-4" />Accept</Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleReject(u.uid)}><UserX className="mr-2 h-4 w-4"/>Reject</Button>
+                    </>))
+                ) : <p className="text-sm text-muted-foreground">No incoming friend requests.</p>}
+            </div>
+
+            <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Friends ({friendData.friends.length})</h3>
+                {isLoading ? <Skeleton className="h-16 w-full" /> : friendData.friends.length > 0 ? (
+                    friendData.friends.map(u => renderUserCard(u, <Button size="sm" variant="outline" onClick={() => handleRemove(u.uid)}><UserMinus className="mr-2 h-4 w-4"/>Remove</Button>))
+                ) : <p className="text-sm text-muted-foreground">You haven't added any friends yet.</p>}
+            </div>
+            
+             <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Sent Requests ({friendData.outgoing.length})</h3>
+                {isLoading ? <Skeleton className="h-16 w-full" /> : friendData.outgoing.length > 0 ? (
+                    friendData.outgoing.map(u => renderUserCard(u, <Button size="sm" variant="ghost" onClick={() => handleCancel(u.uid)}>Cancel</Button>))
+                ) : <p className="text-sm text-muted-foreground">No pending sent requests.</p>}
+            </div>
+        </div>
+    );
+};
+
 
 export default function ProfilePage() {
   const { user, userData, loading, appSettings } = useAuth();
@@ -403,8 +540,9 @@ export default function ProfilePage() {
           <CardContent className="space-y-6">
               
               <Tabs defaultValue="wallets" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="wallets">Wallets</TabsTrigger>
+                  <TabsTrigger value="friends">Friends</TabsTrigger>
                   <TabsTrigger value="tournaments">My Tournaments</TabsTrigger>
                   <TabsTrigger value="referrals">Referrals</TabsTrigger>
                   <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -442,6 +580,9 @@ export default function ProfilePage() {
                       ))}
                     </Tabs>
                   </div>
+                </TabsContent>
+                 <TabsContent value="friends" className="pt-4">
+                    <FriendsTabContent />
                 </TabsContent>
                 <TabsContent value="tournaments" className="pt-4">
                    <Card className="p-4 pt-2 bg-card shadow-md">

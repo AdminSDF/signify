@@ -117,6 +117,10 @@ export interface UserDocument {
   manualWinRateOverride?: number | null; // Admin-set override (0 to 1)
   recentSpinHistory: ('win' | 'loss')[]; // To track last few spins
   vipUntil?: Timestamp | null;
+  // Social Features
+  friends?: string[];
+  friendRequestsSent?: string[];
+  friendRequestsReceived?: string[];
 }
 
 export const createUserData = async (
@@ -183,6 +187,9 @@ export const createUserData = async (
     manualWinRateOverride: null,
     recentSpinHistory: [],
     vipUntil: null,
+    friends: [],
+    friendRequestsSent: [],
+    friendRequestsReceived: [],
   };
 
   const userRewardData: UserRewardData = {
@@ -576,7 +583,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-  const globalStatsRef = doc(db, SYSTEM_STATS_COLlection, GLOBAL_STATS_DOC_ID);
+  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
 
   const [userSnap, appConfig] = await Promise.all([
     getDoc(userRef),
@@ -1102,6 +1109,166 @@ export const getUserTournaments = async (userId: string): Promise<UserTournament
   );
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => doc.data() as UserTournamentData);
+};
+
+
+// --- Social & Friends Functions ---
+
+export const findUserByEmail = async (email: string): Promise<UserDocument | null> => {
+  const q = query(collection(db, USERS_COLLECTION), where("email", "==", email), limit(1));
+  const querySnapshot = await getDocs(q);
+  if (querySnapshot.empty) {
+    return null;
+  }
+  return querySnapshot.docs[0].data() as UserDocument;
+};
+
+export interface Notification {
+  id: string;
+  title: string;
+  body: string;
+  type: 'friend_request' | 'challenge_invite' | 'info';
+  actionLink?: string;
+  isRead: boolean;
+  createdAt: Timestamp;
+}
+
+export const sendFriendRequest = async (senderId: string, receiverEmail: string): Promise<{success: boolean, error?: string}> => {
+  if (!senderId || !receiverEmail) return { success: false, error: "Invalid data provided."};
+  const senderRef = doc(db, USERS_COLLECTION, senderId);
+  
+  const receiver = await findUserByEmail(receiverEmail);
+  if (!receiver) return { success: false, error: "User with that email not found."};
+  if (receiver.uid === senderId) return { success: false, error: "You cannot send a friend request to yourself."};
+
+  const receiverRef = doc(db, USERS_COLLECTION, receiver.uid);
+  const senderDoc = await getDoc(senderRef);
+  const senderData = senderDoc.data() as UserDocument;
+
+  if (senderData.friends?.includes(receiver.uid)) return { success: false, error: "You are already friends with this user."};
+  if (senderData.friendRequestsSent?.includes(receiver.uid)) return { success: false, error: "You have already sent a request to this user."};
+  
+  const batch = writeBatch(db);
+  batch.update(senderRef, { friendRequestsSent: arrayUnion(receiver.uid) });
+  batch.update(receiverRef, { friendRequestsReceived: arrayUnion(senderId) });
+  
+  // Create notification for receiver
+  const notificationRef = doc(collection(db, 'users', receiver.uid, 'notifications'));
+  batch.set(notificationRef, {
+      title: "New Friend Request",
+      body: `${senderData.displayName || senderData.email} sent you a friend request.`,
+      type: "friend_request",
+      actionLink: "/profile",
+      isRead: false,
+      createdAt: Timestamp.now()
+  });
+
+  await batch.commit();
+  return { success: true };
+};
+
+export const acceptFriendRequest = async (currentUserId: string, requestingUserId: string) => {
+  const currentUserRef = doc(db, USERS_COLLECTION, currentUserId);
+  const requestingUserRef = doc(db, USERS_COLLECTION, requestingUserId);
+  const currentUserDoc = await getDoc(currentUserRef);
+  const currentUserData = currentUserDoc.data() as UserDocument;
+
+  const batch = writeBatch(db);
+  
+  // Update both users' documents
+  batch.update(currentUserRef, {
+    friendRequestsReceived: arrayRemove(requestingUserId),
+    friends: arrayUnion(requestingUserId)
+  });
+  batch.update(requestingUserRef, {
+    friendRequestsSent: arrayRemove(currentUserId),
+    friends: arrayUnion(currentUserId)
+  });
+
+  // Create notification for the user who sent the request
+  const notificationRef = doc(collection(db, 'users', requestingUserId, 'notifications'));
+  batch.set(notificationRef, {
+      title: "Friend Request Accepted",
+      body: `${currentUserData.displayName || currentUserData.email} accepted your request.`,
+      type: "info",
+      actionLink: "/profile",
+      isRead: false,
+      createdAt: Timestamp.now()
+  });
+
+  await batch.commit();
+};
+
+export const rejectFriendRequest = async (currentUserId: string, requestingUserId: string) => {
+  const currentUserRef = doc(db, USERS_COLLECTION, currentUserId);
+  const requestingUserRef = doc(db, USERS_COLLECTION, requestingUserId);
+  
+  const batch = writeBatch(db);
+  batch.update(currentUserRef, { friendRequestsReceived: arrayRemove(requestingUserId) });
+  batch.update(requestingUserRef, { friendRequestsSent: arrayRemove(currentUserId) });
+  await batch.commit();
+};
+
+export const cancelFriendRequest = async (senderId: string, receiverId: string) => {
+    return rejectFriendRequest(receiverId, senderId); // Same logic
+};
+
+export const removeFriend = async (currentUserId: string, friendId: string) => {
+  const currentUserRef = doc(db, USERS_COLLECTION, currentUserId);
+  const friendRef = doc(db, USERS_COLLECTION, friendId);
+  
+  const batch = writeBatch(db);
+  batch.update(currentUserRef, { friends: arrayRemove(friendId) });
+  batch.update(friendRef, { friends: arrayRemove(currentUserId) });
+  await batch.commit();
+};
+
+export interface FriendAndRequestData {
+    friends: UserDocument[];
+    incoming: UserDocument[];
+    outgoing: UserDocument[];
+}
+export const getFriendsAndRequests = async (userId: string): Promise<FriendAndRequestData> => {
+    const userDoc = await getDoc(doc(db, USERS_COLLECTION, userId));
+    if (!userDoc.exists()) throw new Error("User not found");
+    const userData = userDoc.data() as UserDocument;
+
+    const friendIds = userData.friends || [];
+    const incomingIds = userData.friendRequestsReceived || [];
+    const outgoingIds = userData.friendRequestsSent || [];
+    
+    const allIds = [...new Set([...friendIds, ...incomingIds, ...outgoingIds])];
+    
+    if (allIds.length === 0) {
+        return { friends: [], incoming: [], outgoing: [] };
+    }
+
+    // Fetch all user documents in one go
+    const userDocs = await Promise.all(allIds.map(id => getDoc(doc(db, USERS_COLLECTION, id))));
+    const userMap = new Map(userDocs.map(d => [d.id, d.data() as UserDocument]).filter(entry => entry[1]));
+
+    return {
+        friends: friendIds.map(id => userMap.get(id)).filter(Boolean) as UserDocument[],
+        incoming: incomingIds.map(id => userMap.get(id)).filter(Boolean) as UserDocument[],
+        outgoing: outgoingIds.map(id => userMap.get(id)).filter(Boolean) as UserDocument[],
+    };
+};
+
+export const getNotifications = (userId: string, callback: (notifications: Notification[]) => void): (() => void) => {
+    const q = query(
+        collection(db, 'users', userId, 'notifications'),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+    );
+    return onSnapshot(q, (querySnapshot) => {
+        const notifications = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+        callback(notifications);
+    });
+};
+
+export const markNotificationAsRead = async (userId: string, notificationId: string): Promise<void> => {
+    const notifRef = doc(db, 'users', userId, 'notifications', notificationId);
+    await updateDoc(notifRef, { isRead: true });
 };
 
 
