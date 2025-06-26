@@ -138,7 +138,7 @@ export default function GameSelectionPage() {
           </div>
         )}
         <CardHeader>
-          <Image src={appSettings.logoUrl} alt={`${config.name} Logo`} width={64} height={64} className="h-16 w-16 mx-auto animate-glow-pulse rounded-full" />
+          <Image src={appSettings.logoUrl} alt={`${config.name} Logo`} width={64} height={64} className="h-16 w-16 mx-auto animate-glow-pulse rounded-full" priority />
           <CardTitle className="text-3xl font-bold text-primary mt-4">{config.name}</CardTitle>
           <CardDescription className="text-muted-foreground mt-1 text-base">{config.description}</CardDescription>
         </CardHeader>
