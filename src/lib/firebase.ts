@@ -50,6 +50,27 @@ const firebaseConfig: FirebaseOptions = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// Check for missing configuration on both client and server.
+const requiredConfigKeys: (keyof FirebaseOptions)[] = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'appId'];
+const missingKeys = requiredConfigKeys.filter(key => !firebaseConfig[key]);
+
+if (missingKeys.length > 0) {
+  const envVarMap: { [key: string]: string } = {
+    apiKey: 'NEXT_PUBLIC_GOOGLE_API_KEY',
+    authDomain: 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+    projectId: 'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+    storageBucket: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+    appId: 'NEXT_PUBLIC_FIREBASE_APP_ID',
+  };
+  const missingEnvVars = missingKeys.map(key => envVarMap[key as keyof typeof envVarMap] || key);
+
+  const errorMessage = `FIREBASE_INIT_ERROR: Aapki .env file mein Firebase ki zaroori jaankari nahi hai. Kripya neeche di gayi keys ko apne Firebase project se copy karke .env file mein daalein: ${missingEnvVars.join(', ')}. ` +
+    "Yeh jaankari aapko Firebase project settings (gear icon -> Project settings -> General -> Your apps -> SDK setup and configuration -> Config) mein milegi.";
+  // Throw an error to stop execution and make the problem clear in the console.
+  throw new Error(errorMessage);
+}
+
+
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
