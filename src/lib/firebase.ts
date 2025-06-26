@@ -33,6 +33,7 @@ import {
   increment,
   arrayUnion,
   arrayRemove,
+  runTransaction,
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig, RewardConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
@@ -69,6 +70,8 @@ const FRAUD_ALERTS_COLLECTION = 'fraudAlerts';
 const SYSTEM_STATS_COLLECTION = 'systemStats';
 const GLOBAL_STATS_DOC_ID = 'global';
 const USER_REWARDS_COLLECTION = 'userRewards';
+const TOURNAMENTS_COLLECTION = 'tournaments';
+const USER_TOURNAMENTS_COLLECTION = 'userTournaments';
 
 
 // --- User Functions ---
@@ -245,7 +248,7 @@ export const getAllUsers = async (
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (UserDocument & {id: string})));
 };
 
-export const getLeaderboardUsers = async (count: number = 20): Promise<UserDocument[]> => {
+export const getLeaderboardUsers = async (count: number = 50): Promise<UserDocument[]> => {
   const q = query(
     collection(db, USERS_COLLECTION),
     orderBy("totalWinnings", "desc"),
@@ -573,7 +576,7 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
   const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
-  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
+  const globalStatsRef = doc(db, SYSTEM_STATS_COLlection, GLOBAL_STATS_DOC_ID);
 
   const [userSnap, appConfig] = await Promise.all([
     getDoc(userRef),
@@ -953,6 +956,152 @@ export const claimDailyReward = async (userId: string, config: RewardConfig): Pr
 
   await batch.commit();
   return { message: rewardMessage };
+};
+
+
+// --- Tournament Functions ---
+export interface TournamentReward {
+  rank: number;
+  prize: number;
+  type: 'cash' | 'spins';
+}
+
+export interface Tournament {
+  id?: string;
+  name: string;
+  description: string;
+  type: 'daily' | 'weekly' | 'monthly' | 'special';
+  startDate: Timestamp;
+  endDate: Timestamp;
+  entryFee: number;
+  tierId: string; // Which balance to use for entry fee
+  prizePool: number;
+  status: 'upcoming' | 'active' | 'ended' | 'cancelled';
+  participants: string[];
+  rewards: TournamentReward[];
+  createdBy: string; // admin UID
+}
+
+export interface UserTournamentData {
+  id?: string; // combination of userId and tournamentId
+  userId: string;
+  userDisplayName: string;
+  userPhotoURL?: string;
+  tournamentId: string;
+  score: number;
+  rank?: number;
+  prizeWon?: TournamentReward;
+}
+
+export const createTournament = async (tournament: Omit<Tournament, 'id' | 'status' | 'participants'>, adminId: string): Promise<string> => {
+  const docRef = await addDoc(collection(db, TOURNAMENTS_COLLECTION), {
+    ...tournament,
+    status: 'upcoming',
+    participants: [],
+    createdBy: adminId,
+  });
+  return docRef.id;
+};
+
+export const getAllTournaments = async (): Promise<(Tournament & { id: string })[]> => {
+  const q = query(collection(db, TOURNAMENTS_COLLECTION), orderBy('startDate', 'desc'));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (Tournament & { id: string })));
+};
+
+export const joinTournament = async (tournamentId: string, userId: string): Promise<void> => {
+  await runTransaction(db, async (transaction) => {
+    const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, tournamentId);
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    const userTournamentRef = doc(db, USER_TOURNAMENTS_COLLECTION, `${userId}_${tournamentId}`);
+
+    const [tournamentDoc, userDoc, userTournamentDoc] = await Promise.all([
+      transaction.get(tournamentRef),
+      transaction.get(userRef),
+      transaction.get(userTournamentRef)
+    ]);
+
+    if (!tournamentDoc.exists()) throw new Error("Tournament not found.");
+    if (!userDoc.exists()) throw new Error("User not found.");
+    if (userTournamentDoc.exists()) throw new Error("You have already joined this tournament.");
+
+    const tournament = tournamentDoc.data() as Tournament;
+    const user = userDoc.data() as UserDocument;
+
+    if (tournament.status !== 'active') throw new Error("This tournament is not active.");
+    if (user.balances[tournament.tierId] < tournament.entryFee) {
+      throw new Error(`Insufficient balance in ${tournament.tierId} wallet.`);
+    }
+
+    // Deduct entry fee
+    const newBalance = user.balances[tournament.tierId] - tournament.entryFee;
+    transaction.update(userRef, { [`balances.${tournament.tierId}`]: newBalance });
+
+    // Add user to participants list
+    transaction.update(tournamentRef, { participants: arrayUnion(userId) });
+
+    // Create user tournament data
+    const newUserTournamentData: UserTournamentData = {
+      userId,
+      userDisplayName: user.displayName || 'N/A',
+      userPhotoURL: user.photoURL || undefined,
+      tournamentId,
+      score: 0,
+    };
+    transaction.set(userTournamentRef, newUserTournamentData);
+  });
+};
+
+export const getTournamentParticipants = async (tournamentId: string): Promise<UserTournamentData[]> => {
+  const q = query(
+    collection(db, USER_TOURNAMENTS_COLLECTION),
+    where('tournamentId', '==', tournamentId),
+    orderBy('score', 'desc')
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => doc.data() as UserTournamentData);
+};
+
+export const endTournamentAndDistributePrizes = async (tournamentId: string): Promise<void> => {
+  const batch = writeBatch(db);
+  const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, tournamentId);
+  const tournamentDoc = await getDoc(tournamentRef);
+
+  if (!tournamentDoc.exists()) throw new Error("Tournament not found.");
+  const tournament = tournamentDoc.data() as Tournament;
+
+  if (tournament.status === 'ended') throw new Error("Tournament has already ended.");
+
+  const participants = await getTournamentParticipants(tournamentId);
+
+  tournament.rewards.forEach((reward, index) => {
+    if (index < participants.length) {
+      const winner = participants[index];
+      const winnerRef = doc(db, USERS_COLLECTION, winner.userId);
+      const winnerTournamentRef = doc(db, USER_TOURNAMENTS_COLLECTION, `${winner.userId}_${tournamentId}`);
+      
+      batch.update(winnerTournamentRef, { prizeWon: reward, rank: reward.rank });
+
+      if (reward.type === 'cash') {
+        batch.update(winnerRef, { 'balances.little': increment(reward.prize) });
+      } else if (reward.type === 'spins') {
+        batch.update(winnerRef, { spinsAvailable: increment(reward.prize) });
+      }
+    }
+  });
+
+  batch.update(tournamentRef, { status: 'ended' });
+
+  await batch.commit();
+};
+
+export const getUserTournaments = async (userId: string): Promise<UserTournamentData[]> => {
+  const q = query(
+    collection(db, USER_TOURNAMENTS_COLLECTION),
+    where('userId', '==', userId)
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => doc.data() as UserTournamentData);
 };
 
 

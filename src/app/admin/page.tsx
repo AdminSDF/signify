@@ -21,7 +21,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
@@ -51,7 +51,14 @@ import {
   getGlobalStats,
   GlobalStats,
   db,
-  UserDocument
+  UserDocument,
+  Tournament,
+  createTournament,
+  getAllTournaments,
+  getTournamentParticipants,
+  UserTournamentData,
+  endTournamentAndDistributePrizes,
+  TournamentReward,
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
@@ -59,6 +66,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Slider } from '@/components/ui/slider';
 import { collection, onSnapshot, query } from 'firebase/firestore';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
@@ -107,7 +118,7 @@ const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
     return 'N/A';
 };
 
-const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'datetime'): string => {
+const formatDisplayDate = (dateInput: any, formatType: 'datetime' | 'date' = 'datetime'): string => {
     if (!dateInput) return 'N/A';
     
     let dateObj: Date;
@@ -123,10 +134,10 @@ const formatDisplayDate = (dateInput: any, format: 'datetime' | 'date' = 'dateti
       return 'N/A';
     }
   
-    if (format === 'date') {
-      return dateObj.toLocaleDateString();
+    if (formatType === 'date') {
+      return format(dateObj, "PPP");
     }
-    return dateObj.toLocaleString();
+    return format(dateObj, "Pp");
 };
 
 const StatCard = ({ title, value, icon, description }: { title: string, value: string | number, icon: React.ReactNode, description?: string }) => (
@@ -167,6 +178,10 @@ export default function AdminPage() {
   const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [fraudAlerts, setFraudAlerts] = useState<(FraudAlertData & {id: string})[]>([]);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
+  const [allTournaments, setAllTournaments] = useState<(Tournament & { id: string })[]>([]);
+  const [isTournamentModalOpen, setIsTournamentModalOpen] = useState(false);
+  const [viewingTournamentParticipants, setViewingTournamentParticipants] = useState<(UserTournamentData[]) | null>(null);
+  const [currentTournamentForView, setCurrentTournamentForView] = useState<string | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
@@ -228,7 +243,7 @@ export default function AdminPage() {
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const [withdrawals, adds, transactions, leaderboardUsers, tickets, summary, alerts, stats] = await Promise.all([
+      const [withdrawals, adds, transactions, leaderboardUsers, tickets, summary, alerts, stats, tournaments] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
         getAllTransactions(),
@@ -237,6 +252,7 @@ export default function AdminPage() {
         getActivitySummary(1),
         getFraudAlerts(),
         getGlobalStats(),
+        getAllTournaments(),
       ]);
       setWithdrawalRequests(withdrawals);
       setAddFundRequests(adds);
@@ -246,6 +262,7 @@ export default function AdminPage() {
       setActivitySummary(summary);
       setFraudAlerts(alerts);
       setGlobalStats(stats);
+      setAllTournaments(tournaments);
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
@@ -535,6 +552,29 @@ export default function AdminPage() {
       }
       setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, streakBonuses: updatedBonuses}}));
   };
+  
+  const handleViewParticipants = async (tournamentId: string) => {
+    setCurrentTournamentForView(tournamentId);
+    setViewingTournamentParticipants([]);
+    try {
+      const participants = await getTournamentParticipants(tournamentId);
+      setViewingTournamentParticipants(participants);
+    } catch (error) {
+      console.error("Error fetching tournament participants", error);
+      toast({ title: "Error", description: "Could not fetch participants.", variant: "destructive"});
+    }
+  };
+
+  const handleDistributePrizes = async (tournamentId: string) => {
+    try {
+      await endTournamentAndDistributePrizes(tournamentId);
+      toast({ title: "Prizes Distributed!", description: "The tournament has ended and prizes have been sent."});
+      fetchAdminData();
+    } catch (error: any) {
+       console.error("Error distributing prizes", error);
+       toast({ title: "Error", description: `Could not distribute prizes: ${error.message}`, variant: "destructive"});
+    }
+  };
 
 
   if (loading) {
@@ -575,6 +615,7 @@ export default function AdminPage() {
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-12 gap-2 mb-6 h-auto flex-wrap">
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
+              <TabsTrigger value="tournaments"><Swords className="mr-2 h-4 w-4"/>Tournaments</TabsTrigger>
               <TabsTrigger value="activity"><Activity className="mr-2 h-4 w-4"/>Activity</TabsTrigger>
               <TabsTrigger value="winning-rules"><BrainCircuit className="mr-2 h-4 w-4"/>Winning Rules</TabsTrigger>
               <TabsTrigger value="daily-rewards"><Gift className="mr-2 h-4 w-4"/>Daily Rewards</TabsTrigger>
@@ -804,6 +845,52 @@ export default function AdminPage() {
                     </TableBody></Table></CardContent></Card>
             </TabsContent>
             
+             <TabsContent value="tournaments">
+                <Card className="bg-muted/20">
+                    <CardHeader>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle className="flex items-center gap-2"><Swords/> Tournament Management</CardTitle>
+                                <CardDescription>Create, monitor, and manage tournaments.</CardDescription>
+                            </div>
+                            <Button onClick={() => setIsTournamentModalOpen(true)}><PlusCircle className="mr-2 h-4 w-4"/>Create Tournament</Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Dates</TableHead>
+                                    <TableHead>Participants</TableHead>
+                                    <TableHead>Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isLoadingData ? (
+                                    <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading tournaments...</TableCell></TableRow>
+                                ) : allTournaments.map((t) => (
+                                    <TableRow key={t.id}>
+                                        <TableCell className="font-bold">{t.name}</TableCell>
+                                        <TableCell>{t.type}</TableCell>
+                                        <TableCell><Badge variant={t.status === 'active' ? 'default' : t.status === 'ended' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell>
+                                        <TableCell>{formatDisplayDate(t.startDate, 'date')} to {formatDisplayDate(t.endDate, 'date')}</TableCell>
+                                        <TableCell>{t.participants?.length || 0}</TableCell>
+                                        <TableCell className="flex gap-2">
+                                            <Button variant="outline" size="sm" onClick={() => handleViewParticipants(t.id!)}>View</Button>
+                                            {t.status === 'active' && <Button variant="destructive" size="sm" onClick={() => handleDistributePrizes(t.id!)}>End & Distribute</Button>}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {!isLoadingData && allTournaments.length === 0 && <TableRow><TableCell colSpan={6} className="text-center h-24">No tournaments found.</TableCell></TableRow>}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
             <TabsContent value="activity">
               <Card className="bg-muted/20">
                 <CardHeader><CardTitle className="flex items-center gap-2"><BarChart2 /> User Activity</CardTitle><CardDescription>Unique active users based on time of day (last 24 hours).</CardDescription></CardHeader>
@@ -1281,7 +1368,135 @@ export default function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <CreateTournamentDialog 
+        isOpen={isTournamentModalOpen} 
+        onClose={() => setIsTournamentModalOpen(false)}
+        adminId={user.uid}
+        onTournamentCreated={fetchAdminData}
+      />
+      
+      <Dialog open={!!viewingTournamentParticipants} onOpenChange={() => setViewingTournamentParticipants(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Tournament Participants</DialogTitle>
+            <DialogDescription>
+              Live leaderboard for {allTournaments.find(t => t.id === currentTournamentForView)?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <Table>
+            <TableHeader><TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead>Score</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {!viewingTournamentParticipants || viewingTournamentParticipants.length === 0 ? (
+                <TableRow><TableCell colSpan={3} className="text-center h-24">No participants yet.</TableCell></TableRow>
+              ) : (
+                viewingTournamentParticipants.map((p, index) => (
+                  <TableRow key={p.userId}>
+                    <TableCell className="font-bold">{index + 1}</TableCell>
+                    <TableCell className="flex items-center gap-2">
+                      <Avatar className="w-8 h-8"><AvatarImage src={p.userPhotoURL}/><AvatarFallback>{p.userDisplayName[0]}</AvatarFallback></Avatar>
+                      {p.userDisplayName}
+                    </TableCell>
+                    <TableCell>{p.score}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
 }
+
+
+// --- Create Tournament Dialog Component ---
+const CreateTournamentDialog = ({ isOpen, onClose, adminId, onTournamentCreated }: { isOpen: boolean, onClose: () => void, adminId: string, onTournamentCreated: () => void }) => {
+  const { toast } = useToast();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState<'daily' | 'weekly' | 'monthly' | 'special'>('weekly');
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
+  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [entryFee, setEntryFee] = useState('0');
+  const [prizePool, setPrizePool] = useState('1000');
+  const [tierId, setTierId] = useState('little');
+  const [rewards, setRewards] = useState<TournamentReward[]>([
+    { rank: 1, prize: 500, type: 'cash' },
+    { rank: 2, prize: 300, type: 'cash' },
+    { rank: 3, prize: 200, type: 'cash' },
+  ]);
+
+  const handleAddReward = () => setRewards([...rewards, { rank: rewards.length + 1, prize: 0, type: 'cash' }]);
+  const handleRemoveReward = (index: number) => setRewards(rewards.filter((_, i) => i !== index));
+  const handleRewardChange = (index: number, field: keyof TournamentReward, value: any) => {
+    const newRewards = [...rewards];
+    if(field === 'prize' || field === 'rank') {
+      newRewards[index][field] = parseInt(value, 10) || 0;
+    } else {
+      newRewards[index][field] = value;
+    }
+    setRewards(newRewards);
+  };
+
+  const handleSubmit = async () => {
+    if (!name || !description || !startDate || !endDate || rewards.length === 0) {
+      toast({ title: 'Missing Fields', description: 'Please fill out all required fields.', variant: 'destructive' });
+      return;
+    }
+    try {
+      await createTournament({
+        name,
+        description,
+        type,
+        startDate: Timestamp.fromDate(startDate),
+        endDate: Timestamp.fromDate(endDate),
+        entryFee: parseFloat(entryFee),
+        prizePool: parseFloat(prizePool),
+        tierId,
+        rewards
+      }, adminId);
+      toast({ title: 'Tournament Created!', description: `${name} has been scheduled.` });
+      onTournamentCreated();
+      onClose();
+    } catch (error: any) {
+      console.error("Error creating tournament:", error);
+      toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>Create New Tournament</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+          <div className="space-y-2"><Label>Name</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Monsoon Madness" /></div>
+          <div className="space-y-2"><Label>Type</Label><Select value={type} onValueChange={(v) => setType(v as any)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="daily">Daily</SelectItem><SelectItem value="weekly">Weekly</SelectItem><SelectItem value="monthly">Monthly</SelectItem><SelectItem value="special">Special</SelectItem></SelectContent></Select></div>
+          <div className="md:col-span-2 space-y-2"><Label>Description</Label><Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the tournament rules and details." /></div>
+          <div className="space-y-2"><Label>Start Date</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{startDate ? format(startDate, "PPP") : <span>Pick a date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus /></PopoverContent></Popover></div>
+          <div className="space-y-2"><Label>End Date</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, "PPP") : <span>Pick a date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus /></PopoverContent></Popover></div>
+          <div className="space-y-2"><Label>Entry Fee (₹)</Label><Input type="number" value={entryFee} onChange={e => setEntryFee(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Prize Pool (₹)</Label><Input type="number" value={prizePool} onChange={e => setPrizePool(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Entry Fee Wallet</Label><Select value={tierId} onValueChange={setTierId}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="little">Little Lux</SelectItem><SelectItem value="big">Big Bonanza</SelectItem><SelectItem value="more-big">Mega Millions</SelectItem><SelectItem value="stall-machine">Stall Machine</SelectItem></SelectContent></Select></div>
+        </div>
+        <div>
+          <Label>Reward Distribution</Label>
+          {rewards.map((r, i) => (
+            <div key={i} className="flex items-center gap-2 my-1">
+              <Input type="number" value={r.rank} onChange={e => handleRewardChange(i, 'rank', e.target.value)} placeholder="Rank" className="w-16" />
+              <Input type="number" value={r.prize} onChange={e => handleRewardChange(i, 'prize', e.target.value)} placeholder="Prize Amount" />
+              <Select value={r.type} onValueChange={v => handleRewardChange(i, 'type', v)}><SelectTrigger className="w-32"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="spins">Spins</SelectItem></SelectContent></Select>
+              <Button variant="destructive" size="icon" onClick={() => handleRemoveReward(i)}><Trash2 className="h-4 w-4"/></Button>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={handleAddReward} className="mt-2">Add Reward</Button>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit}>Create Tournament</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};

@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star, CalendarDays } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star, CalendarDays, Swords } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -25,12 +25,18 @@ import {
   logUserActivity,
   UserDocument,
   getUserRewardData,
-  UserRewardData
+  UserRewardData,
+  getUserTournaments,
+  UserTournamentData,
+  getAllTournaments,
+  Tournament,
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
 import { copyToClipboard } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+
 
 type PaymentMethod = "upi" | "bank";
 
@@ -67,6 +73,8 @@ export default function ProfilePage() {
   
   const [referralLink, setReferralLink] = useState('');
   const [userRewardData, setUserRewardData] = useState<UserRewardData | null>(null);
+  const [userTournaments, setUserTournaments] = useState<UserTournamentData[]>([]);
+  const [allTournaments, setAllTournaments] = useState<(Tournament & {id: string})[]>([]);
 
   useEffect(() => {
     if (user && userData) {
@@ -77,6 +85,8 @@ export default function ProfilePage() {
         setTimeout(() => setIsTourOpen(true), 500);
       }
       getUserRewardData(user.uid).then(setUserRewardData);
+      getUserTournaments(user.uid).then(setUserTournaments);
+      getAllTournaments().then(setAllTournaments); // Fetch all for name mapping
     }
   }, [user, userData, loading]);
 
@@ -392,93 +402,127 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="space-y-6">
               
-              <Card data-tour-id="daily-streak" className="p-4 pt-2 bg-card shadow-md">
-                <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><CalendarDays className="mr-2 h-6 w-6"/>Daily Streak</CardTitle></CardHeader>
-                <CardContent className="space-y-3 p-2">
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Current Streak</p>
-                    <p className="text-4xl font-bold text-primary">{currentStreak} Day{currentStreak !== 1 ? 's' : ''}</p>
+              <Tabs defaultValue="wallets" className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="wallets">Wallets</TabsTrigger>
+                  <TabsTrigger value="tournaments">My Tournaments</TabsTrigger>
+                  <TabsTrigger value="referrals">Referrals</TabsTrigger>
+                  <TabsTrigger value="settings">Settings</TabsTrigger>
+                </TabsList>
+                <TabsContent value="wallets" className="pt-4">
+                  <div data-tour-id="daily-streak" className="p-4 pt-2 bg-card shadow-md border rounded-lg mb-6">
+                    <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><CalendarDays className="mr-2 h-6 w-6"/>Daily Streak</CardTitle></CardHeader>
+                    <CardContent className="space-y-3 p-2">
+                      <div className="text-center">
+                        <p className="text-sm text-muted-foreground">Current Streak</p>
+                        <p className="text-4xl font-bold text-primary">{currentStreak} Day{currentStreak !== 1 ? 's' : ''}</p>
+                      </div>
+                      {nextBonus && (
+                        <div className="text-center">
+                          <Label>Next Bonus in {nextBonus.afterDays - currentStreak} Day{nextBonus.afterDays - currentStreak > 1 ? 's' : ''}</Label>
+                          <Progress value={(currentStreak / nextBonus.afterDays) * 100} className="w-full mt-1" />
+                          <p className="text-xs text-muted-foreground mt-1">Claim {nextBonus.emoji} {nextBonus.type === 'credit' ? `₹${nextBonus.value}` : `${nextBonus.value} Spins`} on Day {nextBonus.afterDays}</p>
+                        </div>
+                      )}
+                    </CardContent>
                   </div>
-                  {nextBonus && (
-                    <div className="text-center">
-                      <Label>Next Bonus in {nextBonus.afterDays - currentStreak} Day{nextBonus.afterDays - currentStreak > 1 ? 's' : ''}</Label>
-                      <Progress value={(currentStreak / nextBonus.afterDays) * 100} className="w-full mt-1" />
-                      <p className="text-xs text-muted-foreground mt-1">Claim {nextBonus.emoji} {nextBonus.type === 'credit' ? `₹${nextBonus.value}` : `${nextBonus.value} Spins`} on Day {nextBonus.afterDays}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              
-              <div data-tour-id="tier-selector-tabs">
-                <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
-                  <TabsList className="grid w-full grid-cols-4">
-                    {Object.values(appSettings.wheelConfigs).map(tier => (
-                        <TabsTrigger key={tier.id} value={tier.id} className="flex items-center gap-2">
-                            {tierIcons[tier.id]} {tier.name}
-                        </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  {Object.values(appSettings.wheelConfigs).map(tier => (
-                    <TabsContent key={tier.id} value={tier.id}>
-                        {renderWalletContent(tier)}
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              </div>
-
-              <Card data-tour-id="referral-system" className="p-4 pt-2 bg-card shadow-md">
-                <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><UsersIcon className="mr-2 h-6 w-6"/>Referral System</CardTitle></CardHeader>
-                <CardContent className="space-y-4 p-2">
-                  <div>
-                    <Label htmlFor="referralCode">Your Referral Code</Label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Input id="referralCode" type="text" readOnly value={userData.referralCode || 'N/A'} className="bg-muted"/>
-                      <Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode, 'Code')}><Copy className="w-4 h-4" /></Button>
-                    </div>
+                  <div data-tour-id="tier-selector-tabs">
+                    <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
+                      <TabsList className="grid w-full grid-cols-4">
+                        {Object.values(appSettings.wheelConfigs).map(tier => (
+                            <TabsTrigger key={tier.id} value={tier.id} className="flex items-center gap-2">
+                                {tierIcons[tier.id]} {tier.name}
+                            </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {Object.values(appSettings.wheelConfigs).map(tier => (
+                        <TabsContent key={tier.id} value={tier.id} className="pt-4">
+                            {renderWalletContent(tier)}
+                        </TabsContent>
+                      ))}
+                    </Tabs>
                   </div>
-                  <div>
-                    <Label htmlFor="referralLink">Your Referral Link</Label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Input id="referralLink" type="text" readOnly value={referralLink} className="bg-muted"/>
-                      <Button variant="outline" size="icon" onClick={() => handleCopy(referralLink, 'Link')}><Share2 className="w-4 h-4" /></Button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-center pt-2">
+                </TabsContent>
+                <TabsContent value="tournaments" className="pt-4">
+                   <Card className="p-4 pt-2 bg-card shadow-md">
+                    <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><Swords className="mr-2 h-6 w-6"/>My Tournaments</CardTitle></CardHeader>
+                     <CardContent className="space-y-2 p-2">
+                        {userTournaments.length === 0 ? (
+                            <p className="text-center text-muted-foreground py-4">You haven't joined any tournaments yet.</p>
+                        ) : (
+                          userTournaments.map(ut => {
+                            const tournamentDetails = allTournaments.find(t => t.id === ut.tournamentId);
+                            return (
+                              <div key={ut.id} className="border p-3 rounded-lg flex justify-between items-center">
+                                <div>
+                                  <p className="font-semibold">{tournamentDetails?.name || 'Tournament'}</p>
+                                  <p className="text-sm text-muted-foreground">Score: {ut.score}</p>
+                                </div>
+                                {ut.prizeWon && <Badge variant="default" className="bg-yellow-500 text-white">Rank #{ut.rank} - Won ₹{ut.prizeWon.prize}</Badge>}
+                              </div>
+                            )
+                          })
+                        )}
+                     </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="referrals" className="pt-4">
+                  <Card data-tour-id="referral-system" className="p-4 pt-2 bg-card shadow-md">
+                    <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><UsersIcon className="mr-2 h-6 w-6"/>Referral System</CardTitle></CardHeader>
+                    <CardContent className="space-y-4 p-2">
                       <div>
-                          <p className="text-sm text-muted-foreground">Successful Referrals</p>
-                          <p className="text-2xl font-bold text-primary">{userData.referrals?.length || 0}</p>
+                        <Label htmlFor="referralCode">Your Referral Code</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Input id="referralCode" type="text" readOnly value={userData.referralCode || 'N/A'} className="bg-muted"/>
+                          <Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode, 'Code')}><Copy className="w-4 h-4" /></Button>
+                        </div>
                       </div>
                       <div>
-                          <p className="text-sm text-muted-foreground">Total Earnings</p>
-                          <p className="text-2xl font-bold text-primary">₹{(userData.referralEarnings || 0).toFixed(2)}</p>
+                        <Label htmlFor="referralLink">Your Referral Link</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Input id="referralLink" type="text" readOnly value={referralLink} className="bg-muted"/>
+                          <Button variant="outline" size="icon" onClick={() => handleCopy(referralLink, 'Link')}><Share2 className="w-4 h-4" /></Button>
+                        </div>
                       </div>
-                  </div>
-                   <CardDescription className="text-xs text-center">New users get ₹{appSettings.referralBonusForNewUser} bonus. You get ₹{appSettings.referralBonusForReferrer} on their first deposit!</CardDescription>
-                </CardContent>
-              </Card>
-
-              <Card className="p-4 pt-2 bg-card shadow-md">
-                  <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline">Withdrawal Details</CardTitle></CardHeader>
-                  <CardContent className="space-y-4 p-2">
-                      <div>
-                          <Label>Payment Method</Label>
-                          <Select value={selectedPaymentMethod} onValueChange={(v) => setSelectedPaymentMethod(v as PaymentMethod)} disabled={isProcessing}>
-                          <SelectTrigger className="mt-1"><SelectValue placeholder="Select method" /></SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="upi"><div className="flex items-center"><Smartphone className="mr-2 h-4 w-4" />UPI</div></SelectItem>
-                              <SelectItem value="bank"><div className="flex items-center"><Library className="mr-2 h-4 w-4" />Bank Account</div></SelectItem>
-                          </SelectContent>
-                          </Select>
+                      <div className="grid grid-cols-2 gap-4 text-center pt-2">
+                          <div>
+                              <p className="text-sm text-muted-foreground">Successful Referrals</p>
+                              <p className="text-2xl font-bold text-primary">{userData.referrals?.length || 0}</p>
+                          </div>
+                          <div>
+                              <p className="text-sm text-muted-foreground">Total Earnings</p>
+                              <p className="text-2xl font-bold text-primary">₹{(userData.referralEarnings || 0).toFixed(2)}</p>
+                          </div>
                       </div>
-                      {selectedPaymentMethod === "upi" && (<div><Label htmlFor="upiIdInput">UPI ID</Label><Input id="upiIdInput" type="text" value={upiIdInput} onChange={(e) => setUpiIdInput(e.target.value)} placeholder="yourname@upi" className="mt-1" disabled={isProcessing} /></div>)}
-                      {selectedPaymentMethod === "bank" && (<div className="space-y-3">
-                          <div><Label htmlFor="accountHolderName">Account Holder Name</Label><Input id="accountHolderName" type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="e.g., John Doe" className="mt-1" disabled={isProcessing} /></div>
-                          <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isProcessing} /></div>
-                          <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isProcessing} /></div>
-                      </div>)}
-                      <CardDescription className="text-xs text-center">Your saved details will be used for all withdrawals.</CardDescription>
-                  </CardContent>
-              </Card>
+                       <CardDescription className="text-xs text-center">New users get ₹{appSettings.referralBonusForNewUser} bonus. You get ₹{appSettings.referralBonusForReferrer} on their first deposit!</CardDescription>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="settings" className="pt-4">
+                   <Card className="p-4 pt-2 bg-card shadow-md">
+                      <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline">Withdrawal Details</CardTitle></CardHeader>
+                      <CardContent className="space-y-4 p-2">
+                          <div>
+                              <Label>Payment Method</Label>
+                              <Select value={selectedPaymentMethod} onValueChange={(v) => setSelectedPaymentMethod(v as PaymentMethod)} disabled={isProcessing}>
+                              <SelectTrigger className="mt-1"><SelectValue placeholder="Select method" /></SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="upi"><div className="flex items-center"><Smartphone className="mr-2 h-4 w-4" />UPI</div></SelectItem>
+                                  <SelectItem value="bank"><div className="flex items-center"><Library className="mr-2 h-4 w-4" />Bank Account</div></SelectItem>
+                              </SelectContent>
+                              </Select>
+                          </div>
+                          {selectedPaymentMethod === "upi" && (<div><Label htmlFor="upiIdInput">UPI ID</Label><Input id="upiIdInput" type="text" value={upiIdInput} onChange={(e) => setUpiIdInput(e.target.value)} placeholder="yourname@upi" className="mt-1" disabled={isProcessing} /></div>)}
+                          {selectedPaymentMethod === "bank" && (<div className="space-y-3">
+                              <div><Label htmlFor="accountHolderName">Account Holder Name</Label><Input id="accountHolderName" type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="e.g., John Doe" className="mt-1" disabled={isProcessing} /></div>
+                              <div><Label htmlFor="accountNumber">Account Number</Label><Input id="accountNumber" type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g., 123456789012" className="mt-1" disabled={isProcessing} /></div>
+                              <div><Label htmlFor="ifscCode">IFSC Code</Label><Input id="ifscCode" type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g., SBIN0001234" className="mt-1" disabled={isProcessing} /></div>
+                          </div>)}
+                          <CardDescription className="text-xs text-center">Your saved details will be used for all withdrawals.</CardDescription>
+                      </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
           </CardContent>
           <CardFooter className="flex flex-col items-center gap-4 pt-6">
               {userData?.isAdmin && (

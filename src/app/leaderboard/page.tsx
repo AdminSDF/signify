@@ -33,7 +33,7 @@ export default function LeaderboardPage() {
     const fetchLeaderboard = async () => {
       setIsLoading(true);
       try {
-        const users = await getLeaderboardUsers(20); // Fetch top 20
+        const users = await getLeaderboardUsers(50); // Fetch top 50
         setLeaderboard(users);
       } catch (error) {
         console.error("Error fetching leaderboard data:", error);
@@ -57,7 +57,7 @@ export default function LeaderboardPage() {
             Hall of Fame
           </CardTitle>
           <CardDescription className="text-muted-foreground text-lg mt-1">
-            Top players with the highest winnings!
+            Top 50 players with the highest winnings!
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">

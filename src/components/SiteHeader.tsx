@@ -4,7 +4,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield, HelpCircle } from 'lucide-react';
+import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield, HelpCircle, Swords } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -33,14 +33,19 @@ const SiteHeader: React.FC = () => {
                 <Home className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Game</span>
               </Button>
             </Link>
-            <Link href="/transactions" passHref>
+             <Link href="/tournaments" passHref>
               <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-                <ListChecks className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Transactions</span>
+                <Swords className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Tournaments</span>
               </Button>
             </Link>
             <Link href="/leaderboard" passHref>
               <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
                 <Trophy className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Leaderboard</span>
+              </Button>
+            </Link>
+            <Link href="/transactions" passHref>
+              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+                <ListChecks className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Transactions</span>
               </Button>
             </Link>
              <Link href="/help" passHref>
