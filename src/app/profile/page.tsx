@@ -331,7 +331,7 @@ export default function ProfilePage() {
 
     setIsProcessing(true);
     const amount = parseFloat(withdrawalAmount);
-    const balance = userData.balances[activeTier] ?? 0;
+    const balance = userData?.balances?.[activeTier] ?? 0;
     
     if (isNaN(amount) || amount <= 0) { toast({ title: 'Invalid Amount', variant: 'destructive' }); setIsProcessing(false); return; }
     if (amount < activeWheelConfig.minWithdrawalAmount) { toast({ title: 'Minimum Withdrawal', description: `Min is ₹${activeWheelConfig.minWithdrawalAmount.toFixed(2)} for ${activeWheelConfig.name}.`, variant: 'destructive' }); setIsProcessing(false); return; }
@@ -443,7 +443,7 @@ export default function ProfilePage() {
   }
 
   const renderWalletContent = (tierConfig: WheelTierConfig) => {
-    const balance = userData?.balances[tierConfig.id] ?? 0;
+    const balance = userData?.balances?.[tierConfig.id] ?? 0;
     const minWithdrawal = tierConfig.minWithdrawalAmount;
 
     return (

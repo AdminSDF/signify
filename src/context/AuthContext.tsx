@@ -38,7 +38,7 @@ interface AuthContextType {
   refreshAppConfig: () => Promise<void>;
   signUpWithEmailPassword: (credentials: SignUpCredentials) => Promise<void>;
   loginWithEmailPassword: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (isBlocked?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -115,6 +115,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         firestoreUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
               const latestUserData = docSnap.data() as UserDocument;
+
+              // Ensure the balances object exists to prevent crashes
+              if (!latestUserData.balances) {
+                latestUserData.balances = {};
+              }
               
               const needsMigration = !latestUserData.referralCode || !latestUserData.hasOwnProperty('referrals') || !latestUserData.hasOwnProperty('referralEarnings');
               
@@ -133,10 +138,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                   updateUserData(firebaseUser.uid, migrationData).catch(err => {
                       console.error("Referral system migration for user failed:", err);
                   });
-                  setUserData(latestUserData);
-              } else {
-                  setUserData(latestUserData);
               }
+              
+              setUserData(latestUserData);
               
               if (latestUserData.isBlocked) {
                   logout(true);
@@ -293,7 +297,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,
-    logout: () => logout(false),
+    logout: (isBlocked) => logout(isBlocked),
   };
 
   return (
