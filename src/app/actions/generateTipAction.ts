@@ -10,8 +10,8 @@ export interface TipGenerationResult {
 
 export async function getAiTipAction(input: GenerateTipInput): Promise<TipGenerationResult> {
   // This is a server action, it can access process.env
-  if (!process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) {
-      console.error("AI Service is not configured. The API key is missing on the server. Please add GOOGLE_API_KEY to your .env file.");
+  if (!process.env.NEXT_PUBLIC_GOOGLE_API_KEY) {
+      console.error("AI Service is not configured. The API key is missing on the server. Please add NEXT_PUBLIC_GOOGLE_API_KEY to your .env file.");
       return { error: "The AI Game Assistant is not configured on the server." };
   }
   
