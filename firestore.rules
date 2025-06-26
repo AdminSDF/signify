@@ -1,108 +1,145 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- Helper Functions ---
-    function isAuthenticated() {
-      return request.auth != null;
-    }
 
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
-    // --- Default Security ---
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // This function checks if a NON-OWNER is making a valid change to friend lists.
+    function isAllowedFriendsUpdate() {
+      let requesterId = request.auth.uid;
+      let incoming = request.resource.data;
+      let existing = resource.data;
 
-    // --- Public Collections ---
-    match /appConfiguration/{docId} {
-      allow read: if true;
-    }
-    
-    match /tournaments/{tournamentId} {
-        allow read: if isAuthenticated();
-        // Writes are handled by admin panel
-    }
-    
-    match /userTournaments/{userTournamentId} {
-        allow read: if isAuthenticated();
-        // Writes handled by joinTournament transaction
-    }
+      // 1. Ensure no fields OTHER THAN the three friend-related lists are being changed.
+      // This is the most crucial security check.
+      let protectedFieldsUnchanged = 
+          incoming.uid == existing.uid &&
+          incoming.email == existing.email &&
+          incoming.displayName == existing.displayName &&
+          incoming.photoURL == existing.photoURL &&
+          incoming.balances == existing.balances && 
+          incoming.spinsAvailable == existing.spinsAvailable &&
+          incoming.dailyPaidSpinsUsed == existing.dailyPaidSpinsUsed &&
+          incoming.lastPaidSpinDate == existing.lastPaidSpinDate &&
+          incoming.totalWinnings == existing.totalWinnings &&
+          incoming.totalSpinsPlayed == existing.totalSpinsPlayed &&
+          incoming.totalWins == existing.totalWins &&
+          incoming.totalDeposited == existing.totalDeposited &&
+          incoming.totalWithdrawn == existing.totalWithdrawn &&
+          incoming.isAdmin == existing.isAdmin &&
+          incoming.isBlocked == existing.isBlocked &&
+          incoming.lastActive == existing.lastActive &&
+          incoming.isOnline == existing.isOnline &&
+          incoming.currentGame == existing.currentGame &&
+          incoming.upiIdForWithdrawal == existing.upiIdForWithdrawal &&
+          incoming.bankDetailsForWithdrawal == existing.bankDetailsForWithdrawal &&
+          incoming.toursCompleted == existing.toursCompleted &&
+          incoming.referralCode == existing.referralCode &&
+          incoming.referredBy == existing.referredBy &&
+          incoming.referrals == existing.referrals &&
+          incoming.referralEarnings == existing.referralEarnings &&
+          incoming.tags == existing.tags &&
+          incoming.manualWinRateOverride == existing.manualWinRateOverride &&
+          incoming.recentSpinHistory == existing.recentSpinHistory &&
+          incoming.vipUntil == existing.vipUntil;
 
-
-    // --- User-Specific Collections ---
-    match /users/{userId} {
-      // Any authenticated user can read any user's profile data.
-      // This is needed for features like leaderboards and friend profiles.
-      allow read: if isAuthenticated();
-
-      // A user can create their own document.
-      allow create: if isOwner(userId);
-
-      // A user can update their own document for most standard profile changes.
-      // We also need to allow cross-user updates for the friend system, which is handled in the 'update' rule below.
-      // The 'write' rule covers both create and update.
-      allow write: if isOwner(userId);
-
-      // This is the key rule to fix the "insufficient permissions" error for the friends system.
-      // It allows an authenticated user to update ANOTHER user's document,
-      // but ONLY if they are changing the friend-related lists.
-      allow update: if isAuthenticated() {
-        let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
-        let allowedFriendKeys = ['friends', 'friendRequestsSent', 'friendRequestsReceived'];
-        // The update is only allowed if the ONLY keys being changed are in the allowedFriendKeys list.
-        return changedKeys.hasOnly(allowedFriendKeys);
+      if (!protectedFieldsUnchanged) {
+        return false;
       }
+
+      // 2. Check the changes in the friend-related arrays.
+      let friendsDiff = incoming.friends.toSet().symmetricDifference(existing.friends.toSet());
+      let sentDiff = incoming.friendRequestsSent.toSet().symmetricDifference(existing.friendRequestsSent.toSet());
+      let receivedDiff = incoming.friendRequestsReceived.toSet().symmetricDifference(existing.friendRequestsReceived.toSet());
       
-      // Users cannot delete their own accounts from the client.
-      allow delete: if false;
-
+      // Combine all changes into one set.
+      let allChanges = friendsDiff.union(sentDiff).union(receivedDiff);
+      
+      // The set of all changed UIDs must ONLY contain the requester's UID.
+      // This prevents a user from adding/removing other people to the target's lists.
+      return allChanges.hasOnly([requesterId]);
+    }
+    
+    // --- User Profile Rules ---
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if isOwner(userId);
+      
+      // Allow update if you are the owner OR if you are a non-owner performing a valid friend action.
+      allow update: if (isOwner(userId)) || 
+                     (!isOwner(userId) && isAllowedFriendsUpdate());
+      
+      // --- Subcollection Rules ---
       match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId);
+        // A user can create a notification for another user (e.g. friend request).
+        allow create: if !isOwner(userId);
+        // Only the owner can read or delete their notifications.
+        allow read, delete: if isOwner(userId);
+        allow update: if false;
       }
     }
     
-    // Transactions can only be read by the owner. Created server-side.
-    match /transactions/{transactionId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    // --- Rules for other collections ---
+    match /appConfiguration/{docId} { 
+      allow read: if true; 
+      allow write: if false; 
     }
 
-    // Requests can be created and read by the owner.
-    match /withdrawalRequests/{requestId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    match /transactions/{transactionId} { 
+      allow create: if request.resource.data.userId == request.auth.uid;
+      allow read: if resource.data.userId == request.auth.uid;
+      allow update, delete: if false; 
     }
     
-    match /addFundRequests/{requestId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    match /withdrawalRequests/{reqId} { 
+      allow create: if request.resource.data.userId == request.auth.uid;
+      allow read: if resource.data.userId == request.auth.uid;
+      allow update, delete: if false; 
+    }
+
+    match /addFundRequests/{reqId} { 
+      allow create: if request.resource.data.userId == request.auth.uid;
+      allow read: if resource.data.userId == request.auth.uid;
+      allow update, delete: if false; 
     }
 
     match /supportTickets/{ticketId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if request.resource.data.userId == request.auth.uid;
+      allow read: if resource.data.userId == request.auth.uid;
+      allow update, delete: if false; 
+    }
+    
+    match /tournaments/{tId} { 
+      allow read: if true; 
+      allow update: if request.auth.uid in request.resource.data.participants;
+      allow create, delete: if false;
     }
 
-    match /userRewards/{userId} {
-      allow read: if isOwner(userId);
-      // Writes are handled by claimDailyReward transaction which is invoked from client but rules are checked.
-      // Since it updates the user document as well, the rules for user document update need to be correct.
+    match /userTournaments/{utId} { 
+      allow read: if true; 
+      allow create: if request.resource.data.userId == request.auth.uid;
+      allow update: if resource.data.userId == request.auth.uid;
+      allow delete: if false;
     }
 
-     match /activityLogs/{logId} {
-        allow create: if isAuthenticated();
-     }
+    match /activityLogs/{logId} { 
+      allow create: if request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if false;
+    }
 
-     match /systemStats/global {
-        allow read: if isAuthenticated();
-     }
-
-     match /fraudAlerts/{alertId} {
-        allow read: if isAuthenticated();
-     }
+    match /userRewards/{rewId} { 
+      allow read, write: if isOwner(rewId); 
+    }
+    
+    match /fraudAlerts/{alertId} {
+        allow read, write: if false;
+    }
+    
+    match /systemStats/{statsId} {
+        allow read, write: if false;
+    }
   }
 }
