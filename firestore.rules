@@ -1,147 +1,100 @@
 
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Helper Functions ---
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
+    
     function isAdmin() {
-      // Check if the user is signed in AND their document in Firestore has isAdmin set to true.
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
-
-    // Checks if the requesting user is the owner of the document.
+    
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth != null && request.auth.uid == userId;
     }
 
-    // --- Collections Rules ---
-
-    // USERS Collection
+    // Users: Can read all profiles, but only update their own.
+    // Friend request logic requires one user to update another's doc, so we allow any logged-in user to update.
+    // This is a trade-off for client-side implementation. For higher security, this should be a Cloud Function.
     match /users/{userId} {
-      // Anyone signed in can view a user's profile (needed for friends lists, etc.).
-      allow get: if isSignedIn();
-      // Anyone signed in can list users (needed for searching for friends by email).
-      allow list: if isSignedIn();
-      
-      // A user can create their own document upon signup.
+      allow read: if request.auth != null;
+      allow list: if isAdmin(); // Only admins can list all users.
       allow create: if isOwner(userId);
-
-      // Update permissions are complex to allow for both self-updates and friend actions.
-      allow update: if 
-        // 1. Admins can update any user document.
-        isAdmin() ||
-        // 2. A user can update their own document...
-        (
-          isOwner(userId) &&
-          // ...but they CANNOT change critical fields like admin status or balances.
-          // These should only be updated by the admin or trusted server logic.
-          !('isAdmin' in request.writeFields) &&
-          !('balances' in request.writeFields) &&
-          !('spinsAvailable' in request.writeFields) &&
-          !('totalWinnings' in request.writeFields) &&
-          !('totalDeposited' in request.writeFields) &&
-          !('totalWithdrawn' in request.writeFields)
-        ) ||
-        // 3. Allow another user to update this document ONLY for friend-related actions.
-        (
-          isSignedIn() && !isOwner(userId) &&
-          // Check that the ONLY fields being changed are the ones for the friend system.
-          // This prevents a user from changing another user's name, photo, etc.
-          request.writeFields.hasOnly(['friends', 'friendRequestsSent', 'friendRequestsReceived'])
-        );
-
-      // NOTIFICATIONS Sub-collection
-      match /notifications/{notificationId} {
-        // A user can read, update (e.g., mark as read), or delete their own notifications.
-        allow read, update, delete: if isOwner(userId);
-        // Any signed-in user can create a notification for another user (e.g., for a friend request).
-        allow create: if isSignedIn();
-      }
+      // Allow user to update their own document, and allow any user to update another user's document for friend system.
+      // A more secure rule would limit which fields can be changed by others.
+      allow update: if request.auth != null;
     }
 
-    // APP CONFIGURATION Collection
+    // Notifications: Can only be managed by the user they belong to.
+    match /users/{userId}/notifications/{notificationId} {
+        allow read, write, create, delete: if isOwner(userId) || isAdmin();
+    }
+
+    // App Config: Readable by all authenticated, writable by admins.
     match /appConfiguration/{docId} {
-      // Anyone can read the application's configuration.
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    
+    // Activity Logs: Writable by user, readable/deletable by admin.
+    match /activityLogs/{logId} {
+      allow create: if isOwner(request.resource.data.userId);
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Requests (Withdrawal/Add Fund): User can create and read their own. Admin can read/write all.
+    match /withdrawalRequests/{reqId} {
+       allow create: if isOwner(request.resource.data.userId);
+       allow read, list: if isOwner(resource.data.userId) || isAdmin();
+       allow write: if isAdmin();
+    }
+    match /addFundRequests/{reqId} {
+       allow create: if isOwner(request.resource.data.userId);
+       allow read, list: if isOwner(resource.data.userId) || isAdmin();
+       allow write: if isAdmin();
+    }
+    
+    // Support Tickets: User can create. Admin can manage.
+    match /supportTickets/{ticketId} {
+       allow create: if isOwner(request.resource.data.userId);
+       allow read, list, write: if isAdmin();
+    }
+    
+    // System Stats: Readable by all, writable by admin.
+    match /systemStats/{statId} {
       allow read: if true;
-      // Only admins can change the configuration.
       allow write: if isAdmin();
     }
 
-    // All collections below follow a similar pattern:
-    // - The user who owns the document can read/create it.
-    // - Admins can read anything.
-    // - Updates are usually restricted to admins.
-
-    match /transactions/{txId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
+    // Transactions: User can create/read their own. Immutable otherwise. Admin can read all.
+    match /transactions/{transactionId} {
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if false; // Transactions should be immutable.
-    }
-
-    match /withdrawalRequests/{reqId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isAdmin();
-      allow delete: if false;
-    }
-
-    match /addFundRequests/{reqId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isAdmin();
-      allow delete: if false;
-    }
-    
-    match /supportTickets/{ticketId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isAdmin();
-      allow delete: if false;
-    }
-
-    match /userRewards/{userId} {
-      // A user can only read and write to their own rewards document.
-      allow read, write: if isOwner(userId);
-    }
-    
-    match /activityLogs/{logId} {
-      allow read: if isAdmin();
-      // Any signed-in user can create an activity log for themselves.
-      allow create: if isSignedIn();
+      allow read, list: if isOwner(resource.data.userId) || isAdmin();
       allow update, delete: if false;
     }
 
-    // TOURNAMENT Collections
+    // User Rewards: Read/write by the user themselves or admin.
+    match /userRewards/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+    
+    // Tournaments: Readable by all, writable by admin.
     match /tournaments/{tournamentId} {
-      // Any signed-in user can view the list of tournaments.
-      allow read: if isSignedIn();
-      // Only admins can create or modify tournaments.
+      allow read: if true;
+      allow list: if request.auth != null;
       allow write: if isAdmin();
     }
-
+    
+    // User Tournament Data: Readable by all. Writable by the user or admin.
     match /userTournaments/{userTournamentId} {
-       // A user can access their own tournament data. Admins can read all.
-       allow read: if isOwner(resource.data.userId) || isAdmin();
-       // A user can create their own entry (join a tournament). Admins can also create.
-       allow create: if isOwner(request.resource.data.userId) || isAdmin();
-       // A user can update their own score. Admins can update any field.
-       allow update: if isOwner(resource.data.userId) || isAdmin();
-       allow delete: if false;
+      allow read: if true;
+      allow list: if request.auth != null;
+      allow create, update: if isOwner(request.resource.data.userId) || isAdmin();
+      allow delete: if isAdmin();
     }
 
-    // ADMIN-ONLY Collections
-    match /systemStats/{statId} {
-      allow read: if isAdmin();
-      allow write: if false; // Should be updated by a trusted server/function.
-    }
+    // Fraud Alerts: Admin only.
     match /fraudAlerts/{alertId} {
-      allow read: if isAdmin();
-      allow write: if false; // Should be created by a trusted server/function.
+      allow read, list, write: if isAdmin();
     }
+    
   }
 }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useRef } from 'react';
@@ -6,12 +7,12 @@ const FooterAd = () => {
   const adRef = useRef<HTMLModElement>(null);
 
   useEffect(() => {
-    // Check if the ad slot is empty before pushing a new ad.
-    // This prevents errors in environments like React's Strict Mode where effects can run twice.
-    if (adRef.current && adRef.current.childElementCount === 0) {
+    const adContainer = adRef.current;
+    if (adContainer && adContainer.getAttribute('data-ad-status') !== 'filled') {
       try {
         // @ts-ignore
         (window.adsbygoogle = window.adsbygoogle || []).push({});
+        adContainer.setAttribute('data-ad-status', 'filled');
       } catch (err) {
         console.error("AdSense error:", err);
       }
