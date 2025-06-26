@@ -918,7 +918,7 @@ export const claimDailyReward = async (userId: string, config: RewardConfig): Pr
 
   // Apply reward
   if (rewardToGive.type === 'credit') {
-    const currentBalance = userData.balances.little || 0;
+    const currentBalance = userData.balances?.little || 0;
     batch.update(userRef, { 'balances.little': increment(rewardToGive.value) });
     rewardMessage = `You claimed ₹${rewardToGive.value}!`;
     
@@ -1036,12 +1036,14 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
     const user = userDoc.data() as UserDocument;
 
     if (tournament.status !== 'active') throw new Error("This tournament is not active.");
-    if (user.balances[tournament.tierId] < tournament.entryFee) {
+    
+    const currentBalance = user.balances?.[tournament.tierId] || 0;
+    if (currentBalance < tournament.entryFee) {
       throw new Error(`Insufficient balance in ${tournament.tierId} wallet.`);
     }
 
     // Deduct entry fee
-    const newBalance = user.balances[tournament.tierId] - tournament.entryFee;
+    const newBalance = currentBalance - tournament.entryFee;
     transaction.update(userRef, { [`balances.${tournament.tierId}`]: newBalance });
 
     // Add user to participants list
