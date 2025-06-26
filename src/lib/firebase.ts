@@ -41,7 +41,7 @@ import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMI
 
 
 const firebaseConfig: FirebaseOptions = {
-  apiKey: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
@@ -56,7 +56,7 @@ const missingKeys = requiredConfigKeys.filter(key => !firebaseConfig[key]);
 
 if (missingKeys.length > 0) {
   const envVarMap: { [key: string]: string } = {
-    apiKey: 'NEXT_PUBLIC_GOOGLE_API_KEY',
+    apiKey: 'NEXT_PUBLIC_FIREBASE_API_KEY',
     authDomain: 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
     projectId: 'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
     storageBucket: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
@@ -64,8 +64,7 @@ if (missingKeys.length > 0) {
   };
   const missingEnvVars = missingKeys.map(key => envVarMap[key as keyof typeof envVarMap] || key);
 
-  const errorMessage = `FIREBASE_INIT_ERROR: Aapki .env file mein Firebase ki zaroori jaankari nahi hai. Kripya neeche di gayi keys ko apne Firebase project se copy karke .env file mein daalein: ${missingEnvVars.join(', ')}. ` +
-    "Yeh jaankari aapko Firebase project settings (gear icon -> Project settings -> General -> Your apps -> SDK setup and configuration -> Config) mein milegi.";
+  const errorMessage = `FIREBASE_INIT_ERROR: Your .env file is missing required Firebase config keys: ${missingEnvVars.join(', ')}. Please go to your Firebase project settings (gear icon -> Project settings -> General -> Your apps -> SDK setup and configuration -> Config) and add these values to your .env file.`;
   // Throw an error to stop execution and make the problem clear in the console.
   throw new Error(errorMessage);
 }
@@ -247,7 +246,9 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
 
 export const updateUserData = async (userId: string, data: Partial<UserDocument | { [key: string]: any }>): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
-  await updateDoc(userRef, data);
+  // Use setDoc with merge: true to prevent errors if the document doesn't exist yet.
+  // This handles the race condition during new user sign-up and cases where doc creation may have failed.
+  await setDoc(userRef, data, { merge: true });
 };
 
 
@@ -1300,3 +1301,5 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
   Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion, arrayRemove
 };
+
+    
