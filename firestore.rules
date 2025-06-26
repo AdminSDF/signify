@@ -1,100 +1,109 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // --- Helper Functions ---
+    function isAuth() {
+      return request.auth != null;
+    }
+
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Check if the user's document in Firestore has isAdmin == true.
+      // Use exists() to prevent errors if the user doc doesn't exist yet during creation.
+      return isAuth() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
     
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return isAuth() && request.auth.uid == userId;
     }
-
-    // Users: Can read all profiles, but only update their own.
-    // Friend request logic requires one user to update another's doc, so we allow any logged-in user to update.
-    // This is a trade-off for client-side implementation. For higher security, this should be a Cloud Function.
+    
+    // --- User Collection Rules ---
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow list: if isAdmin(); // Only admins can list all users.
-      allow create: if isOwner(userId);
-      // Allow user to update their own document, and allow any user to update another user's document for friend system.
-      // A more secure rule would limit which fields can be changed by others.
-      allow update: if request.auth != null;
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuth();
+      
+      // Update rule is complex, handled by a function
+      allow update: if isOwner(userId) || isAdmin();
+      
+      allow delete: if isAdmin();
+      
+      // Notifications subcollection
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+      }
     }
-
-    // Notifications: Can only be managed by the user they belong to.
-    match /users/{userId}/notifications/{notificationId} {
-        allow read, write, create, delete: if isOwner(userId) || isAdmin();
-    }
-
-    // App Config: Readable by all authenticated, writable by admins.
+    
+    // --- App Configuration Rules ---
     match /appConfiguration/{docId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if isAdmin();
     }
     
-    // Activity Logs: Writable by user, readable/deletable by admin.
-    match /activityLogs/{logId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read, update, delete: if isAdmin();
-    }
-
-    // Requests (Withdrawal/Add Fund): User can create and read their own. Admin can read/write all.
-    match /withdrawalRequests/{reqId} {
-       allow create: if isOwner(request.resource.data.userId);
-       allow read, list: if isOwner(resource.data.userId) || isAdmin();
-       allow write: if isAdmin();
-    }
-    match /addFundRequests/{reqId} {
-       allow create: if isOwner(request.resource.data.userId);
-       allow read, list: if isOwner(resource.data.userId) || isAdmin();
-       allow write: if isAdmin();
+    // --- Financial Transaction Rules ---
+    match /transactions/{transactionId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      // Transactions are created by trusted logic (like claiming a reward or finishing a spin), not directly by users.
+      // This rule allows the app client logic to create transactions for the logged-in user.
+      allow create: if isOwner(request.resource.data.userId); 
+      allow update, delete: if isAdmin();
     }
     
-    // Support Tickets: User can create. Admin can manage.
+    match /withdrawalRequests/{reqId} {
+      allow create: if isOwner(request.resource.data.userId);
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+    
+    match /addFundRequests/{reqId} {
+      allow create: if isOwner(request.resource.data.userId);
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+    
+    // --- Support & Stats Rules ---
     match /supportTickets/{ticketId} {
        allow create: if isOwner(request.resource.data.userId);
-       allow read, list, write: if isAdmin();
+       allow read, update, delete: if isAdmin();
+    }
+
+    match /activityLogs/{logId} {
+      allow create: if isAuth();
+      allow read: if isAdmin();
+    }
+
+    match /fraudAlerts/{alertId} {
+       allow read, create, update, delete: if isAdmin();
     }
     
-    // System Stats: Readable by all, writable by admin.
     match /systemStats/{statId} {
       allow read: if true;
-      allow write: if isAdmin();
+      // Should ideally be updated by cloud functions, but allow admin for now.
+      allow write: if isAdmin(); 
     }
 
-    // Transactions: User can create/read their own. Immutable otherwise. Admin can read all.
-    match /transactions/{transactionId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read, list: if isOwner(resource.data.userId) || isAdmin();
-      allow update, delete: if false;
-    }
-
-    // User Rewards: Read/write by the user themselves or admin.
+    // --- Reward System Rules ---
     match /userRewards/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      // User reward doc is created during signup.
+      allow create: if isOwner(userId); 
+      // User must be able to update their own reward data when they claim it.
+      allow update: if isOwner(userId); 
     }
     
-    // Tournaments: Readable by all, writable by admin.
+    // --- Tournament Rules ---
     match /tournaments/{tournamentId} {
       allow read: if true;
-      allow list: if request.auth != null;
-      allow write: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
     
-    // User Tournament Data: Readable by all. Writable by the user or admin.
     match /userTournaments/{userTournamentId} {
+       // userTournamentId is structured as `${userId}_${tournamentId}`
       allow read: if true;
-      allow list: if request.auth != null;
-      allow create, update: if isOwner(request.resource.data.userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow create: if isOwner(userTournamentId.split('_')[0]); // Can join a tournament
+      // Score can only be incremented, and only by the user themselves or an admin.
+      allow update: if (isOwner(resource.data.userId) && request.resource.data.score >= resource.data.score) || isAdmin();
     }
-
-    // Fraud Alerts: Admin only.
-    match /fraudAlerts/{alertId} {
-      allow read, list, write: if isAdmin();
-    }
-    
   }
 }
