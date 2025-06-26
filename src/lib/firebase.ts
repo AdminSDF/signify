@@ -35,7 +35,7 @@ import {
   arrayRemove,
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
+import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig, RewardConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
 import { initialSettings as defaultAppSettings, DEFAULT_NEWS_ITEMS, DEFAULT_ADMIN_EMAIL, initialWheelConfigs } from '@/lib/appConfig';
 
 
@@ -68,6 +68,7 @@ const ACTIVITY_LOGS_COLLECTION = 'activityLogs';
 const FRAUD_ALERTS_COLLECTION = 'fraudAlerts';
 const SYSTEM_STATS_COLLECTION = 'systemStats';
 const GLOBAL_STATS_DOC_ID = 'global';
+const USER_REWARDS_COLLECTION = 'userRewards';
 
 
 // --- User Functions ---
@@ -112,6 +113,7 @@ export interface UserDocument {
   tags: string[]; // e.g., ["new", "high-loss", "vip"]
   manualWinRateOverride?: number | null; // Admin-set override (0 to 1)
   recentSpinHistory: ('win' | 'loss')[]; // To track last few spins
+  vipUntil?: Timestamp | null;
 }
 
 export const createUserData = async (
@@ -123,12 +125,12 @@ export const createUserData = async (
   referredBy?: string | null
 ): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
+  const userRewardRef = doc(db, USER_REWARDS_COLLECTION, userId);
 
   // Initialize balances for all tiers
   const initialBalances: { [tierId: string]: number } = {};
   let baseInitialBalance = initialAppSettings.initialBalanceForNewUsers;
   
-  // Add referral bonus to the initial balance if referred
   if (referredBy) {
     baseInitialBalance += initialAppSettings.referralBonusForNewUser;
   }
@@ -170,16 +172,29 @@ export const createUserData = async (
       gamePage: false,
       profilePage: false,
     },
-    referralCode: userId, // Use UID as the referral code
+    referralCode: userId,
     referrals: [],
     referralEarnings: 0,
-    ...(referredBy && { referredBy }), // Conditionally add referredBy field
-    // Dynamic winning chance fields
-    tags: ['new'], // All new users start with the 'new' tag
+    ...(referredBy && { referredBy }),
+    tags: ['new'],
     manualWinRateOverride: null,
     recentSpinHistory: [],
+    vipUntil: null,
   };
-  await setDoc(userRef, userData);
+
+  const userRewardData: UserRewardData = {
+    userId,
+    lastClaimDate: null,
+    currentStreak: 0,
+    totalClaims: 0,
+    history: [],
+  };
+
+  const batch = writeBatch(db);
+  batch.set(userRef, userData);
+  batch.set(userRewardRef, userRewardData);
+
+  await batch.commit();
 };
 
 export const getUserData = async (userId: string): Promise<UserDocument | null> => {
@@ -346,7 +361,11 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
       const settings = { 
         ...defaultAppSettings, 
         ...(fetchedData?.settings || {}),
-        wheelConfigs: mergedWheelConfigs
+        wheelConfigs: mergedWheelConfigs,
+        rewardConfig: {
+          ...defaultAppSettings.rewardConfig,
+          ...(fetchedData?.settings?.rewardConfig || {})
+        }
       };
 
       const newsItems = fetchedData?.newsItems && Array.isArray(fetchedData.newsItems) && fetchedData.newsItems.length > 0
@@ -355,7 +374,6 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
 
       return { settings, newsItems };
     }
-    // If config doc doesn't exist, create it with the default values
     await setDoc(configRef, {
       settings: defaultAppSettings,
       newsItems: DEFAULT_NEWS_ITEMS
@@ -369,7 +387,7 @@ export const getAppConfiguration = async (): Promise<AppConfiguration> => {
 
 export const saveAppConfigurationToFirestore = async (config: AppConfiguration): Promise<void> => {
   const configRef = doc(db, APP_CONFIG_COLLECTION, APP_CONFIG_DOC_ID);
-  await setDoc(configRef, config, { merge: true }); // Use set with merge to be safe
+  await setDoc(configRef, config, { merge: true });
 };
 
 
@@ -494,7 +512,6 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   
   batch.update(globalStatsRef, { totalDeposited: increment(amount) });
   
-  // Referral logic: If it's the first deposit and the user was referred, reward the referrer.
   if (isFirstDeposit && userData.referredBy) {
     const referrerRef = doc(db, USERS_COLLECTION, userData.referredBy);
     const referrerSnap = await getDoc(referrerRef);
@@ -508,7 +525,6 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
             referralEarnings: increment(bonus)
         });
 
-        // Add a transaction for the referrer's bonus
         const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
         const referrerTransactionPayload: TransactionData = {
             userId: userData.referredBy,
@@ -678,7 +694,6 @@ export const updateSupportTicketStatus = async (ticketId: string, status: Suppor
 };
 
 // --- Activity and Fraud Detection Functions ---
-
 export type ActivityPeriod = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export const getTimePeriod = (): ActivityPeriod => {
@@ -779,7 +794,6 @@ export const getFraudAlerts = async (): Promise<(FraudAlertData & {id: string})[
 
 
 // --- Global Stats Function ---
-
 export interface GlobalStats {
   totalDeposited: number;
   totalWithdrawn: number;
@@ -804,7 +818,6 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
     statsFromDoc.totalWithdrawn = data.totalWithdrawn || 0;
     statsFromDoc.totalGstCollected = data.totalGstCollected || 0;
   } else {
-    // If the document doesn't exist, create it.
     await setDoc(globalStatsRef, statsFromDoc);
   }
 
@@ -828,6 +841,118 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
   });
 
   return { ...statsFromDoc, ...aggregatedStats };
+};
+
+
+// --- Daily Reward Functions ---
+
+export interface UserRewardData {
+  userId: string;
+  lastClaimDate: string | null; // YYYY-MM-DD
+  currentStreak: number;
+  totalClaims: number;
+  history: {
+    date: string;
+    reward: string;
+    value: number;
+  }[];
+}
+
+export const getUserRewardData = async (userId: string): Promise<UserRewardData | null> => {
+  const rewardRef = doc(db, USER_REWARDS_COLLECTION, userId);
+  const docSnap = await getDoc(rewardRef);
+  return docSnap.exists() ? docSnap.data() as UserRewardData : null;
+};
+
+export const claimDailyReward = async (userId: string, config: RewardConfig): Promise<{ message: string }> => {
+  const userRef = doc(db, USERS_COLLECTION, userId);
+  const rewardRef = doc(db, USER_REWARDS_COLLECTION, userId);
+  const batch = writeBatch(db);
+
+  const [userSnap, rewardSnap] = await Promise.all([getDoc(userRef), getDoc(rewardRef)]);
+
+  if (!userSnap.exists()) throw new Error("User not found.");
+  if (!rewardSnap.exists()) throw new Error("User reward data not found.");
+
+  const userData = userSnap.data() as UserDocument;
+  const rewardData = rewardSnap.data() as UserRewardData;
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  if (rewardData.lastClaimDate === todayStr) {
+    throw new Error("Reward already claimed today.");
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  let newStreak = 1;
+  if (rewardData.lastClaimDate === yesterdayStr) {
+    newStreak = rewardData.currentStreak + 1;
+  } else if (config.resetIfMissed === false && rewardData.lastClaimDate !== null) {
+    newStreak = rewardData.currentStreak + 1; // Continue streak if not resetting
+  }
+  
+  // Check for streak bonus first
+  const streakBonus = config.streakBonuses.find(b => b.afterDays === newStreak);
+  let rewardToGive = streakBonus;
+  let rewardMessage: string;
+
+  // If no streak bonus, get daily reward
+  if (!rewardToGive) {
+    const dayIndex = (newStreak - 1) % config.dailyRewards.length;
+    rewardToGive = config.dailyRewards[dayIndex];
+  }
+  
+  if (!rewardToGive) throw new Error("No reward configured for the current day/streak.");
+
+  // Apply reward
+  if (rewardToGive.type === 'credit') {
+    const currentBalance = userData.balances.little || 0;
+    batch.update(userRef, { 'balances.little': increment(rewardToGive.value) });
+    rewardMessage = `You claimed ₹${rewardToGive.value}!`;
+    
+    // Log transaction
+    const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+    batch.set(transactionDocRef, {
+      userId,
+      userEmail: userData.email,
+      type: 'credit',
+      amount: rewardToGive.value,
+      description: `Daily Reward (Day ${newStreak})`,
+      date: Timestamp.now(),
+      status: 'completed',
+      tierId: 'little',
+      balanceBefore: currentBalance,
+      balanceAfter: currentBalance + rewardToGive.value
+    });
+
+  } else if (rewardToGive.type === 'spin') {
+    batch.update(userRef, { spinsAvailable: increment(rewardToGive.value) });
+    rewardMessage = `You claimed ${rewardToGive.value} free spins!`;
+  } else if (rewardToGive.type === 'vip') {
+    const vipUntil = new Date();
+    vipUntil.setDate(vipUntil.getDate() + rewardToGive.value);
+    batch.update(userRef, { vipUntil: Timestamp.fromDate(vipUntil) });
+    rewardMessage = `You are now a VIP for ${rewardToGive.value} day(s)!`;
+  } else {
+    throw new Error("Unknown reward type.");
+  }
+  
+  // Update reward data
+  batch.update(rewardRef, {
+    lastClaimDate: todayStr,
+    currentStreak: newStreak,
+    totalClaims: increment(1),
+    history: arrayUnion({
+      date: todayStr,
+      reward: rewardToGive.type,
+      value: rewardToGive.value
+    })
+  });
+
+  await batch.commit();
+  return { message: rewardMessage };
 };
 
 

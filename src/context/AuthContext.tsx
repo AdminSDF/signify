@@ -101,7 +101,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let firestoreUnsubscribe: (() => void) | null = null;
 
     const authUnsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-      // First, clean up any previous listener if it exists
       if (firestoreUnsubscribe) {
         firestoreUnsubscribe();
       }
@@ -117,8 +116,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (docSnap.exists()) {
               const latestUserData = docSnap.data() as UserDocument;
               
-              // --- MIGRATION LOGIC FOR REFERRAL SYSTEM ---
-              // Checks if referral fields are missing and adds them for existing users.
               const needsMigration = !latestUserData.referralCode || !latestUserData.hasOwnProperty('referrals') || !latestUserData.hasOwnProperty('referralEarnings');
               
               if (needsMigration) {
@@ -133,19 +130,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                       migrationData.referralEarnings = 0;
                   }
 
-                  // Update the document. onSnapshot will then re-run with the updated data.
                   updateUserData(firebaseUser.uid, migrationData).catch(err => {
                       console.error("Referral system migration for user failed:", err);
                   });
-                  // We set the current data, but it will be quickly updated by the listener
                   setUserData(latestUserData);
               } else {
-                  // Data is fine, just set it.
                   setUserData(latestUserData);
               }
               
               if (latestUserData.isBlocked) {
-                  logout(true); // If user is blocked, log them out immediately.
+                  logout(true);
                   return;
               }
 
@@ -168,13 +162,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
       } else {
-        // User is logged out, clear data
         setUserData(null);
         setUserDataLoading(false);
       }
     });
 
-    // Cleanup function runs when component unmounts
     return () => {
       authUnsubscribe();
       if (firestoreUnsubscribe) {
@@ -228,10 +220,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           displayName,
           photoURL,
           currentAppSettings,
-          referredBy // Pass referral code to create user function
+          referredBy
         );
 
-        // If the user was referred, update the referrer's document
         if (referredBy) {
           try {
             const referrerRef = doc(db, 'users', referredBy);
@@ -241,7 +232,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           } catch (refError) {
             console.error("Failed to update referrer's document:", refError);
           } finally {
-            sessionStorage.removeItem('referralCode'); // Clear code after use
+            sessionStorage.removeItem('referralCode');
           }
         }
         
@@ -267,14 +258,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setFbAuthLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // After successful sign-in, check if user is blocked before proceeding
       const loggedInUser = await getUserData(userCredential.user.uid);
       if (loggedInUser?.isBlocked) {
-        await logout(true); // Call logout with blocked flag
-        return; // Stop further execution
+        await logout(true);
+        return;
       }
 
-      // Log login activity after successful signin
       await logUserActivity(userCredential.user.uid, userCredential.user.email, 'login');
 
       toast({ title: "Login Successful", description: "Welcome back!" });
@@ -304,7 +293,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshAppConfig: fetchAppConfig,
     signUpWithEmailPassword,
     loginWithEmailPassword,
-    logout: () => logout(false), // Expose a simple logout function
+    logout: () => logout(false),
   };
 
   return (

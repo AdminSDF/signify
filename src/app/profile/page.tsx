@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star, CalendarDays } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -23,11 +23,14 @@ import {
   auth,
   updateProfile,
   logUserActivity,
-  UserDocument
+  UserDocument,
+  getUserRewardData,
+  UserRewardData
 } from '@/lib/firebase';
 import { WheelTierConfig } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
 import { copyToClipboard } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
 type PaymentMethod = "upi" | "bank";
 
@@ -63,18 +66,17 @@ export default function ProfilePage() {
   const [isTourOpen, setIsTourOpen] = useState(false);
   
   const [referralLink, setReferralLink] = useState('');
+  const [userRewardData, setUserRewardData] = useState<UserRewardData | null>(null);
 
   useEffect(() => {
-    if (userData?.referralCode) {
-      setReferralLink(`https://studio--spinify-m348p.us-central1.hosted.app/login?ref=${userData.referralCode}`);
-    }
-  }, [userData?.referralCode]);
-
-  const activeWheelConfig = appSettings.wheelConfigs[activeTier];
-
-  useEffect(() => {
-    if (user && userData && !loading && userData.toursCompleted?.profilePage === false) {
-      setTimeout(() => setIsTourOpen(true), 500);
+    if (user && userData) {
+      if (userData.referralCode) {
+        setReferralLink(`${window.location.origin}/login?ref=${userData.referralCode}`);
+      }
+      if (!loading && userData.toursCompleted?.profilePage === false) {
+        setTimeout(() => setIsTourOpen(true), 500);
+      }
+      getUserRewardData(user.uid).then(setUserRewardData);
     }
   }, [user, userData, loading]);
 
@@ -91,26 +93,24 @@ export default function ProfilePage() {
       intro: 'Here you can see your profile picture and name. Click the camera icon to upload a new photo!',
     },
     {
-      element: '[data-tour-id="tier-selector-tabs"]',
-      intro: 'You have a separate balance for each game arena. Click these tabs to switch between your wallets.',
+      element: '[data-tour-id="daily-streak"]',
+      intro: 'This shows your daily login streak. Keep it going to earn bigger bonuses!',
     },
     {
-      element: '[data-tour-id="balance-display"]',
-      intro: 'This card shows your current balance for the selected wallet.',
+      element: '[data-tour-id="tier-selector-tabs"]',
+      intro: 'You have a separate balance for each game arena. Click these tabs to switch between your wallets.',
     },
     {
       element: '[data-tour-id="referral-system"]',
       intro: 'Share your referral code with friends! You get a bonus when they make their first deposit, and they get a bonus for signing up!',
     },
     {
-      element: '[data-tour-id="add-balance-section"]',
-      intro: 'Need more funds to play? You can add balance to your wallet from here.',
-    },
-    {
       element: '[data-tour-id="withdraw-funds-section"]',
       intro: 'Ready to cash out? You can request a withdrawal of your winnings here. Make sure your payment details below are correct!',
     },
   ];
+
+  const activeWheelConfig = appSettings.wheelConfigs[activeTier];
 
   useEffect(() => {
     if (userData) {
@@ -207,7 +207,6 @@ export default function ProfilePage() {
         ...paymentDetails
       });
 
-      // Log withdrawal request activity
       await logUserActivity(user.uid, user.email, 'withdrawalRequest');
 
       const userUpdateData: Partial<UserDocument> = {};
@@ -248,7 +247,6 @@ export default function ProfilePage() {
         paymentReference: "User Confirmed Payment In Modal",
       });
 
-      // Log add fund request activity
       await logUserActivity(user.uid, user.email, 'addFundRequest');
 
       toast({ title: 'Add Balance Request Submitted', description: `Request to add ₹${amount.toFixed(2)} to ${activeWheelConfig.name} is pending.`, variant: 'default' });
@@ -350,6 +348,9 @@ export default function ProfilePage() {
       </div>
     );
   };
+  
+  const currentStreak = userRewardData?.currentStreak || 0;
+  const nextBonus = appSettings.rewardConfig.streakBonuses.find(b => b.afterDays > currentStreak);
 
   return (
     <>
@@ -390,6 +391,24 @@ export default function ProfilePage() {
             <CardDescription className="text-muted-foreground">{user.email}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+              
+              <Card data-tour-id="daily-streak" className="p-4 pt-2 bg-card shadow-md">
+                <CardHeader className="p-2 pb-4"><CardTitle className="text-xl flex items-center font-headline text-accent"><CalendarDays className="mr-2 h-6 w-6"/>Daily Streak</CardTitle></CardHeader>
+                <CardContent className="space-y-3 p-2">
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">Current Streak</p>
+                    <p className="text-4xl font-bold text-primary">{currentStreak} Day{currentStreak !== 1 ? 's' : ''}</p>
+                  </div>
+                  {nextBonus && (
+                    <div className="text-center">
+                      <Label>Next Bonus in {nextBonus.afterDays - currentStreak} Day{nextBonus.afterDays - currentStreak > 1 ? 's' : ''}</Label>
+                      <Progress value={(currentStreak / nextBonus.afterDays) * 100} className="w-full mt-1" />
+                      <p className="text-xs text-muted-foreground mt-1">Claim {nextBonus.emoji} {nextBonus.type === 'credit' ? `₹${nextBonus.value}` : `${nextBonus.value} Spins`} on Day {nextBonus.afterDays}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              
               <div data-tour-id="tier-selector-tabs">
                 <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
                   <TabsList className="grid w-full grid-cols-4">

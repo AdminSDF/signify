@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -9,23 +9,69 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Lock, ShieldAlert } from 'lucide-react';
-import type { WheelTierConfig } from '@/lib/appConfig';
-import { updateUserData } from '@/lib/firebase';
+import type { WheelTierConfig, RewardConfig } from '@/lib/appConfig';
+import { updateUserData, getUserRewardData, UserRewardData, claimDailyReward } from '@/lib/firebase';
 import { Steps } from 'intro.js-react';
 import { cn } from '@/lib/utils';
+import DailyRewardModal from '@/components/DailyRewardModal';
+import { useToast } from '@/hooks/use-toast';
 
 export default function GameSelectionPage() {
   const { user, userData, loading, appSettings } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   
   const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isRewardModalOpen, setIsRewardModalOpen] = useState(false);
+  const [userRewardData, setUserRewardData] = useState<UserRewardData | null>(null);
+  const [isRewardClaimable, setIsRewardClaimable] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+
+
+  const checkRewardStatus = useCallback(async () => {
+    if (!user || !userData) return;
+    try {
+      const rewards = await getUserRewardData(user.uid);
+      if (rewards) {
+        setUserRewardData(rewards);
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (rewards.lastClaimDate !== todayStr) {
+          setIsRewardClaimable(true);
+          setIsRewardModalOpen(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking reward status:", error);
+    }
+  }, [user, userData]);
 
   useEffect(() => {
-    if (user && userData && !loading && userData.toursCompleted?.welcome === false) {
-        // A small delay to ensure the DOM is ready for the tour
-        setTimeout(() => setIsTourOpen(true), 500);
+    if (user && userData && !loading) {
+        if (userData.toursCompleted?.welcome === false) {
+            setTimeout(() => setIsTourOpen(true), 500);
+        }
+        checkRewardStatus();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userData, loading]);
+
+  const handleClaimReward = async () => {
+    if (!user) return;
+    setIsClaiming(true);
+    try {
+      const result = await claimDailyReward(user.uid, appSettings.rewardConfig);
+      toast({ title: "Reward Claimed!", description: result.message });
+      setIsRewardModalOpen(false);
+      setIsRewardClaimable(false);
+      // Re-fetch user data to update balance/spins displayed elsewhere
+      // This is often handled by the real-time listener in AuthContext, but a manual trigger can be useful
+    } catch (error: any) {
+      toast({ title: "Claim Failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
 
   const onTourExit = () => {
     setIsTourOpen(false);
@@ -120,6 +166,16 @@ export default function GameSelectionPage() {
           prevLabel: '← Back',
         }}
       />
+      {isRewardClaimable && userRewardData && (
+        <DailyRewardModal
+          isOpen={isRewardModalOpen}
+          onClose={() => setIsRewardModalOpen(false)}
+          onClaim={handleClaimReward}
+          isClaiming={isClaiming}
+          rewardData={userRewardData}
+          rewardConfig={appSettings.rewardConfig}
+        />
+      )}
       <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-8">
         <div data-tour-id="page-title" className="text-center">
           <h1 className="text-5xl md:text-6xl font-bold text-primary-foreground animate-glow-pulse font-headline">

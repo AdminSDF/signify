@@ -21,10 +21,10 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule } from '@/lib/appConfig';
+import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
 import {
   saveAppConfigurationToFirestore,
   getWithdrawalRequests,
@@ -195,14 +195,13 @@ export default function AdminPage() {
   useEffect(() => {
     if(editingUser) {
         const rate = editingUser.manualWinRateOverride === null || editingUser.manualWinRateOverride === undefined 
-                     ? 50 // A neutral default if not set
+                     ? 50
                      : editingUser.manualWinRateOverride * 100;
         setManualWinRate(rate);
         setUserTagsInput((editingUser.tags || []).join(', '));
     }
   }, [editingUser]);
   
-   // Real-time user listener
   useEffect(() => {
     if (!userData?.isAdmin || !db) return;
 
@@ -229,7 +228,6 @@ export default function AdminPage() {
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      // User data is now handled by the real-time listener, so we fetch everything else.
       const [withdrawals, adds, transactions, leaderboardUsers, tickets, summary, alerts, stats] = await Promise.all([
         getWithdrawalRequests(),
         getAddFundRequests(),
@@ -256,7 +254,6 @@ export default function AdminPage() {
     }
   }, [toast]);
   
-  // Memoize sorted users to prevent re-sorting on every render
   const sortedUsers = useMemo(() => {
       if (allUsers.length === 0) return [];
       const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
@@ -265,20 +262,16 @@ export default function AdminPage() {
           const valA = a[field as keyof UserDocument] ?? 0;
           const valB = b[field as keyof UserDocument] ?? 0;
 
-          // Handle Timestamps
           if (valA instanceof Timestamp && valB instanceof Timestamp) {
               return direction === 'desc' ? valB.toMillis() - valA.toMillis() : valA.toMillis() - valB.toMillis();
           }
-          // Handle numbers
           if (typeof valA === 'number' && typeof valB === 'number') {
               return direction === 'desc' ? valB - valA : valA - valB;
           }
-          // Fallback for other types (though not used in current sorting options)
           return 0;
       });
   }, [allUsers, userSortBy]);
   
-  // Memoize live stats to prevent re-calculating on every render
   const liveStats = useMemo(() => {
     const onlineUsers = allUsers.filter(u => u.isOnline);
     const gameBreakdown = onlineUsers.reduce((acc, user) => {
@@ -316,13 +309,8 @@ export default function AdminPage() {
   const handleAddBalancePresetsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setAddBalancePresetsInput(value);
-    
     const presets = value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
-    
-    setCurrentAppSettings(prev => ({
-        ...prev,
-        addBalancePresets: presets
-    }));
+    setCurrentAppSettings(prev => ({ ...prev, addBalancePresets: presets }));
   };
   
   const handleDefaultWinRateChange = (value: string) => {
@@ -338,11 +326,9 @@ export default function AdminPage() {
     } else {
       (updatedRules[index][field] as string) = value as string;
     }
-    // special handling for rate as it's percentage based in UI
     if (field === 'rate') {
       updatedRules[index].rate = (value as number) / 100;
     }
-
     setCurrentAppSettings(prev => ({...prev, winRateRules: updatedRules}));
   };
 
@@ -352,10 +338,7 @@ export default function AdminPage() {
   };
   
   const removeWinRateRule = (id: string) => {
-    setCurrentAppSettings(prev => ({
-      ...prev,
-      winRateRules: prev.winRateRules.filter(rule => rule.id !== id)
-    }));
+    setCurrentAppSettings(prev => ({ ...prev, winRateRules: prev.winRateRules.filter(rule => rule.id !== id) }));
   };
   
   const handleSaveUserChanges = async () => {
@@ -364,14 +347,9 @@ export default function AdminPage() {
       const tags = userTagsInput.split(',').map(t => t.trim()).filter(Boolean);
       const rateValue = manualWinRate === 50 ? null : manualWinRate / 100;
 
-      await updateUserData(editingUser.id, {
-        manualWinRateOverride: rateValue,
-        tags: tags,
-      });
-
+      await updateUserData(editingUser.id, { manualWinRateOverride: rateValue, tags: tags });
       toast({ title: 'User Updated', description: `Changes for ${editingUser.displayName} have been saved.`});
       setEditingUser(null);
-      // No need to fetch data, real-time listener will update it.
     } catch (error: any) {
       console.error("Error updating user:", error);
       toast({ title: 'Update Failed', description: error.message, variant: 'destructive'});
@@ -380,152 +358,64 @@ export default function AdminPage() {
 
 
   const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => {
-    setCurrentAppSettings(prev => ({
-      ...prev,
-      wheelConfigs: {
-        ...prev.wheelConfigs,
-        [tierId]: {
-          ...prev.wheelConfigs[tierId],
-          [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value
-        }
-      }
-    }));
+    setCurrentAppSettings(prev => ({ ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value }}}));
   };
 
   const handleToggleLock = (tierId: string, checked: boolean) => {
-    setCurrentAppSettings(prev => ({
-      ...prev,
-      wheelConfigs: {
-        ...prev.wheelConfigs,
-        [tierId]: {
-          ...prev.wheelConfigs[tierId],
-          isLocked: checked
-        }
-      }
-    }));
+    setCurrentAppSettings(prev => ({ ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], isLocked: checked }}}));
   };
 
   const handleCostSettingChange = (tierId: string, field: 'baseCost' | 'tier1Limit' | 'tier1Cost' | 'tier2Limit' | 'tier2Cost' | 'tier3Cost', value: string) => {
-      setCurrentAppSettings(prev => ({
-          ...prev,
-          wheelConfigs: {
-              ...prev.wheelConfigs,
-              [tierId]: {
-                  ...prev.wheelConfigs[tierId],
-                  costSettings: {
-                      ...prev.wheelConfigs[tierId].costSettings,
-                      [field]: parseFloat(value) || 0
-                  }
-              }
-          }
-      }));
+      setCurrentAppSettings(prev => ({ ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], costSettings: { ...prev.wheelConfigs[tierId].costSettings, [field]: parseFloat(value) || 0 } } } }));
   };
 
   const handleSegmentChange = (tierId: string, segmentIndex: number, field: keyof SegmentConfig, value: string) => {
       setCurrentAppSettings(prev => {
           const newSegments = [...prev.wheelConfigs[tierId].segments];
-          newSegments[segmentIndex] = {
-              ...newSegments[segmentIndex],
-              [field]: (field === 'amount' || field === 'probability') ? parseFloat(value) || 0 : value
-          };
-
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: {
-                      ...prev.wheelConfigs[tierId],
-                      segments: newSegments
-                  }
-              }
-          };
+          newSegments[segmentIndex] = { ...newSegments[segmentIndex], [field]: (field === 'amount' || field === 'probability') ? parseFloat(value) || 0 : value };
+          return { ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], segments: newSegments }}};
       });
   };
 
   const addSegment = (tierId: string) => {
       setCurrentAppSettings(prev => {
-          const newSegment: SegmentConfig = {
-              id: `${tierId.charAt(0)}${new Date().getTime()}`,
-              text: 'New Prize',
-              emoji: '🎉',
-              amount: 1,
-              probability: 10,
-              color: '0 0% 80%',
-          };
+          const newSegment: SegmentConfig = { id: `${tierId.charAt(0)}${new Date().getTime()}`, text: 'New Prize', emoji: '🎉', amount: 1, probability: 10, color: '0 0% 80%' };
           const newSegments = [...prev.wheelConfigs[tierId].segments, newSegment];
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: {
-                      ...prev.wheelConfigs[tierId],
-                      segments: newSegments
-                  }
-              }
-          };
+          return { ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], segments: newSegments }}};
       });
   };
 
   const removeSegment = (tierId: string, indexToRemove: number) => {
       if (currentAppSettings.wheelConfigs[tierId].segments.length <= 1) {
-          toast({
-              title: "Cannot Delete Last Segment",
-              description: "A wheel must have at least one prize segment.",
-              variant: "destructive",
-          });
+          toast({ title: "Cannot Delete Last Segment", description: "A wheel must have at least one prize segment.", variant: "destructive" });
           return;
       }
       setCurrentAppSettings(prev => {
           const newSegments = prev.wheelConfigs[tierId].segments.filter((_, index) => index !== indexToRemove);
-          return {
-              ...prev,
-              wheelConfigs: {
-                  ...prev.wheelConfigs,
-                  [tierId]: {
-                      ...prev.wheelConfigs[tierId],
-                      segments: newSegments
-                  }
-              }
-          };
+          return { ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], segments: newSegments }}};
       });
   };
   
-  const handleDragStart = (tierId: string, index: number) => {
-    setDraggedSegment({ tierId, index });
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
+  const handleDragStart = (tierId: string, index: number) => { setDraggedSegment({ tierId, index }); };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
   const handleDrop = (targetTierId: string, dropIndex: number) => {
-      if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) {
-          setDraggedSegment(null);
-          return;
-      }
-      
+      if (!draggedSegment || draggedSegment.tierId !== targetTierId || draggedSegment.index === dropIndex) { setDraggedSegment(null); return; }
       setCurrentAppSettings(prev => {
           const newAppSettings = { ...prev };
           const segments = [...newAppSettings.wheelConfigs[targetTierId].segments];
           const [draggedItem] = segments.splice(draggedSegment.index, 1);
           segments.splice(dropIndex, 0, draggedItem);
-          
           newAppSettings.wheelConfigs[targetTierId].segments = segments;
           return newAppSettings;
       });
-      
       setDraggedSegment(null);
   };
-
-  const handleDragEnd = () => {
-    setDraggedSegment(null);
-  };
+  const handleDragEnd = () => { setDraggedSegment(null); };
   
   const handleToggleUserBlock = async (userId: string, currentStatus: boolean) => {
     try {
       await updateUserData(userId, { isBlocked: !currentStatus });
       toast({ title: "User Status Updated", description: `User has been ${!currentStatus ? 'blocked' : 'unblocked'}.` });
-      // No need to fetch data, real-time listener will update it.
     } catch (error: any) {
       console.error("Error updating user status:", error);
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
@@ -534,10 +424,7 @@ export default function AdminPage() {
 
   const handleSaveConfiguration = async () => {
     try {
-      const fullConfig: AppConfiguration = {
-        settings: currentAppSettings,
-        newsItems: currentNewsItems
-      };
+      const fullConfig: AppConfiguration = { settings: currentAppSettings, newsItems: currentNewsItems };
       await saveAppConfigurationToFirestore(fullConfig);
       await refreshAppConfig();
       toast({ title: "Configuration Saved", description: "All settings have been saved to Firestore." });
@@ -552,16 +439,8 @@ export default function AdminPage() {
     setCurrentNewsItems(prev => [...prev, newNewsItem.trim()]);
     setNewNewsItem('');
   };
-
-  const handleRemoveNewsItem = (indexToRemove: number) => {
-    setCurrentNewsItems(prev => prev.filter((_, index) => index !== indexToRemove));
-  };
-  
-  const startEditNewsItem = (index: number) => {
-    setEditingNewsItemIndex(index);
-    setEditingNewsItemText(currentNewsItems[index]);
-  };
-
+  const handleRemoveNewsItem = (indexToRemove: number) => { setCurrentNewsItems(prev => prev.filter((_, index) => index !== indexToRemove)); };
+  const startEditNewsItem = (index: number) => { setEditingNewsItemIndex(index); setEditingNewsItemText(currentNewsItems[index]); };
   const handleSaveEditedNewsItem = () => {
     if (editingNewsItemIndex === null) return;
     const updatedNewsItems = [...currentNewsItems];
@@ -637,6 +516,27 @@ export default function AdminPage() {
     ];
   }, [activitySummary]);
   
+  const handleDailyRewardChange = (index: number, field: keyof DailyReward, value: string | number) => {
+    const updatedRewards = [...currentAppSettings.rewardConfig.dailyRewards];
+    if (typeof updatedRewards[index][field] === 'number') {
+        updatedRewards[index][field] = parseFloat(value as string) || 0;
+    } else {
+        (updatedRewards[index][field] as string) = value as string;
+    }
+    setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, dailyRewards: updatedRewards}}));
+  };
+
+  const handleStreakBonusChange = (index: number, field: keyof StreakBonus, value: string | number) => {
+      const updatedBonuses = [...currentAppSettings.rewardConfig.streakBonuses];
+      if (typeof updatedBonuses[index][field] === 'number') {
+          updatedBonuses[index][field] = parseFloat(value as string) || 0;
+      } else {
+          (updatedBonuses[index][field] as string) = value as string;
+      }
+      setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, streakBonuses: updatedBonuses}}));
+  };
+
+
   if (loading) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
@@ -677,6 +577,7 @@ export default function AdminPage() {
               <TabsTrigger value="overview"><Users className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
               <TabsTrigger value="activity"><Activity className="mr-2 h-4 w-4"/>Activity</TabsTrigger>
               <TabsTrigger value="winning-rules"><BrainCircuit className="mr-2 h-4 w-4"/>Winning Rules</TabsTrigger>
+              <TabsTrigger value="daily-rewards"><Gift className="mr-2 h-4 w-4"/>Daily Rewards</TabsTrigger>
               
               <TabsTrigger value="fraud-alerts" className="relative">
                 <ShieldAlert className="mr-2 h-4 w-4"/>Fraud Alerts
@@ -893,7 +794,7 @@ export default function AdminPage() {
                                 id={`block-switch-${u.id}`}
                                 checked={u.isBlocked || false}
                                 onCheckedChange={() => handleToggleUserBlock(u.id, u.isBlocked || false)}
-                                disabled={u.isAdmin} // Prevent blocking admins
+                                disabled={u.isAdmin}
                                 aria-label={`Block or unblock user ${u.displayName}`}
                               />
                             </div>
@@ -992,6 +893,68 @@ export default function AdminPage() {
               </Card>
             </TabsContent>
             
+            <TabsContent value="daily-rewards">
+                <Card className="bg-muted/20">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Gift/> Daily Rewards & Streaks</CardTitle>
+                        <CardDescription>Configure rewards for daily logins and long streaks to keep users engaged.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-8">
+                        <div>
+                            <h3 className="font-semibold text-lg mb-2">Daily Login Rewards (7-Day Cycle)</h3>
+                             <Table>
+                                <TableHeader><TableRow><TableHead>Day</TableHead><TableHead>Emoji</TableHead><TableHead>Type</TableHead><TableHead>Value</TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {currentAppSettings.rewardConfig.dailyRewards.map((reward, index) => (
+                                    <TableRow key={reward.day}>
+                                        <TableCell className="font-bold">{reward.day}</TableCell>
+                                        <TableCell><Input value={reward.emoji} onChange={(e) => handleDailyRewardChange(index, 'emoji', e.target.value)} className="w-16"/></TableCell>
+                                        <TableCell>
+                                          <Select value={reward.type} onValueChange={(value) => handleDailyRewardChange(index, 'type', value)}>
+                                            <SelectTrigger><SelectValue/></SelectTrigger>
+                                            <SelectContent><SelectItem value="spin">Spins</SelectItem><SelectItem value="credit">Credits (₹)</SelectItem></SelectContent>
+                                          </Select>
+                                        </TableCell>
+                                        <TableCell><Input type="number" value={reward.value} onChange={(e) => handleDailyRewardChange(index, 'value', e.target.value)} className="w-24"/></TableCell>
+                                    </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                        <div className="border-t pt-6">
+                             <h3 className="font-semibold text-lg mb-2">Streak Bonuses</h3>
+                             <Table>
+                                <TableHeader><TableRow><TableHead>After X Days</TableHead><TableHead>Emoji</TableHead><TableHead>Type</TableHead><TableHead>Value</TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {currentAppSettings.rewardConfig.streakBonuses.map((bonus, index) => (
+                                    <TableRow key={bonus.afterDays}>
+                                        <TableCell><Input type="number" value={bonus.afterDays} onChange={(e) => handleStreakBonusChange(index, 'afterDays', e.target.value)} className="w-24"/></TableCell>
+                                        <TableCell><Input value={bonus.emoji} onChange={(e) => handleStreakBonusChange(index, 'emoji', e.target.value)} className="w-16"/></TableCell>
+                                        <TableCell>
+                                            <Select value={bonus.type} onValueChange={(value) => handleStreakBonusChange(index, 'type', value)}>
+                                            <SelectTrigger><SelectValue/></SelectTrigger>
+                                            <SelectContent><SelectItem value="spin">Spins</SelectItem><SelectItem value="credit">Credits (₹)</SelectItem></SelectContent>
+                                          </Select>
+                                        </TableCell>
+                                        <TableCell><Input type="number" value={bonus.value} onChange={(e) => handleStreakBonusChange(index, 'value', e.target.value)} className="w-24"/></TableCell>
+                                    </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                        <div className="border-t pt-6">
+                            <h3 className="font-semibold text-lg mb-2">Settings</h3>
+                            <div className="flex items-center space-x-2">
+                                <Switch id="reset-streak" 
+                                    checked={currentAppSettings.rewardConfig.resetIfMissed} 
+                                    onCheckedChange={(checked) => setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, resetIfMissed: checked}}))} />
+                                <Label htmlFor="reset-streak">Reset streak if user misses a day</Label>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
             <TabsContent value="fraud-alerts">
               <Card className="bg-muted/20">
                 <CardHeader>
@@ -1290,7 +1253,6 @@ export default function AdminPage() {
         </CardContent>
       </Card>
       
-      {/* Dialog for Editing User */}
       <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>

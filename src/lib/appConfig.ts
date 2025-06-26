@@ -123,6 +123,27 @@ export interface WinRateRule {
   priority: number; // lower is higher priority
 }
 
+// --- Daily Rewards ---
+export interface DailyReward {
+  day: number;
+  type: "spin" | "credit" | "vip";
+  value: number;
+  emoji: string;
+}
+
+export interface StreakBonus {
+  afterDays: number;
+  type: "spin" | "credit" | "vip";
+  value: number;
+  emoji: string;
+}
+
+export interface RewardConfig {
+  dailyRewards: DailyReward[];
+  streakBonuses: StreakBonus[];
+  resetIfMissed: boolean;
+}
+
 // General App Settings Interface
 export interface AppSettings {
   appName: string;
@@ -139,6 +160,7 @@ export interface AppSettings {
   // Dynamic Winning Chance Settings
   defaultWinRate: number; // Default chance to win (0 to 1)
   winRateRules: WinRateRule[];
+  rewardConfig: RewardConfig; // Nesting reward config for simplicity
 }
 
 // Initial structure / fallback for general settings if Firestore is unavailable.
@@ -158,7 +180,23 @@ export const initialSettings: AppSettings = {
   winRateRules: [
     { id: 'rule-new', tag: 'new', rate: 0.6, priority: 1 }, // 60% win rate for new users
     { id: 'rule-high-loss', tag: 'high-loss', rate: 0.5, priority: 2 }, // 50% for high-loss users
-  ]
+  ],
+  rewardConfig: {
+    dailyRewards: [
+      { day: 1, type: "spin", value: 1, emoji: "🎁" },
+      { day: 2, type: "credit", value: 5, emoji: "💰" },
+      { day: 3, type: "spin", value: 2, emoji: "🎁" },
+      { day: 4, type: "credit", value: 10, emoji: "💰" },
+      { day: 5, type: "spin", value: 3, emoji: "🎁" },
+      { day: 6, type: "credit", value: 15, emoji: "💰" },
+      { day: 7, type: "spin", value: 5, emoji: "🎉" },
+    ],
+    streakBonuses: [
+      { afterDays: 7, type: "credit", value: 50, emoji: "🏆" },
+      { afterDays: 30, type: "credit", value: 250, emoji: "👑" },
+    ],
+    resetIfMissed: true,
+  },
 };
 
 // --- Other constants ---
