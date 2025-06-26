@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -89,11 +90,11 @@ export default function ForgotPasswordPage() {
             </form>
           </Form>
           <div className="mt-6 text-center">
-            <Link href="/login" passHref>
-                <Button variant="link" className="text-muted-foreground">
-                    <ArrowLeft className="mr-2 h-4 w-4" /> Back to Login
-                </Button>
-            </Link>
+            <Button asChild variant="link" className="text-muted-foreground">
+              <Link href="/login">
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Login
+              </Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

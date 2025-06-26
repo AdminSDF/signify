@@ -587,9 +587,11 @@ export default function GamePage() {
         {showConfetti && <ConfettiRain />}
         
         <div className="w-full max-w-4xl flex items-center justify-between">
-           <Link href="/" passHref>
-              <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Selection</Button>
-          </Link>
+           <Button asChild variant="outline">
+             <Link href="/">
+               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Selection
+             </Link>
+           </Button>
           <SpinifyGameHeader />
           <div style={{width: '112px'}}></div> {/* Spacer */}
         </div>

@@ -102,31 +102,31 @@ const SiteHeader: React.FC = () => {
             <Image src={appSettings.logoUrl} alt="Spinify Logo" width={32} height={32} className="h-8 w-8 rounded-full" />
           </Link>
           <nav className="flex items-center gap-1 text-sm flex-grow">
-            <Link href="/" passHref>
-              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link href="/">
                 <Home className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Game</span>
-              </Button>
-            </Link>
-             <Link href="/tournaments" passHref>
-              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link href="/tournaments">
                 <Swords className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Tournaments</span>
-              </Button>
-            </Link>
-            <Link href="/leaderboard" passHref>
-              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link href="/leaderboard">
                 <Trophy className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Leaderboard</span>
-              </Button>
-            </Link>
-            <Link href="/transactions" passHref>
-              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link href="/transactions">
                 <ListChecks className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Transactions</span>
-              </Button>
-            </Link>
-             <Link href="/help" passHref>
-              <Button variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              </Link>
+            </Button>
+             <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link href="/help">
                 <HelpCircle className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Help</span>
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -179,11 +179,11 @@ const SiteHeader: React.FC = () => {
                 </DropdownMenu>
               </>
             ) : (
-              <Link href="/login" passHref>
-                <Button variant="default" size="sm">
+              <Button asChild variant="default" size="sm">
+                <Link href="/login">
                   <LogIn className="mr-2 h-4 w-4" /> Login
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             )}
           </div>
         </div>

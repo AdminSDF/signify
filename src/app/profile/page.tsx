@@ -668,9 +668,11 @@ export default function ProfilePage() {
           </CardContent>
           <CardFooter className="flex flex-col items-center gap-4 pt-6">
               {userData?.isAdmin && (
-                <Link href="/admin" passHref className="w-full max-w-xs">
-                  <Button variant="secondary" className="w-full"><Shield className="mr-2 h-4 w-4" />Admin Panel</Button>
-                </Link>
+                <Button asChild variant="secondary" className="w-full max-w-xs">
+                  <Link href="/admin">
+                    <Shield className="mr-2 h-4 w-4" />Admin Panel
+                  </Link>
+                </Button>
               )}
           </CardFooter>
         </Card>
