@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -7,114 +8,95 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
     function isAdmin() {
-      // Check if the user is authenticated and their user document has isAdmin set to true.
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-
-    function isUpdatingOnlyOwnSafeFields() {
-      // WARNING: 'balances' and 'spinsAvailable' are allowed here for client-side reward claims.
-      // This is a security risk. A proper solution uses Cloud Functions for reward logic.
-      let nonUpdatable = [
-        'uid', 'email', 'createdAt', 'isAdmin', 'isBlocked',
-        'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
-        'referralCode', 'referralEarnings', 'referredBy', 'referrals', 'vipUntil',
-        'friends', 'friendRequestsSent', 'friendRequestsReceived'
-      ];
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(nonUpdatable);
-    }
-    
-    function isUpdatingOnlyCrossUserFields() {
-        let allowedCrossUserFields = ['friends', 'friendRequestsSent', 'friendRequestsReceived', 'referrals'];
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedCrossUserFields);
+      // Check if the user document exists and has the isAdmin flag.
+      // Use exists() to prevent errors for users not yet in Firestore.
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
     match /users/{userId} {
-      allow get, list: if isSignedIn();
-      allow create: if isOwner(userId);
-      // Admin can update any user field. Regular user can update own safe fields or cross-user friendship fields.
-      allow update: if isSignedIn() && (
+      // Admins and signed-in users can read profiles (for leaderboards, friend lookups).
+      allow get, list: if isSignedIn() || isAdmin();
+      
+      // A user can only create their own document.
+      allow create: if request.auth.uid == userId;
+      
+      // Update logic is complex, so we break it down:
+      allow update: if 
+        // 1. Admins can update anything.
         isAdmin() ||
-        (isOwner(userId) && isUpdatingOnlyOwnSafeFields()) ||
-        isUpdatingOnlyCrossUserFields()
-      );
+        
+        // 2. A user can update their own safe profile fields (like displayName, photoURL).
+        // They cannot touch critical data or friendship lists here.
+        (
+          request.auth.uid == userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'uid', 'email', 'createdAt', 'balances', 'spinsAvailable', 'isAdmin', 'isBlocked', 
+            'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
+            'referralCode', 'referralEarnings', 'referredBy', 'vipUntil',
+            'friends', 'friendRequestsSent', 'friendRequestsReceived', 'referrals'
+          ])
+        ) ||
+
+        // 3. ANY authenticated user can update ANY user's friendship/referral lists.
+        // This is the key rule that allows the batch write for friend requests to succeed.
+        (
+          isSignedIn() && 
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends', 'friendRequestsSent', 'friendRequestsReceived', 'referrals'])
+        );
     }
 
     match /userRewards/{userId} {
-       allow get, create, update: if isSignedIn() && isOwner(userId);
+       // A user must be able to update their own rewards doc for daily claims.
+       allow get, create, update: if request.auth.uid == userId;
     }
-
+    
     match /appConfiguration/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }
     
     match /transactions/{transactionId} {
-      allow get: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
-      allow list: if isAdmin();
-      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
-      allow update, delete: if false;
+      // User can create/read their own transactions. Admin can read all.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow write: if false;
     }
     
     match /withdrawalRequests/{reqId} {
-       allow get: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
-       allow list: if isAdmin();
-       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
-       allow update: if isAdmin();
-       allow delete: if false;
+       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+       allow read, list, update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
     }
     
     match /addFundRequests/{reqId} {
-       allow get: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
-       allow list: if isAdmin();
-       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
-       allow update: if isAdmin();
-       allow delete: if false;
+       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+       allow read, list, update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
     }
     
     match /supportTickets/{ticketId} {
-      allow get: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
-      allow list: if isAdmin();
-      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, list, update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
     }
 
     match /users/{userId}/notifications/{notificationId} {
-        allow read, create, update: if isSignedIn() && isOwner(userId);
+        allow read, create, update: if request.auth.uid == userId;
         allow delete: if false;
     }
     
     match /tournaments/{tournamentId} {
-        allow read: if isSignedIn();
-        allow create, update: if isAdmin();
-        allow delete: if false;
+        allow read: if isSignedIn() || isAdmin();
+        allow write: if isAdmin();
     }
     
     match /userTournaments/{userTournamentId} {
-        allow read: if isSignedIn();
-        allow update: if isAdmin();
-        allow create, delete: if false;
+        allow read: if (isSignedIn() && request.auth.uid == resource.data.userId) || isAdmin();
+        allow write: if false; // Only server/admin can update score.
     }
     
-    match /activityLogs/{logId} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
-
-    match /fraudAlerts/{alertId} {
-      allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow create, delete: if false;
-    }
-    
-    match /systemStats/{statId} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
+    // These collections can be listed/read by admin for monitoring.
+    match /activityLogs/{logId} { allow read, list: if isAdmin(); allow write: if false; }
+    match /fraudAlerts/{alertId} { allow read, list: if isAdmin(); allow write: if false; }
+    match /systemStats/{statId} { allow read: if isAdmin(); allow write: if false; }
   }
 }
