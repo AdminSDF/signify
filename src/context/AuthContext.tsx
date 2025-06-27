@@ -79,6 +79,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = useCallback(async (isBlocked = false) => {
     setFbAuthLoading(true); 
     try {
+      if (user) {
+        // Mark user as offline before signing out
+        await updateUserData(user.uid, { isOnline: false, currentGame: null });
+      }
       await firebaseSignOut(auth);
       if (isBlocked) {
         toast({ title: "Account Blocked", description: "Your account is blocked. Please contact support.", variant: "destructive" });
@@ -94,7 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setFbAuthLoading(false); 
     }
-  }, [router, toast]);
+  }, [router, toast, user]);
 
 
    useEffect(() => {
@@ -121,22 +125,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 latestUserData.balances = {};
               }
               
-              const needsMigration = !latestUserData.referralCode || !latestUserData.hasOwnProperty('referrals') || !latestUserData.hasOwnProperty('referralEarnings');
+              // MIGRATION LOGIC
+              let needsMigration = false;
+              const migrationData: Partial<UserDocument> = {};
+              
+              if (!latestUserData.referralCode) {
+                  migrationData.referralCode = firebaseUser.uid;
+                  needsMigration = true;
+              }
+              if (!latestUserData.hasOwnProperty('referrals')) {
+                  migrationData.referrals = [];
+                  needsMigration = true;
+              }
+              if (!latestUserData.hasOwnProperty('referralEarnings')) {
+                  migrationData.referralEarnings = 0;
+                  needsMigration = true;
+              }
+              // This is the key fix: Migrate old `isAdmin` flag to new `role` system
+              if (latestUserData.isAdmin === true && !latestUserData.role) {
+                  migrationData.role = 'super-admin';
+                  latestUserData.role = 'super-admin'; // Optimistic update
+                  needsMigration = true;
+              }
               
               if (needsMigration) {
-                  const migrationData: Partial<UserDocument> = {};
-                  if (!latestUserData.referralCode) {
-                      migrationData.referralCode = firebaseUser.uid;
-                  }
-                  if (!latestUserData.hasOwnProperty('referrals')) {
-                      migrationData.referrals = [];
-                  }
-                  if (!latestUserData.hasOwnProperty('referralEarnings')) {
-                      migrationData.referralEarnings = 0;
-                  }
-
                   updateUserData(firebaseUser.uid, migrationData).catch(err => {
-                      console.error("Referral system migration for user failed:", err);
+                      console.error("Data migration for user failed:", err);
                   });
               }
               
@@ -229,7 +243,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (referredBy) {
           try {
-            const referrerRef = doc(db, 'users', referredBy);
+            const referrerRef = doc(db, USERS_COLLECTION, referredBy);
             await updateDoc(referrerRef, {
               referrals: arrayUnion(userCredential.user.uid)
             });
