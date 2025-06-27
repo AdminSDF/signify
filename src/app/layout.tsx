@@ -1,6 +1,7 @@
 
 import type {Metadata} from 'next';
 import { Poppins } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import 'intro.js/introjs.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -30,11 +31,6 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="google-adsense-account" content="ca-pub-1425274923062587" />
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
-          crossOrigin="anonymous"
-        ></script>
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
         <AuthProvider>
@@ -46,6 +42,12 @@ export default function RootLayout({
           <SiteFooter />
           <Toaster />
         </AuthProvider>
+        <Script
+          id="adsbygoogle-init"
+          strategy="afterInteractive"
+          crossOrigin="anonymous"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
+        />
       </body>
     </html>
   );
