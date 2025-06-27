@@ -201,17 +201,22 @@ export default function AdminPage() {
   const [manualWinRate, setManualWinRate] = useState<number>(50);
   const [userTagsInput, setUserTagsInput] = useState<string>('');
   
+  // Search states
   const [userSearch, setUserSearch] = useState('');
   const [withdrawalSearch, setWithdrawalSearch] = useState('');
   const [addFundSearch, setAddFundSearch] = useState('');
   const [transactionSearch, setTransactionSearch] = useState('');
   const [supportTicketSearch, setSupportTicketSearch] = useState('');
+  const [tournamentSearch, setTournamentSearch] = useState('');
+  const [staffSearch, setStaffSearch] = useState('');
 
+  // Memoized Counts
   const pendingWithdrawalsCount = useMemo(() => withdrawalRequests.filter(req => req.status === 'pending').length, [withdrawalRequests]);
   const pendingAddFundsCount = useMemo(() => addFundRequests.filter(req => req.status === 'pending').length, [addFundRequests]);
   const openSupportTicketsCount = useMemo(() => supportTickets.filter(ticket => ticket.status === 'open').length, [supportTickets]);
   const openFraudAlertsCount = useMemo(() => fraudAlerts.filter(alert => alert.status === 'open').length, [fraudAlerts]);
 
+  // Effects
   useEffect(() => { if (!loading) { setCurrentAppSettings(appSettings); setCurrentNewsItems(newsItems); setAddBalancePresetsInput(appSettings.addBalancePresets?.join(', ') || ''); } }, [appSettings, newsItems, loading]);
   useEffect(() => { if(editingUser) { const rate = editingUser.manualWinRateOverride === null || editingUser.manualWinRateOverride === undefined ? 50 : editingUser.manualWinRateOverride * 100; setManualWinRate(rate); setUserTagsInput((editingUser.tags || []).join(', ')); } }, [editingUser]);
   
@@ -238,6 +243,7 @@ export default function AdminPage() {
     } finally { setIsLoadingData(false); }
   }, [toast]);
   
+  // Memoized Filters
   const sortedUsers = useMemo(() => {
       if (allUsers.length === 0) return [];
       const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
@@ -287,6 +293,22 @@ export default function AdminPage() {
         (t.description || '').toLowerCase().includes(lowerCaseSearch)
     );
   }, [supportTickets, supportTicketSearch]);
+
+  const filteredTournaments = useMemo(() => {
+    if (!tournamentSearch) return allTournaments;
+    const lowerCaseSearch = tournamentSearch.toLowerCase();
+    return allTournaments.filter(t => (t.name || '').toLowerCase().includes(lowerCaseSearch));
+  }, [allTournaments, tournamentSearch]);
+
+  const filteredStaff = useMemo(() => {
+    const usersWithStaffRoles = allUsers.filter(u => u.role && u.role !== 'player');
+    if (!staffSearch) return usersWithStaffRoles;
+    const lowerCaseSearch = staffSearch.toLowerCase();
+    return usersWithStaffRoles.filter(u =>
+      (u.displayName || '').toLowerCase().includes(lowerCaseSearch) ||
+      (u.email || '').toLowerCase().includes(lowerCaseSearch)
+    );
+  }, [allUsers, staffSearch]);
   
   const liveStats = useMemo(() => {
     const onlineUsers = allUsers.filter(u => u.isOnline);
@@ -441,12 +463,18 @@ export default function AdminPage() {
       );
       case 'tournaments': return (
         <Card>
-            <CardHeader><div className="flex justify-between items-center"><div><CardTitle>Tournament Management</CardTitle><CardDescription>Create, monitor, and manage tournaments.</CardDescription></div><Button onClick={() => setIsTournamentModalOpen(true)}>Create Tournament</Button></div></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div><CardTitle>Tournament Management</CardTitle><CardDescription>Create, monitor, and manage tournaments.</CardDescription></div>
+              <div className="flex items-center gap-2">
+                <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name..." value={tournamentSearch} onChange={(e) => setTournamentSearch(e.target.value)} className="pl-8" /></div>
+                <Button onClick={() => setIsTournamentModalOpen(true)}>Create Tournament</Button>
+              </div>
+            </CardHeader>
             <CardContent><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead>Dates</TableHead><TableHead>Participants</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                     {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading tournaments...</TableCell></TableRow>
-                    : allTournaments.map((t) => (<TableRow key={t.id}><TableCell className="font-bold">{t.name}</TableCell><TableCell>{t.type}</TableCell><TableCell><Badge variant={t.status === 'active' ? 'default' : t.status === 'ended' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell><TableCell>{formatDisplayDate(t.startDate, 'date')} to {formatDisplayDate(t.endDate, 'date')}</TableCell><TableCell>{t.participants?.length || 0}</TableCell><TableCell className="flex gap-2"><Button variant="outline" size="sm" onClick={() => handleViewParticipants(t.id!)}>View</Button>{t.status === 'active' && <Button variant="destructive" size="sm" onClick={() => handleDistributePrizes(t.id!)}>End & Distribute</Button>}</TableCell></TableRow>))}
-                    {!isLoadingData && allTournaments.length === 0 && <TableRow><TableCell colSpan={6} className="text-center h-24">No tournaments found.</TableCell></TableRow>}
+                    : filteredTournaments.map((t) => (<TableRow key={t.id}><TableCell className="font-bold">{t.name}</TableCell><TableCell>{t.type}</TableCell><TableCell><Badge variant={t.status === 'active' ? 'default' : t.status === 'ended' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell><TableCell>{formatDisplayDate(t.startDate, 'date')} to {formatDisplayDate(t.endDate, 'date')}</TableCell><TableCell>{t.participants?.length || 0}</TableCell><TableCell className="flex gap-2"><Button variant="outline" size="sm" onClick={() => handleViewParticipants(t.id!)}>View</Button>{t.status === 'active' && <Button variant="destructive" size="sm" onClick={() => handleDistributePrizes(t.id!)}>End & Distribute</Button>}</TableCell></TableRow>))}
+                    {!isLoadingData && filteredTournaments.length === 0 && <TableRow><TableCell colSpan={6} className="text-center h-24">No tournaments found.</TableCell></TableRow>}
                 </TableBody></Table>
             </CardContent>
         </Card>
@@ -481,7 +509,7 @@ export default function AdminPage() {
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Type</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : filteredTransactions.map((t) => (<TableRow key={t.id}><TableCell>{t.userEmail}</TableCell><TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}{t.type}</span></TableCell><TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{t.description}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell><TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>))}
+                  : filteredTransactions.map((t) => (<TableRow key={t.id}><TableCell>{t.userEmail}</TableCell><TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}{t.type}</span></TableCell><TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>₹{t.amount.toFixed(2)}</TableCell><TableCell className="max-w-xs whitespace-pre-wrap">{t.description}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell><TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>))}
                   {!isLoadingData && filteredTransactions.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center h-24">No transactions found.</TableCell></TableRow>)}
                 </TableBody></Table>
             </CardContent>
@@ -520,11 +548,15 @@ export default function AdminPage() {
         </Card>
       );
       case 'staff-management': return (
-        <Card><CardHeader><CardTitle>Staff Management</CardTitle><CardDescription>Assign roles to users to manage the application.</CardDescription></CardHeader>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div><CardTitle>Staff Management</CardTitle><CardDescription>Assign roles to users to manage the application.</CardDescription></div>
+              <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or email..." value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} className="pl-8" /></div>
+            </CardHeader>
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Current Role</TableHead><TableHead>Change Role</TableHead></TableRow></TableHeader>
                 <TableBody>
                     {isUsersLoading ? <TableRow><TableCell colSpan={3} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                    : allUsers.map((u) => (<TableRow key={u.id}><TableCell><div className="flex items-center gap-2"><Avatar className="w-8 h-8"><AvatarImage src={u.photoURL || undefined} /><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar><div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell><TableCell><Badge variant={u.role === 'super-admin' ? 'destructive' : (u.role === 'admin' ? 'default' : 'secondary')} className="capitalize">{u.role || 'player'}</Badge></TableCell><TableCell><Select defaultValue={u.role || 'player'} onValueChange={(newRole) => handleUpdateUserRole(u.id, newRole as UserRole)} disabled={u.role === 'super-admin' && u.uid !== user.uid}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="player">Player</SelectItem><SelectItem value="support-staff">Support Staff</SelectItem><SelectItem value="finance-staff">Finance Staff</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="super-admin">Super Admin</SelectItem></SelectContent></Select></TableCell></TableRow>))}
+                    : filteredStaff.map((u) => (<TableRow key={u.id}><TableCell><div className="flex items-center gap-2"><Avatar className="w-8 h-8"><AvatarImage src={u.photoURL || undefined} /><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar><div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell><TableCell><Badge variant={u.role === 'super-admin' ? 'destructive' : (u.role === 'admin' ? 'default' : 'secondary')} className="capitalize">{u.role || 'player'}</Badge></TableCell><TableCell><Select defaultValue={u.role || 'player'} onValueChange={(newRole) => handleUpdateUserRole(u.id, newRole as UserRole)} disabled={u.role === 'super-admin' && u.uid !== user.uid}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="player">Player</SelectItem><SelectItem value="support-staff">Support Staff</SelectItem><SelectItem value="finance-staff">Finance Staff</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="super-admin">Super Admin</SelectItem></SelectContent></Select></TableCell></TableRow>))}
                 </TableBody></Table>
             </CardContent>
         </Card>
@@ -655,7 +687,7 @@ const CreateTournamentDialog = ({ isOpen, onClose, adminId, onTournamentCreated 
   const handleRewardChange = (index: number, field: keyof TournamentReward, value: any) => { const newRewards = [...rewards]; if(field === 'prize' || field === 'rank') { newRewards[index][field] = parseInt(value, 10) || 0; } else { newRewards[index][field] = value; } setRewards(newRewards); };
   const handleSubmit = async () => {
     if (!name || !description || !startDate || !endDate || rewards.length === 0) { toast({ title: 'Missing Fields', variant: 'destructive' }); return; }
-    try { await createTournament({ name, description, type, startDate: Timestamp.fromDate(startDate), endDate: Timestamp.fromDate(endDate), entryFee: parseFloat(entryFee), prizePool: parseFloat(prizePool), tierId, rewards }, adminId); toast({ title: 'Tournament Created!' }); onTournamentCreated(); onClose(); } catch (error: any) { toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' }); }
+    try { await createTournament({ name, description, type, startDate: Timestamp.fromDate(startDate), endDate: Timestamp.fromDate(endDate), entryFee: parseFloat(entryFee), prizePool: parseFloat(prizePool), tierId, rewards, status: 'upcoming' }, adminId); toast({ title: 'Tournament Created!' }); onTournamentCreated(); onClose(); } catch (error: any) { toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' }); }
   };
   return (
     <Dialog open={isOpen} onOpenChange={onClose}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Create New Tournament</DialogTitle><DialogDescription>Fill in the details to create a new competitive event.</DialogDescription></DialogHeader>
