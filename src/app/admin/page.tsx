@@ -21,7 +21,7 @@ import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
   ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords, LogOut,
-  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal
+  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
@@ -200,6 +200,12 @@ export default function AdminPage() {
   const [editingUser, setEditingUser] = useState<(UserDocument & {id: string}) | null>(null);
   const [manualWinRate, setManualWinRate] = useState<number>(50);
   const [userTagsInput, setUserTagsInput] = useState<string>('');
+  
+  const [userSearch, setUserSearch] = useState('');
+  const [withdrawalSearch, setWithdrawalSearch] = useState('');
+  const [addFundSearch, setAddFundSearch] = useState('');
+  const [transactionSearch, setTransactionSearch] = useState('');
+  const [supportTicketSearch, setSupportTicketSearch] = useState('');
 
   const pendingWithdrawalsCount = useMemo(() => withdrawalRequests.filter(req => req.status === 'pending').length, [withdrawalRequests]);
   const pendingAddFundsCount = useMemo(() => addFundRequests.filter(req => req.status === 'pending').length, [addFundRequests]);
@@ -235,13 +241,52 @@ export default function AdminPage() {
   const sortedUsers = useMemo(() => {
       if (allUsers.length === 0) return [];
       const [field, direction] = userSortBy.split('_') as [string, 'asc' | 'desc'];
-      return [...allUsers].sort((a, b) => {
+      const sorted = [...allUsers].sort((a, b) => {
           const valA = a[field as keyof UserDocument] ?? 0; const valB = b[field as keyof UserDocument] ?? 0;
           if (valA instanceof Timestamp && valB instanceof Timestamp) return direction === 'desc' ? valB.toMillis() - valA.toMillis() : valA.toMillis() - valB.toMillis();
           if (typeof valA === 'number' && typeof valB === 'number') return direction === 'desc' ? valB - valA : valA - valB;
           return 0;
       });
-  }, [allUsers, userSortBy]);
+      if (!userSearch) return sorted;
+      const lowerCaseSearch = userSearch.toLowerCase();
+      return sorted.filter(u =>
+        (u.displayName || '').toLowerCase().includes(lowerCaseSearch) ||
+        (u.email || '').toLowerCase().includes(lowerCaseSearch)
+      );
+  }, [allUsers, userSortBy, userSearch]);
+  
+  const filteredWithdrawals = useMemo(() => {
+    if (!withdrawalSearch) return withdrawalRequests;
+    const lowerCaseSearch = withdrawalSearch.toLowerCase();
+    return withdrawalRequests.filter(r => (r.userEmail || '').toLowerCase().includes(lowerCaseSearch));
+  }, [withdrawalRequests, withdrawalSearch]);
+
+  const filteredAddFunds = useMemo(() => {
+    if (!addFundSearch) return addFundRequests;
+    const lowerCaseSearch = addFundSearch.toLowerCase();
+    return addFundRequests.filter(r => 
+        (r.userEmail || '').toLowerCase().includes(lowerCaseSearch) ||
+        (r.paymentReference || '').toLowerCase().includes(lowerCaseSearch)
+    );
+  }, [addFundRequests, addFundSearch]);
+
+  const filteredTransactions = useMemo(() => {
+    if (!transactionSearch) return allTransactions;
+    const lowerCaseSearch = transactionSearch.toLowerCase();
+    return allTransactions.filter(t => 
+        (t.userEmail || '').toLowerCase().includes(lowerCaseSearch) ||
+        (t.description || '').toLowerCase().includes(lowerCaseSearch)
+    );
+  }, [allTransactions, transactionSearch]);
+
+  const filteredSupportTickets = useMemo(() => {
+    if (!supportTicketSearch) return supportTickets;
+    const lowerCaseSearch = supportTicketSearch.toLowerCase();
+    return supportTickets.filter(t => 
+        (t.userEmail || '').toLowerCase().includes(lowerCaseSearch) ||
+        (t.description || '').toLowerCase().includes(lowerCaseSearch)
+    );
+  }, [supportTickets, supportTicketSearch]);
   
   const liveStats = useMemo(() => {
     const onlineUsers = allUsers.filter(u => u.isOnline);
@@ -276,10 +321,10 @@ export default function AdminPage() {
   const startEditNewsItem = (index: number) => { setEditingNewsItemIndex(index); setEditingNewsItemText(currentNewsItems[index]); };
   const handleSaveEditedNewsItem = () => { if (editingNewsItemIndex === null) return; const updatedNewsItems = [...currentNewsItems]; updatedNewsItems[editingNewsItemIndex] = editingNewsItemText; setCurrentNewsItems(updatedNewsItems); setEditingNewsItemIndex(null); setEditingNewsItemText(''); };
   const handleApproveAddFund = async (request: AddFundRequestData & {id: string}) => { if (!user?.email) return; try { await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, user.uid, user.email); toast({ title: "Fund Request Approved"}); fetchAdminData(); } catch (error: any) { toast({ title: "Approval Failed", description: error.message, variant: "destructive" }); } };
-  const handleRejectAddFund = async (requestId: string) => { if (!user?.email) return; try { await updateAddFundRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin."); toast({ title: "Fund Request Rejected" }); fetchAdminData(); } catch (error) { toast({ title: "Rejection Failed", variant: "destructive" }); } };
+  const handleRejectAddFund = async (requestId: string) => { if (!user?.email) return; try { await updateAddFundRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin."); toast({ title: "Fund Request Rejected" }); fetchAdminData(); } catch (error: any) { toast({ title: "Rejection Failed", variant: "destructive" }); } };
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => { if (!user?.email) return; try { await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, getPaymentDetailsString(request), user.uid, user.email); toast({ title: "Withdrawal Approved"}); fetchAdminData(); } catch (error: any) { toast({ title: "Approval Failed", description: error.message, variant: "destructive" }); } };
   const handleRejectWithdrawal = async (requestId: string) => { if (!user?.email) return; try { await updateWithdrawalRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin."); toast({ title: "Withdrawal Rejected" }); fetchAdminData(); } catch (error: any) { toast({ title: "Rejection Failed", variant: "destructive" }); } };
-  const handleResolveTicket = async (ticketId: string) => { if (!user?.email) return; try { await updateSupportTicketStatus(ticketId, 'resolved', user.uid, user.email); toast({ title: "Ticket Resolved"}); fetchAdminData(); } catch (error) { toast({ title: "Error", variant: "destructive" }); } };
+  const handleResolveTicket = async (ticketId: string) => { if (!user?.email) return; try { await updateSupportTicketStatus(ticketId, 'resolved', user.uid, user.email); toast({ title: "Ticket Resolved"}); fetchAdminData(); } catch (error: any) { toast({ title: "Error", variant: "destructive" }); } };
   const activityChartData = useMemo(() => { if (!activitySummary) return []; return [ { name: 'Morning', value: activitySummary.morning, fill: '#FFC107' }, { name: 'Afternoon', value: activitySummary.afternoon, fill: '#2196F3' }, { name: 'Evening', value: activitySummary.evening, fill: '#FF9800' }, { name: 'Night', value: activitySummary.night, fill: '#4A148C' } ]; }, [activitySummary]);
   const handleDailyRewardChange = (index: number, field: keyof DailyReward, value: string | number) => { const updatedRewards = [...currentAppSettings.rewardConfig.dailyRewards]; if (typeof updatedRewards[index][field] === 'number') { updatedRewards[index][field] = parseFloat(value as string) || 0; } else { (updatedRewards[index][field] as string) = value as string; } setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, dailyRewards: updatedRewards}})); };
   const handleStreakBonusChange = (index: number, field: keyof StreakBonus, value: string | number) => { const updatedBonuses = [...currentAppSettings.rewardConfig.streakBonuses]; if (typeof updatedBonuses[index][field] === 'number') { updatedBonuses[index][field] = parseFloat(value as string) || 0; } else { (updatedBonuses[index][field] as string) = value as string; } setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, streakBonuses: updatedBonuses}})); };
@@ -341,11 +386,9 @@ export default function AdminPage() {
       );
       case 'users': return (
         <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div><CardTitle>User Management</CardTitle><CardDescription>View and manage all registered users.</CardDescription></div>
-                <div className="w-full max-w-sm"><Select value={userSortBy} onValueChange={setUserSortBy}><SelectTrigger id="user-sort"><SelectValue placeholder="Sort by..." /></SelectTrigger><SelectContent><SelectItem value="totalWinnings_desc">Highest Winnings</SelectItem><SelectItem value="lastActive_desc">Most Recently Active</SelectItem><SelectItem value="totalDeposited_desc">Highest Deposits</SelectItem><SelectItem value="createdAt_desc">Newest First</SelectItem></SelectContent></Select></div>
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div><CardTitle>User Management</CardTitle><CardDescription>View and manage all registered users.</CardDescription></div>
+              <div className="flex items-center gap-2"><div className="relative w-full max-w-sm"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or email..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} className="pl-8" /></div><Select value={userSortBy} onValueChange={setUserSortBy}><SelectTrigger id="user-sort" className="w-[180px]"><SelectValue placeholder="Sort by..." /></SelectTrigger><SelectContent><SelectItem value="totalWinnings_desc">Highest Winnings</SelectItem><SelectItem value="lastActive_desc">Most Recently Active</SelectItem><SelectItem value="totalDeposited_desc">Highest Deposits</SelectItem><SelectItem value="createdAt_desc">Newest First</SelectItem></SelectContent></Select></div>
             </CardHeader>
             <CardContent>
                 <Table>
@@ -409,34 +452,37 @@ export default function AdminPage() {
         </Card>
       );
       case 'withdrawal-req': return (
-        <Card><CardHeader><CardTitle>Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></CardHeader>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email..." value={withdrawalSearch} onChange={(e) => setWithdrawalSearch(e.target.value)} className="pl-8" /></div></CardHeader>
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Gross Amt.</TableHead><TableHead>Net Pay</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={8} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : withdrawalRequests.map((req) => (<TableRow key={req.id}><TableCell>{req.userEmail}</TableCell><TableCell>₹{req.amount.toFixed(2)}</TableCell><TableCell className="font-semibold text-primary">₹{(req.amount - req.amount * 0.02).toFixed(2)}</TableCell><TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell><TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell><TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell><TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell><TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}>Reject</Button></div>)}</TableCell></TableRow>))}
-                  {!isLoadingData && withdrawalRequests.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center h-24">No pending withdrawal requests.</TableCell></TableRow>)}
+                  : filteredWithdrawals.map((req) => (<TableRow key={req.id}><TableCell>{req.userEmail}</TableCell><TableCell>₹{req.amount.toFixed(2)}</TableCell><TableCell className="font-semibold text-primary">₹{(req.amount - req.amount * 0.02).toFixed(2)}</TableCell><TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell><TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell><TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell><TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell><TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}>Reject</Button></div>)}</TableCell></TableRow>))}
+                  {!isLoadingData && filteredWithdrawals.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center h-24">No pending withdrawal requests.</TableCell></TableRow>)}
                 </TableBody></Table>
             </CardContent>
         </Card>
       );
       case 'add-fund': return (
-        <Card><CardHeader><CardTitle>Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></CardHeader>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or reference..." value={addFundSearch} onChange={(e) => setAddFundSearch(e.target.value)} className="pl-8" /></div></CardHeader>
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Amount</TableHead><TableHead>Tier</TableHead><TableHead>Reference</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : addFundRequests.map((req) => (<TableRow key={req.id}><TableCell>{req.userEmail}</TableCell><TableCell>₹{req.amount.toFixed(2)}</TableCell><TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell><TableCell className="text-xs">{req.paymentReference}</TableCell><TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell><TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell><TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}>Reject</Button></div>)}</TableCell></TableRow>))}
-                  {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center h-24">No pending add fund requests.</TableCell></TableRow>)}
+                  : filteredAddFunds.map((req) => (<TableRow key={req.id}><TableCell>{req.userEmail}</TableCell><TableCell>₹{req.amount.toFixed(2)}</TableCell><TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell><TableCell className="text-xs">{req.paymentReference}</TableCell><TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell><TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell><TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}>Reject</Button></div>)}</TableCell></TableRow>))}
+                  {!isLoadingData && filteredAddFunds.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center h-24">No pending add fund requests.</TableCell></TableRow>)}
                 </TableBody></Table>
             </CardContent>
         </Card>
       );
       case 'transactions': return (
-        <Card><CardHeader><CardTitle>All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></CardHeader>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or description..." value={transactionSearch} onChange={(e) => setTransactionSearch(e.target.value)} className="pl-8" /></div></CardHeader>
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Type</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : allTransactions.map((t) => (<TableRow key={t.id}><TableCell>{t.userEmail}</TableCell><TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}{t.type}</span></TableCell><TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{t.description}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell><TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>))}
-                  {!isLoadingData && allTransactions.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center h-24">No transactions found.</TableCell></TableRow>)}
+                  : filteredTransactions.map((t) => (<TableRow key={t.id}><TableCell>{t.userEmail}</TableCell><TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}{t.type}</span></TableCell><TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{t.description}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell><TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>))}
+                  {!isLoadingData && filteredTransactions.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center h-24">No transactions found.</TableCell></TableRow>)}
                 </TableBody></Table>
             </CardContent>
         </Card>
@@ -452,11 +498,12 @@ export default function AdminPage() {
         </Card>
       );
       case 'support': return (
-        <Card><CardHeader><CardTitle>Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></CardHeader>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or description..." value={supportTicketSearch} onChange={(e) => setSupportTicketSearch(e.target.value)} className="pl-8" /></div></CardHeader>
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Description</TableHead><TableHead>Screenshot</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : supportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell>{ticket.userEmail}</TableCell><TableCell className="max-w-sm whitespace-pre-wrap">{ticket.description}</TableCell><TableCell>{ticket.screenshotURL ? <Dialog><DialogTrigger asChild><Button variant="outline" size="sm">View</Button></DialogTrigger><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Screenshot</DialogTitle><DialogDescription>Screenshot attached to the support ticket.</DialogDescription></DialogHeader><div className="flex justify-center p-4"><Image src={ticket.screenshotURL} alt={`Screenshot`} width={800} height={600} className="rounded-md object-contain max-h-[70vh]"/></div></DialogContent></Dialog> : "N/A"}</TableCell><TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell><TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell><TableCell>{ticket.status === 'open' && (<Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>)}</TableCell></TableRow>))}
+                  : filteredSupportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell>{ticket.userEmail}</TableCell><TableCell className="max-w-sm whitespace-pre-wrap">{ticket.description}</TableCell><TableCell>{ticket.screenshotURL ? <Dialog><DialogTrigger asChild><Button variant="outline" size="sm">View</Button></DialogTrigger><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Screenshot</DialogTitle><DialogDescription>Screenshot attached to the support ticket.</DialogDescription></DialogHeader><div className="flex justify-center p-4"><Image src={ticket.screenshotURL} alt={`Screenshot`} width={800} height={600} className="rounded-md object-contain max-h-[70vh]"/></div></DialogContent></Dialog> : "N/A"}</TableCell><TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell><TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell><TableCell>{ticket.status === 'open' && (<Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>)}</TableCell></TableRow>))}
                 </TableBody>
               </Table>
             </CardContent>
