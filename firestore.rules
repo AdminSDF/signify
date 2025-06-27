@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -11,26 +12,25 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Checks that a user is only updating their own "safe" profile fields.
-    // WARNING: 'balances' and 'spinsAvailable' are NOT in this list, so this rule allows them to be updated by the owner.
-    // This is necessary for the client-side daily reward claim system to work.
-    // This carries a security risk if not handled carefully on the client. The proper long-term solution
-    // is to use a Cloud Function (or a trusted server) to handle reward logic.
+    // WARNING: This setup has a security risk. A malicious client could potentially
+    // update their own balance or spins. The proper long-term solution is to use
+    // Cloud Functions for reward claims to ensure updates are validated server-side.
     function isUpdatingOnlyOwnSafeFields() {
       let nonUpdatable = [
-        'uid', 'email', 'createdAt', 'isAdmin', 'isBlocked', 
+        'uid', 'email', 'createdAt', 'isAdmin', 'isBlocked',
         'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
         'referralCode', 'referralEarnings', 'referredBy', 'referrals', 'vipUntil',
         'friends', 'friendRequestsSent', 'friendRequestsReceived'
       ];
-      // This rule allows users to update their own profile fields that are NOT in the nonUpdatable list.
+      // This rule allows a user to update their own profile fields that are NOT in the nonUpdatable list.
+      // This now implicitly allows 'balances' and 'spinsAvailable' to be updated by the owner for reward claims.
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(nonUpdatable);
     }
     
     // Checks if the update ONLY contains changes to fields that are allowed to be updated by another user.
-    // This is for social features like friend requests and referrals.
     function isUpdatingOnlyCrossUserFields() {
         let allowedCrossUserFields = ['friends', 'friendRequestsSent', 'friendRequestsReceived', 'referrals'];
+        // This ensures only the specified lists can be modified in a cross-user update.
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedCrossUserFields);
     }
 
@@ -38,13 +38,13 @@ service cloud.firestore {
       // Any signed-in user can read/list user profiles (for leaderboards, friend searches).
       allow get, list: if isSignedIn();
       
-      // Allow a user to create their own document.
+      // A user can create their own document.
       allow create: if isOwner(userId);
       
       // Update is allowed if:
-      // 1. The user is the owner AND is only updating "safe" fields (like displayName, photoURL, and now balances/spins for rewards).
+      // 1. The user is the owner AND is only updating their "safe" fields (which now includes balances/spins for rewards).
       // OR
-      // 2. The user is any signed-in user, but they are ONLY modifying friendship/referral lists of another user.
+      // 2. The user is another signed-in user, but they are ONLY modifying the target's friendship/referral lists.
       allow update: if isSignedIn() && (
         (isOwner(userId) && isUpdatingOnlyOwnSafeFields()) ||
         isUpdatingOnlyCrossUserFields()
@@ -52,12 +52,8 @@ service cloud.firestore {
     }
 
     match /userRewards/{userId} {
-       // A user can read their own rewards doc.
-       allow get: if isSignedIn() && isOwner(userId);
-       // A user can create their own rewards doc during signup.
-       allow create: if isSignedIn() && isOwner(userId);
-       // A user can update their own rewards doc to claim daily rewards.
-       allow update: if isSignedIn() && isOwner(userId);
+       // A user can read, create, and update their own rewards document.
+       allow get, create, update: if isSignedIn() && isOwner(userId);
     }
 
     // Rules for other collections
