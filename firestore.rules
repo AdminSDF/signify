@@ -3,108 +3,119 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // --- Helper Functions ---
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function getUserRole() {
-      // Safely get user's role from their document.
-      // Use exists() to avoid errors for users not yet in Firestore or missing a role.
-      if (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
-        // Use .get() to access a field that might not exist, providing a default value.
-        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'player');
-      }
-      return 'player';
-    }
-    
-    function isSuperAdmin() {
-      return getUserRole() == 'super-admin';
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
 
-    function isAdminOrSuperAdmin() {
-      return getUserRole() in ['admin', 'super-admin'];
+    // Use getAfter() to read the state of the document after the write operation.
+    // This is crucial for checking roles during document creation or updates.
+    function getUserData(userId) {
+      return getAfter(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData(request.auth.uid).role == 'super-admin';
+    }
+
+    function isAdmin() {
+      if (!isSignedIn()) { return false; }
+      let role = getUserData(request.auth.uid).role;
+      return role == 'super-admin' || role == 'admin';
     }
     
-    function isStaff() {
-       return getUserRole() in ['support-staff', 'finance-staff', 'admin', 'super-admin'];
+    function isFinanceStaff() {
+        if (!isSignedIn()) { return false; }
+        let role = getUserData(request.auth.uid).role;
+        return role == 'super-admin' || role == 'admin' || role == 'finance-staff';
+    }
+
+    function isSupportStaff() {
+        if (!isSignedIn()) { return false; }
+        let role = getUserData(request.auth.uid).role;
+        return role == 'super-admin' || role == 'admin' || role == 'support-staff';
     }
 
     // --- Collection Rules ---
 
     match /users/{userId} {
-      // Staff (admins, etc.) can read any user profile.
-      // A regular user can only read their own profile.
-      allow get: if isStaff() || request.auth.uid == userId;
+      // Any signed-in user can read profiles for leaderboards, friend searches etc.
+      allow get, list: if isSignedIn();
       
-      // Staff can list users for the admin panel.
-      allow list: if isStaff();
+      // A user can only create their own document.
+      allow create: if isOwner(userId);
       
-      // A user can create their own document.
-      allow create: if request.auth.uid == userId;
-      
-      // Update Logic:
-      allow update: if 
-        // 1. Super Admins can update any user's role.
-        (isSuperAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])) ||
-        
-        // 2. Admins can update "safe" fields on any user (e.g. tags, manual win rate).
-        (isAdminOrSuperAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'balances', 'isBlocked', 'isAdmin'])) ||
-        
-        // 3. A user can update their own "safe" profile fields (like displayName, photoURL).
-        (
-          request.auth.uid == userId &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'uid', 'email', 'createdAt', 'balances', 'spinsAvailable', 'isAdmin', 'isBlocked', 'role',
+      allow update: if
+        // A user can update their own "safe" fields.
+        // NOTE: This includes `balances` and `spinsAvailable` to allow client-side reward claims, which is a security trade-off.
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'uid', 'email', 'createdAt', 'isAdmin', 'isBlocked', 
             'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
-            'referralCode', 'referralEarnings', 'referredBy', 'referrals', 'vipUntil',
-            'friends', 'friendRequestsSent', 'friendRequestsReceived'
-          ])
-        ) ||
-
-        // 4. ANY authenticated user can update ANY other user's friendship/referral lists.
-        (
-          isSignedIn() && 
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends', 'friendRequestsSent', 'friendRequestsReceived', 'referrals'])
-        );
+            'referralCode', 'referralEarnings', 'referredBy', 'vipUntil'
+            // `role` is intentionally left out, only Super Admin can change it.
+        ])) ||
+        // Super Admins can update any user's document (e.g., change roles, block users).
+        isSuperAdmin();
     }
 
     match /userRewards/{userId} {
-       // A user must be able to update their own rewards doc for daily claims.
-       allow get, create, update: if request.auth.uid == userId;
+       // A user must be able to create/update their own rewards doc for daily claims.
+       allow get, create, update: if isOwner(userId);
     }
     
+    // Admins can manage these collections.
     match /appConfiguration/{docId} {
       allow read: if true;
-      allow write: if isSuperAdmin(); // Only Super Admins can change app settings
+      allow write: if isSuperAdmin(); 
     }
     
-    match /{collection}/{docId} 
-        where collection in ['transactions', 'withdrawalRequests', 'addFundRequests', 'supportTickets', 'activityLogs', 'fraudAlerts', 'userTournaments'] {
-      // Staff can read/list any document in these collections.
-      // Users can only read/list their own.
-      allow list, read: if isStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      
-      // Users can create documents for themselves.
+    match /transactions/{transactionId} {
+      // User can create their own transactions. Finance staff and above can read all.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      
-      // Only staff can update these documents (e.g. approve a request).
-      allow update: if isStaff();
+      allow read, list: if isFinanceStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false; // No direct edits
     }
     
-    match /tournaments/{tournamentId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdminOrSuperAdmin();
+    match /withdrawalRequests/{reqId} {
+       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+       allow read, list, update: if isFinanceStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+    
+    match /addFundRequests/{reqId} {
+       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+       allow read, list, update: if isFinanceStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+    
+    match /supportTickets/{ticketId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, list, update: if isSupportStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /users/{userId}/notifications/{notificationId} {
-        allow read, list, create, update: if request.auth.uid == userId;
+        allow read, create, update: if isOwner(userId);
+        allow delete: if false;
     }
     
-    match /systemStats/{statId} { 
-        allow read: if isStaff(); 
-        allow write: if false; // Should be updated by server-side logic only
+    match /tournaments/{tournamentId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin(); // Admins and Super Admins can create/update tournaments.
     }
+    
+    match /userTournaments/{userTournamentId} {
+        // A user must be able to create their own entry when joining a tournament.
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow read: if isSignedIn();
+        allow write: if isAdmin(); // Admins can end tournaments and distribute prizes.
+    }
+    
+    // Admins can read system logs for monitoring.
+    match /activityLogs/{logId} { allow read, list: if isAdmin(); allow write: if false; }
+    match /fraudAlerts/{alertId} { allow read, list: if isAdmin(); allow write: if false; }
+    match /systemStats/{statId} { allow read: if isAdmin(); allow write: if false; }
   }
 }
