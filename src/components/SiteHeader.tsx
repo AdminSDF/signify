@@ -4,9 +4,10 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield, HelpCircle, Swords, Bell, UserPlus } from 'lucide-react';
+import { Home, ListChecks, UserCircle, Trophy, LogIn, LogOut, Shield, HelpCircle, Swords, Bell, UserPlus, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
+import { useSoundControl } from '@/context/SoundContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -88,7 +89,17 @@ const NotificationBell: React.FC = () => {
         </PopoverContent>
       </Popover>
     );
-}
+};
+
+const MusicToggleButton: React.FC = () => {
+    const { isMusicPlaying, toggleMusic } = useSoundControl();
+
+    return (
+        <Button variant="ghost" size="icon" onClick={toggleMusic} aria-label="Toggle background music">
+            {isMusicPlaying ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+        </Button>
+    );
+};
 
 
 const SiteHeader: React.FC = () => {
@@ -99,7 +110,7 @@ const SiteHeader: React.FC = () => {
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 max-w-screen-2xl items-center">
           <Link href="/" className="mr-6 flex items-center space-x-2">
-            <Image src={appSettings.logoUrl} alt="Spinify Logo" width={32} height={32} className="h-8 w-8 rounded-full" />
+            <Image src={appSettings.logoUrl} alt="Spinify Logo" width={32} height={32} className="h-8 w-8 rounded-full" priority />
           </Link>
           <nav className="flex items-center gap-1 text-sm flex-grow">
             <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -130,6 +141,7 @@ const SiteHeader: React.FC = () => {
           </nav>
 
           <div className="flex items-center gap-2">
+            <MusicToggleButton />
             {loading ? (
               <div className="animate-pulse flex items-center gap-2">
                  <div className="h-8 w-8 rounded-full bg-muted"></div>

@@ -9,6 +9,7 @@ import SiteHeader from '@/components/SiteHeader';
 import SiteFooter from '@/components/SiteFooter';
 import NewsTicker from '@/components/NewsTicker';
 import { AuthProvider } from '@/context/AuthContext';
+import { SoundProvider } from '@/context/SoundContext';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -34,13 +35,15 @@ export default function RootLayout({
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
         <AuthProvider>
-          <SiteHeader />
-          <NewsTicker />
-          <main className="flex-grow container mx-auto px-4 py-8">
-            {children}
-          </main>
-          <SiteFooter />
-          <Toaster />
+          <SoundProvider>
+            <SiteHeader />
+            <NewsTicker />
+            <main className="flex-grow container mx-auto px-4 py-8">
+              {children}
+            </main>
+            <SiteFooter />
+            <Toaster />
+          </SoundProvider>
         </AuthProvider>
         <Script
           id="adsbygoogle-init"
