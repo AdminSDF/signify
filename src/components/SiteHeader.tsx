@@ -162,7 +162,7 @@ const SiteHeader: React.FC = () => {
                           Profile
                         </Link>
                     </DropdownMenuItem>
-                    {userData?.isAdmin && (
+                    {(userData?.role === 'admin' || userData?.role === 'super-admin') && (
                       <DropdownMenuItem asChild>
                         <Link href="/admin" className="cursor-pointer">
                           <Shield className="mr-2 h-4 w-4" />
@@ -171,7 +171,7 @@ const SiteHeader: React.FC = () => {
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
+                    <DropdownMenuItem onClick={() => logout()} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
                       <LogOut className="mr-2 h-4 w-4" />
                       Log out
                     </DropdownMenuItem>

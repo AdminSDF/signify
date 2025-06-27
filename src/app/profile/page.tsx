@@ -667,7 +667,7 @@ export default function ProfilePage() {
               </Tabs>
           </CardContent>
           <CardFooter className="flex flex-col items-center gap-4 pt-6">
-              {userData?.isAdmin && (
+              {(userData?.role === 'admin' || userData?.role === 'super-admin') && (
                 <Button asChild variant="secondary" className="w-full max-w-xs">
                   <Link href="/admin">
                     <Shield className="mr-2 h-4 w-4" />Admin Panel

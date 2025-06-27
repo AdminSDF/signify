@@ -138,7 +138,6 @@ export default function GamePage() {
   useEffect(() => {
     if (!user) return;
 
-    // Function to set the user's status to online
     const setUserOnline = () => {
       updateUserData(user.uid, {
         isOnline: true,
@@ -147,28 +146,19 @@ export default function GamePage() {
       }).catch(err => console.error("Failed to set user as online:", err));
     };
 
-    // Function to set the user's status to offline
     const setUserOffline = () => {
       updateUserData(user.uid, { isOnline: false, currentGame: null })
         .catch(err => console.error("Failed to set user as offline:", err));
     };
 
-    // Set user online when they enter the game page
     setUserOnline();
-
-    // Add event listeners to handle user presence
-    const handleVisibilityChange = () => {
+    window.addEventListener('pagehide', setUserOffline);
+    window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         setUserOnline();
       }
-    };
-    
-    // 'pagehide' is the most reliable event for when a user leaves a page (e.g., closing the tab)
-    window.addEventListener('pagehide', setUserOffline);
-    // 'visibilitychange' handles the user switching back to the tab
-    window.addEventListener('visibilitychange', handleVisibilityChange);
+    });
 
-    // Set up a heartbeat to update lastActive every 2 minutes while the tab is visible
     const heartbeatInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         updateUserData(user.uid, { lastActive: Timestamp.now() })
@@ -176,12 +166,11 @@ export default function GamePage() {
       }
     }, 120000); // 2 minutes
 
-    // Cleanup function for when the component unmounts (e.g., navigating to another page in the app)
     return () => {
       clearInterval(heartbeatInterval);
       window.removeEventListener('pagehide', setUserOffline);
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      setUserOffline(); // Ensure user is set offline on navigation
+      window.removeEventListener('visibilitychange', setUserOnline);
+      setUserOffline();
     };
   }, [user, tier]);
 
@@ -407,7 +396,11 @@ export default function GamePage() {
         }
     }
     
-    await logUserActivity(user.uid, user.email, 'spin');
+    try {
+      await logUserActivity(user.uid, user.email, 'spin');
+    } catch (error) {
+      console.error(error)
+    }
     
     // --- NEW DYNAMIC SPIN LOGIC ---
     const { winningSegment, isWin } = determineSpinOutcome(userData, appSettings, wheelConfig.segments);
@@ -566,7 +559,7 @@ export default function GamePage() {
           <AlertDescription>
             This wheel has no prizes configured. An admin needs to add prize segments before it can be played.
           </AlertDescription>
-          {userData?.isAdmin && (
+          {(userData?.role === 'admin' || userData?.role === 'super-admin') && (
             <Button onClick={() => router.push('/admin')} className="mt-4">
               Go to Admin Panel
             </Button>
