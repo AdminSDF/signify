@@ -98,19 +98,20 @@ service cloud.firestore {
     }
     
     match /userTournaments/{userTournamentId} {
-        // Users can create their own tournament data when they join.
-        allow create, read: if isSignedIn();
+        // A user can create their own entry when joining
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        // A user can read their own entry
+        allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+        // Admins can list all participants for a tournament
+        allow list: if isAdmin();
         // Admins can update scores or other data.
-        allow write: if isAdmin();
+        allow update: if isAdmin();
     }
     
     match /activityLogs/{logId} {
-      // A signed-in user can create a log entry for themselves.
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Admins can read the logs for monitoring.
+      allow create: if isSignedIn();
       allow read, list: if isAdmin();
-      // No one can update or delete logs from the client.
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     match /fraudAlerts/{alertId} { allow read, list: if isAdmin(); allow write: if false; }
