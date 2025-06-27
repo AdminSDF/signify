@@ -15,11 +15,11 @@ service cloud.firestore {
 
     // Safely gets a user's role. Returns 'player' if role is not set.
     function getUserRole(userId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      if (exists(/databases/$(database)/documents/users/$(userId)) && 'role' in userDoc.data) {
-        return userDoc.data.role;
-      }
-      return 'player';
+      // This function uses the ternary operator, as 'if' statements are not allowed inside functions.
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             'role' in get(/databases/$(database)/documents/users/$(userId)).data
+        ? get(/databases/$(database)/documents/users/$(userId)).data.role
+        : 'player';
     }
 
     function isSuperAdmin() {
@@ -27,25 +27,20 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      if (!isSignedIn()) { return false; }
-      let role = getUserRole(request.auth.uid);
-      return role == 'super-admin' || role == 'admin';
+      // Uses the 'in' operator for a clean check against a list of roles.
+      return isSignedIn() && getUserRole(request.auth.uid) in ['super-admin', 'admin'];
     }
-    
+
     function isFinanceStaff() {
-        if (!isSignedIn()) { return false; }
-        let role = getUserRole(request.auth.uid);
-        return role == 'super-admin' || role == 'admin' || role == 'finance-staff';
+        return isSignedIn() && getUserRole(request.auth.uid) in ['super-admin', 'admin', 'finance-staff'];
     }
 
     function isSupportStaff() {
-        if (!isSignedIn()) { return false; }
-        let role = getUserRole(request.auth.uid);
-        return role == 'super-admin' || role == 'admin' || role == 'support-staff';
+        return isSignedIn() && getUserRole(request.auth.uid) in ['super-admin', 'admin', 'support-staff'];
     }
-    
+
     function isStaff() {
-        return isSupportStaff() || isFinanceStaff() || isAdmin() || isSuperAdmin();
+        return isFinanceStaff() || isSupportStaff();
     }
 
 
@@ -54,14 +49,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow get, list: if isSignedIn();
       allow create: if isOwner(userId);
-      
+
       // WARNING: The following rule is permissive to allow client-side features like
       // reward claims and friend requests to work without server-side Cloud Functions.
       // This means a user can technically update their own profile fields.
       // A more secure, production-ready app would use Cloud Functions for these actions.
-      allow update: if 
+      allow update: if
           // Admins can update any user's document.
-          isSuperAdmin() || 
+          isSuperAdmin() ||
           // Users can update their own document.
           isOwner(userId) ||
           // Another authenticated user can update ONLY the friend/referral lists of this user.
@@ -73,30 +68,30 @@ service cloud.firestore {
        // A user can read, create, and update their own rewards document.
        allow get, create, update: if isOwner(userId);
     }
-    
+
     match /appConfiguration/{docId} {
       allow read: if true;
-      allow write: if isSuperAdmin(); 
+      allow write: if isSuperAdmin();
     }
-    
+
     match /transactions/{transactionId} {
-      // User can create their own transactions. Finance staff can see all.
+      // User can create/read their own transactions. Finance staff can see all.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read, list: if isFinanceStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow write: if false;
     }
-    
+
     match /withdrawalRequests/{reqId} {
        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
        // Finance staff can read/list/update all requests. Users can read their own.
        allow read, list, update: if isFinanceStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
-    
+
     match /addFundRequests/{reqId} {
        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
        allow read, list, update: if isFinanceStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
-    
+
     match /supportTickets/{ticketId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read, list, update: if isSupportStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
@@ -106,21 +101,21 @@ service cloud.firestore {
         allow read, create, update: if isOwner(userId);
         allow delete: if false;
     }
-    
+
     match /tournaments/{tournamentId} {
         allow read: if isSignedIn();
         // Admins can create/update tournaments.
         // Users can update ONLY the participants list to join.
         allow write: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants']));
     }
-    
+
     match /userTournaments/{userTournamentId} {
         // Users can create their own tournament data when they join.
         allow create, read: if isSignedIn();
         // Admins can update scores or other data.
         allow write: if isAdmin();
     }
-    
+
     match /activityLogs/{logId} { allow read, list: if isAdmin(); allow write: if false; }
     match /fraudAlerts/{alertId} { allow read, list: if isAdmin(); allow write: if false; }
     match /systemStats/{statId} { allow read: if isAdmin(); allow write: if false; }
