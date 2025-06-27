@@ -104,8 +104,15 @@ service cloud.firestore {
         allow write: if isAdmin();
     }
     
-    // Admins can read system logs for monitoring.
-    match /activityLogs/{logId} { allow read, list: if isAdmin(); allow write: if false; }
+    match /activityLogs/{logId} {
+      // A signed-in user can create a log entry for themselves.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Admins can read the logs for monitoring.
+      allow read, list: if isAdmin();
+      // No one can update or delete logs from the client.
+      allow update, delete: if false;
+    }
+
     match /fraudAlerts/{alertId} { allow read, list: if isAdmin(); allow write: if false; }
     match /systemStats/{statId} { allow read: if isAdmin(); allow write: if false; }
   }
