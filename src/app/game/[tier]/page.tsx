@@ -147,17 +147,24 @@ export default function GamePage() {
     };
 
     const setUserOffline = () => {
-      updateUserData(user.uid, { isOnline: false, currentGame: null })
-        .catch(err => console.error("Failed to set user as offline:", err));
-    };
-
-    setUserOnline();
-    window.addEventListener('pagehide', setUserOffline);
-    window.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        setUserOnline();
+      if(document.visibilityState === 'hidden') {
+        updateUserData(user.uid, { isOnline: false, currentGame: null })
+          .catch(err => console.error("Failed to set user as offline:", err));
       }
-    });
+    };
+    
+    setUserOnline(); // Set online on component mount
+
+    const visibilityHandler = () => {
+        if (document.visibilityState === 'visible') {
+            setUserOnline();
+        } else {
+            setUserOffline();
+        }
+    };
+    
+    document.addEventListener('visibilitychange', visibilityHandler);
+    window.addEventListener('pagehide', setUserOffline);
 
     const heartbeatInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
@@ -168,9 +175,13 @@ export default function GamePage() {
 
     return () => {
       clearInterval(heartbeatInterval);
+      document.removeEventListener('visibilitychange', visibilityHandler);
       window.removeEventListener('pagehide', setUserOffline);
-      window.removeEventListener('visibilitychange', setUserOnline);
-      setUserOffline();
+      // Attempt to set offline on cleanup, though it may not always run
+      if (user) {
+        updateUserData(user.uid, { isOnline: false, currentGame: null })
+          .catch(err => console.error("Failed to set user as offline on cleanup:", err));
+      }
     };
   }, [user, tier]);
 
