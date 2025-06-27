@@ -1118,7 +1118,9 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
     const tournament = tournamentDoc.data() as Tournament;
     const user = userDoc.data() as UserDocument;
 
-    if (tournament.status !== 'active') throw new Error("This tournament is not active.");
+    if (tournament.status !== 'active' && tournament.status !== 'upcoming') {
+      throw new Error("This tournament is not available for joining.");
+    }
     
     const currentBalance = user.balances?.[tournament.tierId] || 0;
     if (currentBalance < tournament.entryFee) {

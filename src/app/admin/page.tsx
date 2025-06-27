@@ -456,7 +456,7 @@ export default function AdminPage() {
             <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Description</TableHead><TableHead>Screenshot</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : supportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell>{ticket.userEmail}</TableCell><TableCell className="max-w-sm whitespace-pre-wrap">{ticket.description}</TableCell><TableCell>{ticket.screenshotURL ? <Dialog><DialogTrigger asChild><Button variant="outline" size="sm">View</Button></DialogTrigger><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Screenshot</DialogTitle></DialogHeader><div className="flex justify-center p-4"><Image src={ticket.screenshotURL} alt={`Screenshot`} width={800} height={600} className="rounded-md object-contain max-h-[70vh]"/></div></DialogContent></Dialog> : "N/A"}</TableCell><TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell><TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell><TableCell>{ticket.status === 'open' && (<Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>)}</TableCell></TableRow>))}
+                  : supportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell>{ticket.userEmail}</TableCell><TableCell className="max-w-sm whitespace-pre-wrap">{ticket.description}</TableCell><TableCell>{ticket.screenshotURL ? <Dialog><DialogTrigger asChild><Button variant="outline" size="sm">View</Button></DialogTrigger><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Screenshot</DialogTitle><DialogDescription>Screenshot attached to the support ticket.</DialogDescription></DialogHeader><div className="flex justify-center p-4"><Image src={ticket.screenshotURL} alt={`Screenshot`} width={800} height={600} className="rounded-md object-contain max-h-[70vh]"/></div></DialogContent></Dialog> : "N/A"}</TableCell><TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell><TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell><TableCell>{ticket.status === 'open' && (<Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>)}</TableCell></TableRow>))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -611,7 +611,7 @@ const CreateTournamentDialog = ({ isOpen, onClose, adminId, onTournamentCreated 
     try { await createTournament({ name, description, type, startDate: Timestamp.fromDate(startDate), endDate: Timestamp.fromDate(endDate), entryFee: parseFloat(entryFee), prizePool: parseFloat(prizePool), tierId, rewards }, adminId); toast({ title: 'Tournament Created!' }); onTournamentCreated(); onClose(); } catch (error: any) { toast({ title: 'Creation Failed', description: error.message, variant: 'destructive' }); }
   };
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Create New Tournament</DialogTitle></DialogHeader>
+    <Dialog open={isOpen} onOpenChange={onClose}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Create New Tournament</DialogTitle><DialogDescription>Fill in the details to create a new competitive event.</DialogDescription></DialogHeader>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
           <div className="space-y-2"><Label>Name</Label><Input value={name} onChange={e => setName(e.target.value)} /></div>
           <div className="space-y-2"><Label>Type</Label><Select value={type} onValueChange={(v) => setType(v as any)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="daily">Daily</SelectItem><SelectItem value="weekly">Weekly</SelectItem><SelectItem value="monthly">Monthly</SelectItem><SelectItem value="special">Special</SelectItem></SelectContent></Select></div>
@@ -627,5 +627,3 @@ const CreateTournamentDialog = ({ isOpen, onClose, adminId, onTournamentCreated 
     </DialogContent></Dialog>
   );
 };
-
-    
