@@ -28,6 +28,7 @@ const FooterAd = () => {
 
   return (
     <div ref={adContainerRef} className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
+        {/* Spinify 1 ad */}
         <ins 
              className="adsbygoogle"
              style={{display:"block"}}
