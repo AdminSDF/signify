@@ -1,33 +1,22 @@
 "use client";
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 
 const FooterAd = () => {
-  const adContainerRef = useRef<HTMLDivElement>(null);
-  const adPushed = useRef(false);
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (adPushed.current || !adContainerRef.current) {
-      return;
-    }
-
-    // Check if an ad has already been loaded in this container by AdSense
-    if (adContainerRef.current.querySelector('.adsbygoogle-processing') || adContainerRef.current.innerHTML.trim() !== '') {
-        // If an ad is already there or being processed, don't push another one.
-        return;
-    }
-
     try {
       // @ts-ignore
       (window.adsbygoogle = window.adsbygoogle || []).push({});
-      adPushed.current = true;
     } catch (err) {
       console.error("AdSense error:", err);
     }
-  }, []);
+  }, [pathname]);
 
   return (
-    <div ref={adContainerRef} className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
+    <div key={pathname} className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
         {/* Spinify 1 ad */}
         <ins 
              className="adsbygoogle"
