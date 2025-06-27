@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -17,24 +18,32 @@ service cloud.firestore {
         'uid', 'email', 'createdAt', 'balances', 'spinsAvailable', 'isAdmin', 'isBlocked', 
         'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
         'referralCode', 'referralEarnings', 'referredBy', 'referrals', 'vipUntil',
-        'friends', 'friendRequestsSent', 'friendRequestsReceived' // Disallow direct update of these on own doc
+        'friends', 'friendRequestsSent', 'friendRequestsReceived' // Users cannot update their own friend lists directly, it must be via cross-user updates.
       ];
-      return request.resource.data.diff(resource.data).affectedKeys().intersection(nonUpdatable.toSet()).size() == 0;
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(nonUpdatable);
+    }
+    
+    // Checks if the update ONLY contains changes to friendship-related fields.
+    function isUpdatingOnlyFriendshipFields() {
+        let allowedFriendFields = ['friends', 'friendRequestsSent', 'friendRequestsReceived'];
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFriendFields);
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // Any signed-in user can read/list user profiles (for leaderboards, friend searches).
+      allow get, list: if isSignedIn();
+      
+      // Allow a user to create their own document.
       allow create: if isOwner(userId);
       
-      // Update is allowed IF:
-      // 1. You are the owner updating your own safe, non-friend-related fields.
+      // Update is allowed if:
+      // 1. The user is the owner AND is only updating "safe" fields (like displayName, photoURL).
       // OR
-      // 2. You are an authenticated user updating ONLY the friendship lists of ANY user.
-      // This second part is what allows the friend request system to work without Cloud Functions.
-      // It relies on the server-side actions being trustworthy.
+      // 2. The user is any signed-in user, but they are ONLY modifying friendship-related lists (e.g., accepting a request).
+      // This is crucial for the friend request system to work across different user documents.
       allow update: if isSignedIn() && (
         (isOwner(userId) && isUpdatingOnlyOwnSafeFields()) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends', 'friendRequestsSent', 'friendRequestsReceived']))
+        isUpdatingOnlyFriendshipFields()
       );
     }
 
@@ -76,14 +85,15 @@ service cloud.firestore {
     
     match /tournaments/{tournamentId} {
         allow read: if isSignedIn();
-        allow write: if false;
+        allow write: if false; // Only admin/server can create/update tournaments.
     }
     
     match /userTournaments/{userTournamentId} {
         allow read: if isSignedIn() && request.auth.uid == resource.data.userId;
-        allow write: if false; 
+        allow write: if false; // Server-side updates score.
     }
     
+    // These collections should only be written to by a trusted server/admin SDK.
     match /activityLogs/{logId} { allow read, write: if false; }
     match /fraudAlerts/{alertId} { allow read, write: if false; }
     match /systemStats/{statId} { allow read, write: if false; }
