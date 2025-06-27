@@ -2,103 +2,90 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Helper Functions ---
+    
     function isSignedIn() {
       return request.auth != null;
     }
-
+    
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
-    function isUserAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    // Checks that no critical, non-updatable fields are being changed by the user on their own document.
+    function isUpdatingOnlyOwnSafeFields() {
+      let nonUpdatable = [
+        'uid', 'email', 'createdAt', 'balances', 'spinsAvailable', 'isAdmin', 'isBlocked', 
+        'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
+        'referralCode', 'referralEarnings', 'referredBy', 'referrals', 'vipUntil',
+        'friends', 'friendRequestsSent', 'friendRequestsReceived' // Disallow direct update of these on own doc
+      ];
+      return request.resource.data.diff(resource.data).affectedKeys().intersection(nonUpdatable.toSet()).size() == 0;
     }
 
-    function isUpdatingOwnSafeFields() {
-      // These are fields a user is allowed to change about themselves.
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame',
-          'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted'
-      ]);
-    }
-    
-    function isUpdatingFriendLists() {
-        // These are fields related to social features.
-        // This rule allows updates only to the social keys. It's a simplification.
-        // A more secure implementation would use Cloud Functions.
-        return request.resource.data.diff(resource.data).affectedKeys().hasAny(['friends', 'friendRequestsSent', 'friendRequestsReceived']) &&
-               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends', 'friendRequestsSent', 'friendRequestsReceived']);
-    }
-
-    // --- Main Rules ---
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
-
-      // A user can update their own safe fields.
-      // Or anyone can update friend-related lists (this is a simplified, less secure rule to fix the syntax).
+      
+      // Update is allowed IF:
+      // 1. You are the owner updating your own safe, non-friend-related fields.
+      // OR
+      // 2. You are an authenticated user updating ONLY the friendship lists of ANY user.
+      // This second part is what allows the friend request system to work without Cloud Functions.
+      // It relies on the server-side actions being trustworthy.
       allow update: if isSignedIn() && (
-        (isOwner(userId) && isUpdatingOwnSafeFields()) ||
-        isUpdatingFriendLists()
+        (isOwner(userId) && isUpdatingOnlyOwnSafeFields()) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends', 'friendRequestsSent', 'friendRequestsReceived']))
       );
-
-      // --- Notifications Subcollection ---
-      match /notifications/{notificationId} {
-        allow read, update: if isOwner(userId); // Can read and mark as read.
-        allow create: if isSignedIn(); // Allow server/others to create notifications.
-        allow delete: if false; // Don't allow deletion.
-      }
-    }
-    
-    // --- Other Collections Rules ---
-    match /transactions/{transactionId} {
-      allow read: if isOwner(resource.data.userId);
-      allow create: if isSignedIn(); // Server-side logic will enforce correctness.
-      allow update, delete: if false;
     }
 
-    match /withdrawalRequests/{reqId} {
-      allow read: if isOwner(resource.data.userId) || isUserAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isUserAdmin();
-      allow delete: if false;
-    }
-
-    match /addFundRequests/{reqId} {
-      allow read: if isOwner(resource.data.userId) || isUserAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isUserAdmin();
-      allow delete: if false;
-    }
-
+    // Rules for other collections
     match /appConfiguration/{docId} {
       allow read: if true;
-      allow write: if isUserAdmin();
+      allow write: if false; 
+    }
+    
+    match /transactions/{transactionId} {
+      allow read, create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+    
+    match /withdrawalRequests/{reqId} {
+       allow read, create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+       allow write: if false;
+    }
+    
+    match /addFundRequests/{reqId} {
+        allow read, create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+       allow write: if false;
     }
     
     match /supportTickets/{ticketId} {
-      allow read: if isOwner(resource.data.userId) || isUserAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isUserAdmin();
-      allow delete: if false;
+      allow read, create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
     
     match /userRewards/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isSignedIn();
+       allow read: if isSignedIn() && isOwner(userId);
+       allow write: if false;
+    }
+
+    match /users/{userId}/notifications/{notificationId} {
+        allow read, create, update: if isSignedIn() && isOwner(userId);
+        allow delete: if false;
     }
     
-    match /tournaments/{tourneyId} {
-      allow read: if true;
-      allow create, update: if isUserAdmin();
+    match /tournaments/{tournamentId} {
+        allow read: if isSignedIn();
+        allow write: if false;
     }
     
-    match /userTournaments/{userTourneyId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+    match /userTournaments/{userTournamentId} {
+        allow read: if isSignedIn() && request.auth.uid == resource.data.userId;
+        allow write: if false; 
     }
+    
+    match /activityLogs/{logId} { allow read, write: if false; }
+    match /fraudAlerts/{alertId} { allow read, write: if false; }
+    match /systemStats/{statId} { allow read, write: if false; }
   }
 }
