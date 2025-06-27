@@ -20,7 +20,8 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
-  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords, LogOut
+  ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords, LogOut,
+  UserCog
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
@@ -58,6 +59,7 @@ import {
   UserTournamentData,
   endTournamentAndDistributePrizes,
   TournamentReward,
+  UserRole,
 } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
@@ -68,7 +70,6 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
 
 
 // --- HELPER FUNCTIONS (Moved outside component for stability) ---
@@ -156,6 +157,11 @@ export default function AdminPage() {
   const { user, userData, loading, appSettings, newsItems, refreshAppConfig, logout } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  
+  const isSuperAdmin = userData?.role === 'super-admin';
+  const isAdminOrHigher = isSuperAdmin || userData?.role === 'admin';
+  const isFinanceStaff = isAdminOrHigher || userData?.role === 'finance-staff';
+  const isSupportStaff = isAdminOrHigher || userData?.role === 'support-staff';
 
   const [activeView, setActiveView] = useState('overview');
   const [currentAppSettings, setCurrentAppSettings] = useState<AppSettings>(fallbackAppSettings);
@@ -215,7 +221,7 @@ export default function AdminPage() {
   }, [editingUser]);
   
   useEffect(() => {
-    if (!userData?.isAdmin || !db) return;
+    if(!isAdminOrHigher || !db) return;
 
     const usersCollectionRef = collection(db, 'users');
     const q = query(usersCollectionRef);
@@ -235,7 +241,7 @@ export default function AdminPage() {
 
     return () => unsubscribe();
     
-  }, [userData?.isAdmin, toast]);
+  }, [isAdminOrHigher, toast]);
 
   const fetchAdminData = useCallback(async () => {
     setIsLoadingData(true);
@@ -302,10 +308,10 @@ export default function AdminPage() {
 
 
   useEffect(() => {
-    if (userData?.isAdmin && !loading) {
+    if (isAdminOrHigher && !loading) {
       fetchAdminData();
     }
-  }, [userData?.isAdmin, loading, fetchAdminData]);
+  }, [isAdminOrHigher, loading, fetchAdminData]);
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -367,6 +373,20 @@ export default function AdminPage() {
     } catch (error: any) {
       console.error("Error updating user:", error);
       toast({ title: 'Update Failed', description: error.message, variant: 'destructive'});
+    }
+  };
+  
+  const handleUpdateUserRole = async (userId: string, newRole: UserRole) => {
+    if (!isSuperAdmin) {
+      toast({ title: 'Permission Denied', description: 'Only Super Admins can change user roles.', variant: 'destructive'});
+      return;
+    }
+    try {
+        await updateUserData(userId, { role: newRole });
+        toast({ title: 'Role Updated', description: `User role has been changed to ${newRole}.` });
+    } catch (error: any) {
+        console.error("Error updating user role:", error);
+        toast({ title: 'Role Update Failed', description: error.message, variant: 'destructive' });
     }
   };
 
@@ -465,8 +485,9 @@ export default function AdminPage() {
   };
 
   const handleApproveAddFund = async (request: AddFundRequestData & {id: string}) => {
+    if (!user || !user.email) return;
     try {
-      await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount, request.tierId);
+      await approveAddFundAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, user.uid, user.email);
       toast({ title: "Fund Request Approved", description: `₹${request.amount} added to user ${request.userEmail}.`});
       fetchAdminData();
     } catch (error: any) {
@@ -476,8 +497,9 @@ export default function AdminPage() {
   };
   
   const handleRejectAddFund = async (requestId: string) => {
+    if (!user || !user.email) return;
      try {
-      await updateAddFundRequestStatus(requestId, "rejected", "Rejected by admin.");
+      await updateAddFundRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin.");
       toast({ title: "Fund Request Rejected" });
       fetchAdminData();
     } catch (error) {
@@ -487,9 +509,10 @@ export default function AdminPage() {
   };
 
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => {
+    if (!user || !user.email) return;
     const paymentMethodDetails = getPaymentDetailsString(request);
     try {
-      await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, paymentMethodDetails);
+      await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, paymentMethodDetails, user.uid, user.email);
       toast({ title: "Withdrawal Approved & Processed", description: `₹${request.amount} processed for ${request.userEmail}.`});
       fetchAdminData();
     } catch (error: any) {
@@ -499,8 +522,9 @@ export default function AdminPage() {
   };
 
   const handleRejectWithdrawal = async (requestId: string) => {
+    if (!user || !user.email) return;
     try {
-      await updateWithdrawalRequestStatus(requestId, "rejected", "Rejected by admin.");
+      await updateWithdrawalRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin.");
       toast({ title: "Withdrawal Request Rejected" });
       fetchAdminData();
     } catch (error) {
@@ -510,8 +534,9 @@ export default function AdminPage() {
   };
 
   const handleResolveTicket = async (ticketId: string) => {
+    if (!user || !user.email) return;
     try {
-        await updateSupportTicketStatus(ticketId, 'resolved');
+        await updateSupportTicketStatus(ticketId, 'resolved', user.uid, user.email);
         toast({ title: "Ticket Resolved", description: "The support ticket has been marked as resolved."});
         fetchAdminData();
     } catch (error) {
@@ -582,7 +607,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!user || !userData?.isAdmin) {
+  if (!user || !isAdminOrHigher) {
     return (
         <div className="flex-grow flex flex-col items-center justify-center p-4">
           <Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center">
@@ -596,21 +621,22 @@ export default function AdminPage() {
   }
   
   const navItems = [
-    { id: 'overview', label: 'Overview & Users', icon: Users, count: 0 },
-    { id: 'activity', label: 'User Activity', icon: Activity, count: 0 },
-    { id: 'tournaments', label: 'Tournaments', icon: Swords, count: 0 },
-    { id: 'withdrawal-req', label: 'Withdrawal Requests', icon: ClipboardList, count: pendingWithdrawalsCount },
-    { id: 'add-fund', label: 'Add Fund Requests', icon: Banknote, count: pendingAddFundsCount },
-    { id: 'transactions', label: 'All Transactions', icon: History, count: 0 },
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, count: 0 },
-    { id: 'support', label: 'Support Tickets', icon: LifeBuoy, count: openSupportTicketsCount },
-    { id: 'fraud-alerts', label: 'Fraud Alerts', icon: ShieldAlert, count: openFraudAlertsCount },
-    { id: 'settings-header', label: 'Configuration', isHeader: true },
-    { id: 'winning-rules', label: 'Winning Rules', icon: BrainCircuit, count: 0 },
-    { id: 'daily-rewards', label: 'Daily Rewards', icon: Gift, count: 0 },
-    { id: 'wheel-settings', label: 'Wheel Settings', icon: Wand2, count: 0 },
-    { id: 'game-settings', label: 'App Settings', icon: Settings, count: 0 },
-    { id: 'news-ticker', label: 'News Ticker', icon: Newspaper, count: 0 },
+    { id: 'overview', label: 'Overview & Users', icon: Users, permission: isAdminOrHigher },
+    { id: 'activity', label: 'User Activity', icon: Activity, permission: isAdminOrHigher },
+    { id: 'tournaments', label: 'Tournaments', icon: Swords, permission: isAdminOrHigher },
+    { id: 'withdrawal-req', label: 'Withdrawal Requests', icon: ClipboardList, count: pendingWithdrawalsCount, permission: isFinanceStaff },
+    { id: 'add-fund', label: 'Add Fund Requests', icon: Banknote, count: pendingAddFundsCount, permission: isFinanceStaff },
+    { id: 'transactions', label: 'All Transactions', icon: History, permission: isFinanceStaff },
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, permission: isAdminOrHigher },
+    { id: 'support', label: 'Support Tickets', icon: LifeBuoy, count: openSupportTicketsCount, permission: isSupportStaff },
+    { id: 'fraud-alerts', label: 'Fraud Alerts', icon: ShieldAlert, count: openFraudAlertsCount, permission: isAdminOrHigher },
+    { id: 'staff-management', label: 'Staff Management', icon: UserCog, permission: isSuperAdmin },
+    { id: 'settings-header', label: 'Configuration', isHeader: true, permission: isSuperAdmin },
+    { id: 'winning-rules', label: 'Winning Rules', icon: BrainCircuit, permission: isSuperAdmin },
+    { id: 'daily-rewards', label: 'Daily Rewards', icon: Gift, permission: isSuperAdmin },
+    { id: 'wheel-settings', label: 'Wheel Settings', icon: Wand2, permission: isSuperAdmin },
+    { id: 'game-settings', label: 'App Settings', icon: Settings, permission: isSuperAdmin },
+    { id: 'news-ticker', label: 'News Ticker', icon: Newspaper, permission: isSuperAdmin },
   ];
   
   const renderContent = () => {
@@ -739,6 +765,7 @@ export default function AdminPage() {
                <Table>
                 <TableHeader><TableRow>
                   <TableHead>User</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Live Status</TableHead>
                   <TableHead>Spins (W/L)</TableHead>
                   {Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal (₹)</TableHead>)}
@@ -752,6 +779,7 @@ export default function AdminPage() {
                       <TableCell className="font-medium"><div className="flex items-center gap-2">
                            <Avatar className="w-8 h-8 border-2 border-border"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
                           <div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
+                       <TableCell><Badge variant={u.role === 'super-admin' || u.role === 'admin' ? 'default' : 'secondary'} className="capitalize">{u.role || 'player'}</Badge></TableCell>
                       <TableCell>
                         {u.isOnline ? (
                           <div className="flex items-center gap-2 text-green-600 font-medium">
@@ -889,7 +917,7 @@ export default function AdminPage() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><ClipboardList /> Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></CardHeader>
             <CardContent>
-               <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User</TableHead><TableHead>Gross Amt (₹)</TableHead><TableHead>GST (2%)</TableHead><TableHead>Net Pay (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+               <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User</TableHead><TableHead>Gross Amt (₹)</TableHead><TableHead>Net Pay (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Processed By</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={10} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
                   : withdrawalRequests.map((req) => {
@@ -900,12 +928,12 @@ export default function AdminPage() {
                       <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell>
                       <TableCell>{req.userEmail}</TableCell>
                       <TableCell>{req.amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-destructive">{gstAmount.toFixed(2)}</TableCell>
                       <TableCell className="font-semibold text-primary">{netPayable.toFixed(2)}</TableCell>
                       <TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell>
                       <TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell>
                       <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                       <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
+                      <TableCell className="text-xs">{req.processedByAdminEmail || 'N/A'}</TableCell>
                       <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
                     </TableRow>
                     )
@@ -920,9 +948,9 @@ export default function AdminPage() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Banknote /> Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></CardHeader>
             <CardContent>
-               <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+               <Table><TableHeader><TableRow><TableHead>Req ID</TableHead><TableHead>User Email</TableHead><TableHead>Amount (₹)</TableHead><TableHead>Tier</TableHead><TableHead>Payment Ref</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Processed By</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {isLoadingData ? <TableRow><TableCell colSpan={8} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
+                  {isLoadingData ? <TableRow><TableCell colSpan={9} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading requests...</TableCell></TableRow>
                   : addFundRequests.map((req) => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium text-xs">{req.id.substring(0,10)}...</TableCell><TableCell>{req.userEmail}</TableCell><TableCell>{req.amount.toFixed(2)}</TableCell>
@@ -930,9 +958,10 @@ export default function AdminPage() {
                       <TableCell className="text-xs">{req.paymentReference}</TableCell>
                       <TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell>
                       <TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell>
+                      <TableCell className="text-xs">{req.processedByAdminEmail || 'N/A'}</TableCell>
                       <TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button variant="outline" size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}><PackageCheck className="mr-1 h-3 w-3"/>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}><PackageX className="mr-1 h-3 w-3"/>Reject</Button></div>)}</TableCell>
                     </TableRow>))}
-                  {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground h-24">No pending add fund requests.</TableCell></TableRow>)}
+                  {!isLoadingData && addFundRequests.length === 0 && (<TableRow><TableCell colSpan={9} className="text-center text-muted-foreground h-24">No pending add fund requests.</TableCell></TableRow>)}
                 </TableBody></Table>
             </CardContent>
           </Card>
@@ -986,9 +1015,9 @@ export default function AdminPage() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><LifeBuoy /> Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></CardHeader>
             <CardContent>
-              <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Description</TableHead><TableHead>Screenshot</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+              <Table><TableHeader><TableRow><TableHead>User Email</TableHead><TableHead>Description</TableHead><TableHead>Screenshot</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Processed By</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading tickets...</TableCell></TableRow>
+                  {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading tickets...</TableCell></TableRow>
                   : supportTickets.map((ticket) => (
                     <TableRow key={ticket.id}>
                       <TableCell>{ticket.userEmail}</TableCell>
@@ -1010,6 +1039,7 @@ export default function AdminPage() {
                       </TableCell>
                       <TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell>
                       <TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell>
+                      <TableCell className="text-xs">{ticket.processedByAdminEmail || 'N/A'}</TableCell>
                       <TableCell>
                         {ticket.status === 'open' && (
                           <Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>
@@ -1017,7 +1047,7 @@ export default function AdminPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!isLoadingData && supportTickets.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center text-muted-foreground h-24">No support tickets found.</TableCell></TableRow>)}
+                  {!isLoadingData && supportTickets.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">No support tickets found.</TableCell></TableRow>)}
                 </TableBody>
               </Table>
             </CardContent>
@@ -1050,6 +1080,56 @@ export default function AdminPage() {
                </Table>
             </CardContent>
           </Card>
+        )
+      case 'staff-management':
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><UserCog /> Staff Management</CardTitle>
+                    <CardDescription>Assign roles to users to manage the application.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader><TableRow>
+                            <TableHead>User</TableHead>
+                            <TableHead>Current Role</TableHead>
+                            <TableHead>Change Role</TableHead>
+                        </TableRow></TableHeader>
+                        <TableBody>
+                            {isUsersLoading ? <TableRow><TableCell colSpan={3} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
+                            : allUsers.map((u) => (
+                                <TableRow key={u.id}>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Avatar className="w-8 h-8"><AvatarImage src={u.photoURL || undefined} alt={u.displayName || 'User'} /><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar>
+                                            <div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell><Badge variant={u.role === 'super-admin' ? 'destructive' : (u.role === 'admin' ? 'default' : 'secondary')} className="capitalize">{u.role || 'player'}</Badge></TableCell>
+                                    <TableCell>
+                                        <Select
+                                            defaultValue={u.role || 'player'}
+                                            onValueChange={(newRole) => handleUpdateUserRole(u.id, newRole as UserRole)}
+                                            disabled={u.role === 'super-admin' && u.uid !== user.uid}
+                                        >
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="Change role" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="player">Player</SelectItem>
+                                                <SelectItem value="support-staff">Support Staff</SelectItem>
+                                                <SelectItem value="finance-staff">Finance Staff</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
+                                                <SelectItem value="super-admin">Super Admin</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         )
       case 'winning-rules':
         return (
@@ -1315,20 +1395,23 @@ export default function AdminPage() {
          </div>
          <nav className="flex-1 space-y-2 overflow-auto p-4">
            {navItems.map((item) => 
-            item.isHeader ? (
-                <h4 key={item.id} className="px-2 pt-4 pb-2 text-xs font-semibold uppercase text-muted-foreground">{item.label}</h4>
-            ) : (
-             <Button
-               key={item.id}
-               variant={activeView === item.id ? "secondary" : "ghost"}
-               className="w-full justify-start gap-2"
-               onClick={() => setActiveView(item.id)}
-             >
-               <item.icon className="h-5 w-5" />
-               {item.label}
-               {item.count > 0 && <Badge className="ml-auto">{item.count}</Badge>}
-             </Button>
-           ))}
+            item.permission && (
+              item.isHeader ? (
+                  <h4 key={item.id} className="px-2 pt-4 pb-2 text-xs font-semibold uppercase text-muted-foreground">{item.label}</h4>
+              ) : (
+              <Button
+                key={item.id}
+                variant={activeView === item.id ? "secondary" : "ghost"}
+                className="w-full justify-start gap-2"
+                onClick={() => setActiveView(item.id)}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+                {item.count > 0 && <Badge className="ml-auto">{item.count}</Badge>}
+              </Button>
+              )
+            )
+           )}
          </nav>
           <div className="mt-auto p-4 border-t">
             <Button variant="ghost" className="w-full justify-start gap-2" onClick={() => router.push('/')}>
@@ -1343,9 +1426,9 @@ export default function AdminPage() {
        </aside>
        <div className="flex flex-col sm:ml-60">
          <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-6">
-           <h1 className="text-xl font-semibold capitalize">{activeView.replace('-', ' ')}</h1>
+           <h1 className="text-xl font-semibold capitalize">{activeView.replace(/-/g, ' ')}</h1>
            <div className="ml-auto flex items-center gap-4">
-            <Button onClick={handleSaveConfiguration} size="sm"><Save className="mr-2 h-4 w-4" />Save All Changes</Button>
+            {isSuperAdmin && <Button onClick={handleSaveConfiguration} size="sm"><Save className="mr-2 h-4 w-4" />Save All Changes</Button>}
             <Button onClick={fetchAdminData} variant="outline" size="sm"><RefreshCcw className="mr-2 h-4 w-4" />Refresh Data</Button>
            </div>
          </header>
@@ -1514,5 +1597,3 @@ const CreateTournamentDialog = ({ isOpen, onClose, adminId, onTournamentCreated 
     </Dialog>
   );
 };
-
-    

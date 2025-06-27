@@ -95,6 +95,8 @@ const USER_TOURNAMENTS_COLLECTION = 'userTournaments';
 
 
 // --- User Functions ---
+export type UserRole = 'player' | 'support-staff' | 'finance-staff' | 'admin' | 'super-admin';
+
 export interface UserDocument {
   uid: string;
   email: string | null;
@@ -110,7 +112,8 @@ export interface UserDocument {
   totalWins: number; // New field to track wins
   totalDeposited?: number;
   totalWithdrawn?: number;
-  isAdmin?: boolean;
+  isAdmin?: boolean; // Kept for backwards compatibility, but 'role' is preferred
+  role?: UserRole; // New role-based system
   isBlocked?: boolean;
   lastActive?: Timestamp;
   isOnline?: boolean;
@@ -173,6 +176,7 @@ export const createUserData = async (
     .filter(e => e);
 
   const userEmail = email ? email.toLowerCase().trim() : '';
+  const isSuperAdmin = adminEmails.includes(userEmail);
 
   const userData: UserDocument = {
     uid: userId,
@@ -184,7 +188,8 @@ export const createUserData = async (
     spinsAvailable: initialAppSettings.maxSpinsInBundle,
     dailyPaidSpinsUsed: 0,
     lastPaidSpinDate: new Date().toLocaleDateString('en-CA'),
-    isAdmin: adminEmails.includes(userEmail),
+    isAdmin: isSuperAdmin, // For compatibility
+    role: isSuperAdmin ? 'super-admin' : 'player',
     isBlocked: false,
     lastActive: Timestamp.now(),
     isOnline: false,
@@ -246,8 +251,6 @@ export const getUserData = async (userId: string): Promise<UserDocument | null> 
 
 export const updateUserData = async (userId: string, data: Partial<UserDocument | { [key: string]: any }>): Promise<void> => {
   const userRef = doc(db, USERS_COLLECTION, userId);
-  // Use setDoc with merge: true to prevent errors if the document doesn't exist yet.
-  // This handles the race condition during new user sign-up and cases where doc creation may have failed.
   await setDoc(userRef, data, { merge: true });
 };
 
@@ -442,6 +445,8 @@ export interface WithdrawalRequestData {
   processedDate?: Timestamp;
   adminNotes?: string;
   transactionId?: string;
+  processedByAdminId?: string;
+  processedByAdminEmail?: string;
 }
 
 export const createWithdrawalRequest = async (data: Omit<WithdrawalRequestData, 'requestDate' | 'status' | 'id'>): Promise<string> => {
@@ -464,9 +469,19 @@ export const getWithdrawalRequests = async (statusFilter?: WithdrawalRequestData
   return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (WithdrawalRequestData & {id: string})));
 };
 
-export const updateWithdrawalRequestStatus = async (requestId: string, status: WithdrawalRequestData['status'], adminNotes?: string): Promise<void> => {
+export const updateWithdrawalRequestStatus = async (
+  requestId: string,
+  status: WithdrawalRequestData['status'],
+  adminId: string,
+  adminEmail: string,
+  adminNotes?: string
+): Promise<void> => {
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
-  const updateData: Partial<WithdrawalRequestData> = { status };
+  const updateData: Partial<WithdrawalRequestData> = {
+    status,
+    processedByAdminId: adminId,
+    processedByAdminEmail: adminEmail,
+  };
   if (adminNotes) updateData.adminNotes = adminNotes;
   if (status === "processed" || status === "approved") updateData.processedDate = Timestamp.now();
   await updateDoc(requestRef, updateData);
@@ -486,6 +501,8 @@ export interface AddFundRequestData {
   approvedDate?: Timestamp;
   adminNotes?: string;
   transactionId?: string;
+  processedByAdminId?: string;
+  processedByAdminEmail?: string;
 }
 
 export const createAddFundRequest = async (data: Omit<AddFundRequestData, 'requestDate' | 'status' | 'id'>): Promise<string> => {
@@ -508,15 +525,32 @@ export const getAddFundRequests = async (statusFilter?: AddFundRequestData['stat
   return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (AddFundRequestData & {id: string})));
 };
 
-export const updateAddFundRequestStatus = async (requestId: string, status: AddFundRequestData['status'], adminNotes?: string): Promise<void> => {
+export const updateAddFundRequestStatus = async (
+  requestId: string,
+  status: AddFundRequestData['status'],
+  adminId: string,
+  adminEmail: string,
+  adminNotes?: string
+): Promise<void> => {
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
-  const updateData: Partial<AddFundRequestData> = { status };
+  const updateData: Partial<AddFundRequestData> = {
+    status,
+    processedByAdminId: adminId,
+    processedByAdminEmail: adminEmail,
+  };
   if (adminNotes) updateData.adminNotes = adminNotes;
   if (status === "approved") updateData.approvedDate = Timestamp.now();
   await updateDoc(requestRef, updateData);
 };
 
-export const approveAddFundAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string) => {
+export const approveAddFundAndUpdateBalance = async (
+  requestId: string,
+  userId: string,
+  amount: number,
+  tierId: string,
+  adminId: string,
+  adminEmail: string,
+) => {
   const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
@@ -595,13 +629,25 @@ export const approveAddFundAndUpdateBalance = async (requestId: string, userId: 
   
   const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
-    status: "approved", approvedDate: Timestamp.now(), transactionId: transactionDocRef.id
+    status: "approved",
+    approvedDate: Timestamp.now(),
+    transactionId: transactionDocRef.id,
+    processedByAdminId: adminId,
+    processedByAdminEmail: adminEmail,
   } as Partial<AddFundRequestData>);
   
   await batch.commit();
 };
 
-export const approveWithdrawalAndUpdateBalance = async (requestId: string, userId: string, amount: number, tierId: string, paymentMethodDetails: string) => {
+export const approveWithdrawalAndUpdateBalance = async (
+  requestId: string,
+  userId: string,
+  amount: number,
+  tierId: string,
+  paymentMethodDetails: string,
+  adminId: string,
+  adminEmail: string,
+) => {
   const effectiveTierId = tierId || 'little';
   const batch = writeBatch(db);
   const userRef = doc(db, USERS_COLLECTION, userId);
@@ -656,7 +702,11 @@ export const approveWithdrawalAndUpdateBalance = async (requestId: string, userI
 
   const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
   batch.update(requestRef, {
-    status: "processed", processedDate: Timestamp.now(), transactionId: transactionDocRef.id
+    status: "processed",
+    processedDate: Timestamp.now(),
+    transactionId: transactionDocRef.id,
+    processedByAdminId: adminId,
+    processedByAdminEmail: adminEmail,
   } as Partial<WithdrawalRequestData>);
 
   await batch.commit();
@@ -672,6 +722,8 @@ export interface SupportTicketData {
   status: 'open' | 'resolved';
   createdAt: Timestamp;
   resolvedAt?: Timestamp;
+  processedByAdminId?: string;
+  processedByAdminEmail?: string;
 }
 
 export const uploadSupportScreenshot = async (ticketId: string, file: File): Promise<string> => {
@@ -716,9 +768,18 @@ export const getSupportTickets = async (statusFilter?: SupportTicketData['status
     return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (SupportTicketData & {id: string})));
 };
 
-export const updateSupportTicketStatus = async (ticketId: string, status: SupportTicketData['status']): Promise<void> => {
+export const updateSupportTicketStatus = async (
+  ticketId: string,
+  status: SupportTicketData['status'],
+  adminId: string,
+  adminEmail: string
+): Promise<void> => {
     const ticketRef = doc(db, SUPPORT_TICKETS_COLLECTION, ticketId);
-    const updateData: Partial<SupportTicketData> = { status };
+    const updateData: Partial<SupportTicketData> = {
+      status,
+      processedByAdminId: adminId,
+      processedByAdminEmail: adminEmail,
+    };
     if (status === "resolved") {
         updateData.resolvedAt = Timestamp.now();
     }
@@ -1301,5 +1362,3 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
   Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion, arrayRemove
 };
-
-    
