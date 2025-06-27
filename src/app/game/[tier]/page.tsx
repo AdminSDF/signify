@@ -138,14 +138,37 @@ export default function GamePage() {
   useEffect(() => {
     if (!user) return;
 
-    // Set user as online and in the current game when component mounts
-    updateUserData(user.uid, {
-      isOnline: true,
-      currentGame: tier,
-      lastActive: Timestamp.now()
-    }).catch(err => console.error("Failed to set user as online:", err));
+    // Function to set the user's status to online
+    const setUserOnline = () => {
+      updateUserData(user.uid, {
+        isOnline: true,
+        currentGame: tier,
+        lastActive: Timestamp.now(),
+      }).catch(err => console.error("Failed to set user as online:", err));
+    };
 
-    // Set up a heartbeat to update lastActive every 2 minutes
+    // Function to set the user's status to offline
+    const setUserOffline = () => {
+      updateUserData(user.uid, { isOnline: false, currentGame: null })
+        .catch(err => console.error("Failed to set user as offline:", err));
+    };
+
+    // Set user online when they enter the game page
+    setUserOnline();
+
+    // Add event listeners to handle user presence
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setUserOnline();
+      }
+    };
+    
+    // 'pagehide' is the most reliable event for when a user leaves a page (e.g., closing the tab)
+    window.addEventListener('pagehide', setUserOffline);
+    // 'visibilitychange' handles the user switching back to the tab
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Set up a heartbeat to update lastActive every 2 minutes while the tab is visible
     const heartbeatInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         updateUserData(user.uid, { lastActive: Timestamp.now() })
@@ -153,12 +176,12 @@ export default function GamePage() {
       }
     }, 120000); // 2 minutes
 
-    // Cleanup function on component unmount
+    // Cleanup function for when the component unmounts (e.g., navigating to another page in the app)
     return () => {
       clearInterval(heartbeatInterval);
-      // Set user as offline when they leave the game
-      updateUserData(user.uid, { isOnline: false, currentGame: null })
-        .catch(err => console.error("Failed to set user as offline:", err));
+      window.removeEventListener('pagehide', setUserOffline);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      setUserOffline(); // Ensure user is set offline on navigation
     };
   }, [user, tier]);
 
