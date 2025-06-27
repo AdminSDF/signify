@@ -117,6 +117,10 @@ export default {
             from: { opacity: '1', transform: 'translateY(0)' },
             to: { opacity: '0', transform: 'translateY(10px)' },
         },
+        'blink': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -127,10 +131,9 @@ export default {
         'card-spin-multiple': 'card-spin-multiple 2.5s ease-in-out forwards',
         'fade-in': 'fade-in 0.4s ease-out forwards',
         'fade-out': 'fade-out 0.3s ease-out forwards',
+        'blink': 'blink 1s step-end infinite',
       },
     },
   },
   plugins: [require('tailwindcss-animate')],
 } satisfies Config;
-
-    
