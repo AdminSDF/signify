@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -12,21 +11,27 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Checks that no critical, non-updatable fields are being changed by the user on their own document.
+    // Checks that a user is only updating their own "safe" profile fields.
+    // WARNING: 'balances' and 'spinsAvailable' are NOT in this list, so this rule allows them to be updated by the owner.
+    // This is necessary for the client-side daily reward claim system to work.
+    // This carries a security risk if not handled carefully on the client. The proper long-term solution
+    // is to use a Cloud Function (or a trusted server) to handle reward logic.
     function isUpdatingOnlyOwnSafeFields() {
       let nonUpdatable = [
-        'uid', 'email', 'createdAt', 'balances', 'spinsAvailable', 'isAdmin', 'isBlocked', 
+        'uid', 'email', 'createdAt', 'isAdmin', 'isBlocked', 
         'totalWinnings', 'totalSpinsPlayed', 'totalWins', 'totalDeposited', 'totalWithdrawn',
         'referralCode', 'referralEarnings', 'referredBy', 'referrals', 'vipUntil',
-        'friends', 'friendRequestsSent', 'friendRequestsReceived' // Users cannot update their own friend lists directly, it must be via cross-user updates.
+        'friends', 'friendRequestsSent', 'friendRequestsReceived'
       ];
+      // This rule allows users to update their own profile fields that are NOT in the nonUpdatable list.
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(nonUpdatable);
     }
     
-    // Checks if the update ONLY contains changes to friendship-related fields.
-    function isUpdatingOnlyFriendshipFields() {
-        let allowedFriendFields = ['friends', 'friendRequestsSent', 'friendRequestsReceived'];
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFriendFields);
+    // Checks if the update ONLY contains changes to fields that are allowed to be updated by another user.
+    // This is for social features like friend requests and referrals.
+    function isUpdatingOnlyCrossUserFields() {
+        let allowedCrossUserFields = ['friends', 'friendRequestsSent', 'friendRequestsReceived', 'referrals'];
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedCrossUserFields);
     }
 
     match /users/{userId} {
@@ -37,14 +42,22 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       
       // Update is allowed if:
-      // 1. The user is the owner AND is only updating "safe" fields (like displayName, photoURL).
+      // 1. The user is the owner AND is only updating "safe" fields (like displayName, photoURL, and now balances/spins for rewards).
       // OR
-      // 2. The user is any signed-in user, but they are ONLY modifying friendship-related lists (e.g., accepting a request).
-      // This is crucial for the friend request system to work across different user documents.
+      // 2. The user is any signed-in user, but they are ONLY modifying friendship/referral lists of another user.
       allow update: if isSignedIn() && (
         (isOwner(userId) && isUpdatingOnlyOwnSafeFields()) ||
-        isUpdatingOnlyFriendshipFields()
+        isUpdatingOnlyCrossUserFields()
       );
+    }
+
+    match /userRewards/{userId} {
+       // A user can read their own rewards doc.
+       allow get: if isSignedIn() && isOwner(userId);
+       // A user can create their own rewards doc during signup.
+       allow create: if isSignedIn() && isOwner(userId);
+       // A user can update their own rewards doc to claim daily rewards.
+       allow update: if isSignedIn() && isOwner(userId);
     }
 
     // Rules for other collections
@@ -71,11 +84,6 @@ service cloud.firestore {
     match /supportTickets/{ticketId} {
       allow read, create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow write: if false;
-    }
-    
-    match /userRewards/{userId} {
-       allow read: if isSignedIn() && isOwner(userId);
-       allow write: if false;
     }
 
     match /users/{userId}/notifications/{notificationId} {
