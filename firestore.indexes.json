@@ -143,11 +143,10 @@
       ]
     },
     {
-      "collectionGroup": "userTournaments",
-      "queryScope": "COLLECTION",
+      "collectionGroup": "participants",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "tournamentId", "order": "ASCENDING" },
-        { "fieldPath": "score", "order": "DESCENDING" }
+        { "fieldPath": "userId", "order": "ASCENDING" }
       ]
     }
   ]

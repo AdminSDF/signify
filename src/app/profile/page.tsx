@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Lock, Copy, Share2, Users as UsersIcon, Star, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -478,7 +478,7 @@ export default function ProfilePage() {
               </CardTitle>
                {tierConfig.isLocked && (
                  <CardDescription className="text-destructive flex items-center gap-1 pt-1">
-                  <Lock className="h-3 w-3" /> Withdrawals disabled: Arena is locked.
+                  <UserX className="h-3 w-3" /> Withdrawals disabled: Arena is locked.
                 </CardDescription>
               )}
             </CardHeader>
@@ -488,7 +488,7 @@ export default function ProfilePage() {
                 <Input id="withdrawalAmount" type="number" value={withdrawalAmount} onChange={(e) => setWithdrawalAmount(e.target.value)} placeholder={`e.g. ${minWithdrawal}`} className="mt-1" disabled={isProcessing || tierConfig.isLocked} />
                </div>
                <Button onClick={handleWithdrawal} disabled={isProcessing || tierConfig.isLocked || !withdrawalAmount || parseFloat(withdrawalAmount) < minWithdrawal || parseFloat(withdrawalAmount) > balance} className="w-full" variant="default">
-                {tierConfig.isLocked ? <><Lock className="mr-2 h-4 w-4" /> Locked</> : isProcessing ? 'Processing...' : 'Request Withdrawal'}
+                {tierConfig.isLocked ? <><UserX className="mr-2 h-4 w-4" /> Locked</> : isProcessing ? 'Processing...' : 'Request Withdrawal'}
               </Button>
               {parseFloat(withdrawalAmount) > balance && (<p className="text-xs text-destructive text-center mt-1">Amount exceeds balance for this tier.</p>)}
             </CardContent>
@@ -595,7 +595,7 @@ export default function ProfilePage() {
                           userTournaments.map(ut => {
                             const tournamentDetails = allTournaments.find(t => t.id === ut.tournamentId);
                             return (
-                              <div key={ut.id} className="border p-3 rounded-lg flex justify-between items-center">
+                              <div key={ut.tournamentId} className="border p-3 rounded-lg flex justify-between items-center">
                                 <div>
                                   <p className="font-semibold">{tournamentDetails?.name || 'Tournament'}</p>
                                   <p className="text-sm text-muted-foreground">Score: {ut.score}</p>

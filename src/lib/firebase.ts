@@ -19,6 +19,7 @@ import {
   updateDoc,
   addDoc,
   collection,
+  collectionGroup,
   query,
   where,
   getDocs,
@@ -91,7 +92,6 @@ const SYSTEM_STATS_COLLECTION = 'systemStats';
 const GLOBAL_STATS_DOC_ID = 'global';
 const USER_REWARDS_COLLECTION = 'userRewards';
 const TOURNAMENTS_COLLECTION = 'tournaments';
-const USER_TOURNAMENTS_COLLECTION = 'userTournaments';
 
 
 // --- User Functions ---
@@ -1082,13 +1082,13 @@ export interface Tournament {
   tierId: string; // Which balance to use for entry fee
   prizePool: number;
   status: 'upcoming' | 'active' | 'ended' | 'cancelled';
-  participants: string[];
+  participants?: string[]; // Kept for simplicity on admin side, but subcollection is source of truth
   rewards: TournamentReward[];
   createdBy: string; // admin UID
 }
 
 export interface UserTournamentData {
-  id?: string; // combination of userId and tournamentId
+  id?: string;
   userId: string;
   userDisplayName: string;
   userPhotoURL?: string;
@@ -1118,17 +1118,17 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
   await runTransaction(db, async (transaction) => {
     const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, tournamentId);
     const userRef = doc(db, USERS_COLLECTION, userId);
-    const userTournamentRef = doc(db, USER_TOURNAMENTS_COLLECTION, `${userId}_${tournamentId}`);
+    const userParticipantRef = doc(db, 'tournaments', tournamentId, 'participants', userId);
 
-    const [tournamentDoc, userDoc, userTournamentDoc] = await Promise.all([
+    const [tournamentDoc, userDoc, userParticipantDoc] = await Promise.all([
       transaction.get(tournamentRef),
       transaction.get(userRef),
-      transaction.get(userTournamentRef)
+      transaction.get(userParticipantRef)
     ]);
 
     if (!tournamentDoc.exists()) throw new Error("Tournament not found.");
     if (!userDoc.exists()) throw new Error("User not found.");
-    if (userTournamentDoc.exists()) throw new Error("You have already joined this tournament.");
+    if (userParticipantDoc.exists()) throw new Error("You have already joined this tournament.");
 
     const tournament = tournamentDoc.data() as Tournament;
     const user = userDoc.data() as UserDocument;
@@ -1146,18 +1146,20 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
     const newBalance = currentBalance - tournament.entryFee;
     transaction.update(userRef, { [`balances.${tournament.tierId}`]: newBalance });
 
-    // The line updating the tournament's participants array is removed to avoid permission errors.
-    // The participant count can be derived by querying the userTournaments collection.
-
-    // Create user tournament data
-    const newUserTournamentData: UserTournamentData = {
+    // Add user to the participants subcollection
+    const newUserParticipantData: UserTournamentData = {
       userId,
       userDisplayName: user.displayName || 'N/A',
       userPhotoURL: user.photoURL || undefined,
       tournamentId,
       score: 0,
     };
-    transaction.set(userTournamentRef, newUserTournamentData);
+    transaction.set(userParticipantRef, newUserParticipantData);
+
+    // Also update the participants array on the main tournament doc for simple counting
+    transaction.update(tournamentRef, {
+        participants: arrayUnion(userId)
+    });
 
     // Add a transaction record for the entry fee
     const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
@@ -1178,9 +1180,9 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
 };
 
 export const getTournamentParticipants = async (tournamentId: string): Promise<UserTournamentData[]> => {
+  const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');
   const q = query(
-    collection(db, USER_TOURNAMENTS_COLLECTION),
-    where('tournamentId', '==', tournamentId),
+    participantsRef,
     orderBy('score', 'desc')
   );
   const querySnapshot = await getDocs(q);
@@ -1203,7 +1205,7 @@ export const endTournamentAndDistributePrizes = async (tournamentId: string): Pr
     if (index < participants.length) {
       const winner = participants[index];
       const winnerRef = doc(db, USERS_COLLECTION, winner.userId);
-      const winnerTournamentRef = doc(db, USER_TOURNAMENTS_COLLECTION, `${winner.userId}_${tournamentId}`);
+      const winnerTournamentRef = doc(db, 'tournaments', tournamentId, 'participants', winner.userId);
       
       batch.update(winnerTournamentRef, { prizeWon: reward, rank: reward.rank });
 
@@ -1222,7 +1224,7 @@ export const endTournamentAndDistributePrizes = async (tournamentId: string): Pr
 
 export const getUserTournaments = async (userId: string): Promise<UserTournamentData[]> => {
   const q = query(
-    collection(db, USER_TOURNAMENTS_COLLECTION),
+    collectionGroup(db, 'participants'),
     where('userId', '==', userId)
   );
   const querySnapshot = await getDocs(q);
@@ -1395,5 +1397,3 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
   Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion, arrayRemove
 };
-
-    
