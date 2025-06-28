@@ -552,91 +552,101 @@ export const approveAddFundAndUpdateBalance = async (
   adminEmail: string,
 ) => {
   const effectiveTierId = tierId || 'little';
-  const batch = writeBatch(db);
-  const userRef = doc(db, USERS_COLLECTION, userId);
-  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
-
-  const [userSnap, appConfig] = await Promise.all([
-    getDoc(userRef),
-    getAppConfiguration()
-  ]);
-
-  if (!userSnap.exists()) throw new Error("User not found for balance update.");
-  const userData = userSnap.data() as UserDocument;
   
-  const isFirstDeposit = (userData.totalDeposited || 0) === 0;
+  await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
+    const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
+    
+    // Read documents first
+    const [userSnap, globalStatsSnap, appConfig] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(globalStatsRef),
+      getAppConfiguration() // This is not part of transaction, which is fine
+    ]);
 
-  const userBalances = userData.balances || {};
-  const currentBalance = userBalances[effectiveTierId] || 0;
-  const newBalance = currentBalance + amount;
-  const totalDeposited = (userData.totalDeposited || 0) + amount;
-  
-  batch.update(userRef, { 
-    [`balances.${effectiveTierId}`]: newBalance,
-    totalDeposited: totalDeposited
-  });
-  
-  batch.update(globalStatsRef, { totalDeposited: increment(amount) });
-  
-  if (isFirstDeposit && userData.referredBy) {
-    const referrerRef = doc(db, USERS_COLLECTION, userData.referredBy);
-    const referrerSnap = await getDoc(referrerRef);
-    if (referrerSnap.exists()) {
-        const bonus = appConfig.settings.referralBonusForReferrer;
-        const referrerData = referrerSnap.data() as UserDocument;
-        const referrerLittleTierBalance = referrerData.balances?.little || 0;
-
-        batch.update(referrerRef, {
-            'balances.little': referrerLittleTierBalance + bonus,
-            referralEarnings: increment(bonus)
-        });
-
-        const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
-        const referrerTransactionPayload: TransactionData = {
-            userId: userData.referredBy,
-            userEmail: referrerData.email,
-            type: 'credit',
-            amount: bonus,
-            description: `Referral bonus from ${userData.displayName}`,
-            status: 'completed',
-            date: Timestamp.now(),
-            tierId: 'little',
-            balanceBefore: referrerLittleTierBalance,
-            balanceAfter: referrerLittleTierBalance + bonus
-        };
-        batch.set(referrerTransactionDocRef, referrerTransactionPayload);
+    if (!userSnap.exists()) throw new Error("User not found for balance update.");
+    
+    const userData = userSnap.data() as UserDocument;
+    
+    // Create global stats doc if it doesn't exist
+    if (!globalStatsSnap.exists()) {
+        transaction.set(globalStatsRef, { totalDeposited: 0, totalWithdrawn: 0, totalGstCollected: 0 });
     }
-  }
 
-  const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); 
+    const isFirstDeposit = (userData.totalDeposited || 0) === 0;
 
-  const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
-  
-  const transactionPayload: TransactionData = {
-    userId: userId,
-    userEmail: userData.email,
-    type: 'credit',
-    amount: amount,
-    description: `Balance added to ${tierName} (Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed',
-    date: Timestamp.now(),
-    tierId: effectiveTierId,
-    balanceBefore: currentBalance,
-    balanceAfter: newBalance
-  };
-  batch.set(transactionDocRef, transactionPayload);
-  
-  const requestRef = doc(db, ADD_FUND_REQUESTS_COLLECTION, requestId);
-  batch.update(requestRef, {
-    status: "approved",
-    approvedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id,
-    processedByAdminId: adminId,
-    processedByAdminEmail: adminEmail,
-  } as Partial<AddFundRequestData>);
-  
-  await batch.commit();
+    const userBalances = userData.balances || {};
+    const currentBalance = userBalances[effectiveTierId] || 0;
+    const newBalance = currentBalance + amount;
+    const totalDeposited = (userData.totalDeposited || 0) + amount;
+    
+    // Update User
+    transaction.update(userRef, { 
+      [`balances.${effectiveTierId}`]: newBalance,
+      totalDeposited: totalDeposited
+    });
+    
+    // Update Global Stats
+    transaction.update(globalStatsRef, { totalDeposited: increment(amount) });
+    
+    // Handle referral if it's the first deposit
+    if (isFirstDeposit && userData.referredBy) {
+      const referrerRef = doc(db, USERS_COLLECTION, userData.referredBy);
+      const referrerSnap = await transaction.get(referrerRef);
+
+      if (referrerSnap.exists()) {
+          const bonus = appConfig.settings.referralBonusForReferrer;
+          const referrerData = referrerSnap.data() as UserDocument;
+          const referrerLittleTierBalance = referrerData.balances?.little || 0;
+
+          transaction.update(referrerRef, {
+              'balances.little': referrerLittleTierBalance + bonus,
+              referralEarnings: increment(bonus)
+          });
+
+          // Log transaction for referrer
+          const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+          transaction.set(referrerTransactionDocRef, {
+              userId: userData.referredBy,
+              userEmail: referrerData.email,
+              type: 'credit',
+              amount: bonus,
+              description: `Referral bonus from ${userData.displayName}`,
+              status: 'completed',
+              date: Timestamp.now(),
+              tierId: 'little',
+              balanceBefore: referrerLittleTierBalance,
+              balanceAfter: referrerLittleTierBalance + bonus
+          } as TransactionData);
+      }
+    }
+
+    // Log transaction for user
+    const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+    const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
+    transaction.set(transactionDocRef, {
+      userId: userId,
+      userEmail: userData.email,
+      type: 'credit',
+      amount: amount,
+      description: `Balance added to ${tierName} (Req ID: ${requestId.substring(0,6)})`,
+      status: 'completed',
+      date: Timestamp.now(),
+      tierId: effectiveTierId,
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance
+    } as TransactionData);
+    
+    // Update the request itself
+    transaction.update(requestRef, {
+      status: "approved",
+      approvedDate: Timestamp.now(),
+      transactionId: transactionDocRef.id,
+      processedByAdminId: adminId,
+      processedByAdminEmail: adminEmail,
+    } as Partial<AddFundRequestData>);
+  });
 };
 
 export const approveWithdrawalAndUpdateBalance = async (
@@ -649,67 +659,72 @@ export const approveWithdrawalAndUpdateBalance = async (
   adminEmail: string,
 ) => {
   const effectiveTierId = tierId || 'little';
-  const batch = writeBatch(db);
-  const userRef = doc(db, USERS_COLLECTION, userId);
-  const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
 
-  const [userSnap, appConfig] = await Promise.all([
-    getDoc(userRef),
-    getAppConfiguration()
-  ]);
+  await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    const globalStatsRef = doc(db, SYSTEM_STATS_COLLECTION, GLOBAL_STATS_DOC_ID);
+    const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
+    
+    const [userSnap, globalStatsSnap, appConfig] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(globalStatsRef),
+      getAppConfiguration()
+    ]);
 
-  if (!userSnap.exists()) throw new Error("User not found for balance update.");
-  
-  const userData = userSnap.data() as UserDocument;
-  const userBalances = (userData.balances || {});
-  const currentBalance = userBalances[effectiveTierId] || 0;
-  
-  if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
-  
-  const newBalance = currentBalance - amount;
-  const totalWithdrawn = (userData.totalWithdrawn || 0) + amount;
-  const gstAmount = amount * 0.02;
-  const netPayableAmount = amount - gstAmount;
-  
-  batch.update(userRef, { 
-    [`balances.${effectiveTierId}`]: newBalance,
-    totalWithdrawn: totalWithdrawn 
+    if (!userSnap.exists()) throw new Error("User not found for balance update.");
+    
+    // Create global stats doc if it doesn't exist
+    if (!globalStatsSnap.exists()) {
+        transaction.set(globalStatsRef, { totalDeposited: 0, totalWithdrawn: 0, totalGstCollected: 0 });
+    }
+
+    const userData = userSnap.data() as UserDocument;
+    const userBalances = (userData.balances || {});
+    const currentBalance = userBalances[effectiveTierId] || 0;
+    
+    if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
+    
+    const newBalance = currentBalance - amount;
+    const totalWithdrawn = (userData.totalWithdrawn || 0) + amount;
+    const gstAmount = amount * 0.02;
+    
+    // Update User
+    transaction.update(userRef, { 
+      [`balances.${effectiveTierId}`]: newBalance,
+      totalWithdrawn: totalWithdrawn 
+    });
+    
+    // Update Global Stats
+    transaction.update(globalStatsRef, {
+      totalWithdrawn: increment(amount),
+      totalGstCollected: increment(gstAmount),
+    });
+
+    // Log Transaction
+    const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+    const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
+    transaction.set(transactionDocRef, {
+      userId: userId,
+      userEmail: userData.email,
+      type: 'debit',
+      amount: amount,
+      description: `Withdrawal from ${tierName}. Gross: ₹${amount.toFixed(2)}, GST: -₹${gstAmount.toFixed(2)}. (Req ID: ${requestId.substring(0,6)})`,
+      status: 'completed',
+      date: Timestamp.now(),
+      tierId: effectiveTierId,
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance
+    } as TransactionData);
+
+    // Update Request
+    transaction.update(requestRef, {
+      status: "processed",
+      processedDate: Timestamp.now(),
+      transactionId: transactionDocRef.id,
+      processedByAdminId: adminId,
+      processedByAdminEmail: adminEmail,
+    } as Partial<WithdrawalRequestData>);
   });
-  
-  batch.update(globalStatsRef, {
-    totalWithdrawn: increment(amount),
-    totalGstCollected: increment(gstAmount),
-  });
-
-  const transactionCollRef = collection(db, TRANSACTIONS_COLLECTION);
-  const transactionDocRef = doc(transactionCollRef); 
-
-  const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
-  
-  const transactionPayload: TransactionData = {
-    userId: userId,
-    userEmail: userData.email,
-    type: 'debit',
-    amount: amount,
-    description: `Withdrawal from ${tierName}. Gross: ₹${amount.toFixed(2)}, GST: -₹${gstAmount.toFixed(2)}. (Req ID: ${requestId.substring(0,6)})`,
-    status: 'completed',
-    date: Timestamp.now(),
-    tierId: effectiveTierId,
-    balanceBefore: currentBalance,
-    balanceAfter: newBalance
-  };
-  batch.set(transactionDocRef, transactionPayload);
-
-  const requestRef = doc(db, WITHDRAWAL_REQUESTS_COLLECTION, requestId);
-  batch.update(requestRef, {
-    status: "processed",
-    processedDate: Timestamp.now(),
-    transactionId: transactionDocRef.id,
-    processedByAdminId: adminId,
-    processedByAdminEmail: adminEmail,
-  } as Partial<WithdrawalRequestData>);
-
-  await batch.commit();
 };
 
 // --- Support Ticket Functions ---
@@ -1131,8 +1146,8 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
     const newBalance = currentBalance - tournament.entryFee;
     transaction.update(userRef, { [`balances.${tournament.tierId}`]: newBalance });
 
-    // Add user to participants list
-    transaction.update(tournamentRef, { participants: arrayUnion(userId) });
+    // The line updating the tournament's participants array is removed to avoid permission errors.
+    // The participant count can be derived by querying the userTournaments collection.
 
     // Create user tournament data
     const newUserTournamentData: UserTournamentData = {
@@ -1143,6 +1158,22 @@ export const joinTournament = async (tournamentId: string, userId: string): Prom
       score: 0,
     };
     transaction.set(userTournamentRef, newUserTournamentData);
+
+    // Add a transaction record for the entry fee
+    const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+    const transactionPayload: TransactionData = {
+        userId: userId,
+        userEmail: user.email,
+        type: 'debit',
+        amount: tournament.entryFee,
+        description: `Entry fee for tournament: ${tournament.name}`,
+        status: 'completed',
+        date: Timestamp.now(),
+        tierId: tournament.tierId,
+        balanceBefore: currentBalance,
+        balanceAfter: newBalance
+    };
+    transaction.set(transactionDocRef, transactionPayload);
   });
 };
 
@@ -1364,3 +1395,5 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
   Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion, arrayRemove
 };
+
+    
