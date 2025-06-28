@@ -3,7 +3,7 @@
 
 import { useCallback, useMemo } from 'react';
 
-type SoundType = 'spin' | 'win' | 'tryAgain' | 'error' | 'click';
+type SoundType = 'spin' | 'win' | 'tryAgain' | 'error' | 'click' | 'levelup';
 
 export function useSound() {
   const sounds = useMemo(() => {
@@ -17,6 +17,7 @@ export function useSound() {
       tryAgain: new Audio('/sounds/tryAgain.mp3'),
       error: new Audio('/sounds/error.mp3'),
       click: new Audio('/sounds/click.mp3'),
+      levelup: new Audio('/sounds/levelup.mp3'),
     };
   }, []);
 
@@ -34,7 +35,7 @@ export function useSound() {
     
     // Haptic feedback for mobile devices
     if (typeof window !== 'undefined' && window.navigator.vibrate) {
-      if (sound === 'win') {
+      if (sound === 'win' || sound === 'levelup') {
         window.navigator.vibrate([100, 30, 100]);
       } else if (sound === 'spin') {
         window.navigator.vibrate(50);

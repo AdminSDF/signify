@@ -16,6 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { LoginCredentialsValidator, SignUpCredentialsValidator, type LoginCredentials, type SignUpCredentials } from '@/lib/validators/auth';
 import { cn } from '@/lib/utils';
 import { User, Mail, Lock, Loader2 } from 'lucide-react';
+import { useSound } from '@/hooks/useSound';
 
 type FormData = LoginCredentials | SignUpCredentials;
 
@@ -24,6 +25,7 @@ function LoginComponent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const { playSound } = useSound();
   
   const [formContainerClass, setFormContainerClass] = useState('animate-fade-in');
 
@@ -50,6 +52,7 @@ function LoginComponent() {
   }, [user, loading, router]);
   
   const handleModeSwitch = (newMode: boolean) => {
+    playSound('click');
     setFormContainerClass('animate-fade-out');
     setTimeout(() => {
         setIsLoginMode(newMode);
@@ -71,6 +74,7 @@ function LoginComponent() {
   };
 
   const onSubmit = (data: FormData) => {
+    playSound('click');
     if (loading) return;
     if (isLoginMode) {
       onLogin(data as LoginCredentials);

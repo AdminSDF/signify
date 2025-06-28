@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { getNotifications, markNotificationAsRead, Notification } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
+import { useSound } from '@/hooks/useSound';
 
 const NotificationBell: React.FC = () => {
     const { user } = useAuth();
@@ -104,6 +105,9 @@ const MusicToggleButton: React.FC = () => {
 
 const SiteHeader: React.FC = () => {
   const { user, userData, logout, loading, appSettings } = useAuth();
+  const { playSound } = useSound();
+
+  const handleNavClick = () => playSound('click');
 
   return (
     <>
@@ -113,27 +117,27 @@ const SiteHeader: React.FC = () => {
             <Image src={appSettings.logoUrl} alt="Spinify Logo" width={32} height={32} className="h-8 w-8 rounded-full" priority />
           </Link>
           <nav className="flex items-center gap-1 text-sm flex-grow">
-            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Button asChild variant="ghost" onClick={handleNavClick} className="text-sm font-medium text-muted-foreground hover:text-foreground">
               <Link href="/">
                 <Home className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Game</span>
               </Link>
             </Button>
-            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Button asChild variant="ghost" onClick={handleNavClick} className="text-sm font-medium text-muted-foreground hover:text-foreground">
               <Link href="/tournaments">
                 <Swords className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Tournaments</span>
               </Link>
             </Button>
-            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Button asChild variant="ghost" onClick={handleNavClick} className="text-sm font-medium text-muted-foreground hover:text-foreground">
               <Link href="/leaderboard">
                 <Trophy className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Leaderboard</span>
               </Link>
             </Button>
-            <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Button asChild variant="ghost" onClick={handleNavClick} className="text-sm font-medium text-muted-foreground hover:text-foreground">
               <Link href="/transactions">
                 <ListChecks className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Transactions</span>
               </Link>
             </Button>
-             <Button asChild variant="ghost" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+             <Button asChild variant="ghost" onClick={handleNavClick} className="text-sm font-medium text-muted-foreground hover:text-foreground">
               <Link href="/help">
                 <HelpCircle className="mr-1 h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Help</span>
               </Link>
@@ -169,14 +173,14 @@ const SiteHeader: React.FC = () => {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                       <Link href="/profile" className="cursor-pointer">
+                       <Link href="/profile" className="cursor-pointer" onClick={handleNavClick}>
                           <UserCircle className="mr-2 h-4 w-4" />
                           Profile
                         </Link>
                     </DropdownMenuItem>
                     {(userData?.role === 'admin' || userData?.role === 'super-admin') && (
                       <DropdownMenuItem asChild>
-                        <Link href="/admin" className="cursor-pointer">
+                        <Link href="/admin" className="cursor-pointer" onClick={handleNavClick}>
                           <Shield className="mr-2 h-4 w-4" />
                           Admin Panel
                         </Link>
@@ -191,7 +195,7 @@ const SiteHeader: React.FC = () => {
                 </DropdownMenu>
               </>
             ) : (
-              <Button asChild variant="default" size="sm">
+              <Button asChild variant="default" size="sm" onClick={handleNavClick}>
                 <Link href="/login">
                   <LogIn className="mr-2 h-4 w-4" /> Login
                 </Link>

@@ -15,11 +15,13 @@ import { Steps } from 'intro.js-react';
 import { cn } from '@/lib/utils';
 import DailyRewardModal from '@/components/DailyRewardModal';
 import { useToast } from '@/hooks/use-toast';
+import { useSound } from '@/hooks/useSound';
 
 export default function GameSelectionPage() {
   const { user, userData, loading, appSettings } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const { playSound } = useSound();
   
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [isRewardModalOpen, setIsRewardModalOpen] = useState(false);
@@ -61,11 +63,13 @@ export default function GameSelectionPage() {
     try {
       const result = await claimDailyReward(user.uid, appSettings.rewardConfig);
       toast({ title: "Reward Claimed!", description: result.message });
+      playSound('levelup');
       setIsRewardModalOpen(false);
       setIsRewardClaimable(false);
       // Re-fetch user data to update balance/spins displayed elsewhere
       // This is often handled by the real-time listener in AuthContext, but a manual trigger can be useful
     } catch (error: any) {
+      playSound('error');
       toast({ title: "Claim Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsClaiming(false);
@@ -78,6 +82,10 @@ export default function GameSelectionPage() {
     if (user) {
         updateUserData(user.uid, { 'toursCompleted.welcome': true });
     }
+  };
+  
+  const handleCardClick = () => {
+    playSound('click');
   };
 
   const tourSteps = [
@@ -126,7 +134,7 @@ export default function GameSelectionPage() {
 
   const renderCard = (config: WheelTierConfig) => (
      <Link href={`/game/${config.id}`} passHref key={config.id}>
-      <Card data-tour-id={`game-card-${config.id}`} className={cn(
+      <Card onClick={handleCardClick} data-tour-id={`game-card-${config.id}`} className={cn(
           "h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 border-2 relative",
           config.isLocked ? "border-destructive/50" : "border-primary",
           config.themeClass
