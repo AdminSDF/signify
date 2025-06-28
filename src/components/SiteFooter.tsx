@@ -37,7 +37,7 @@ const SiteFooter: React.FC = () => {
         </div>
         <div className="flex items-center gap-1">
             <Button asChild variant="ghost" size="icon">
-                <a href="https://t.me/boost?c=2511117585" target="_blank" rel="noopener noreferrer" aria-label="Join us on Telegram">
+                <a href="https://t.me/+spTBjpmyCm5lYWJl" target="_blank" rel="noopener noreferrer" aria-label="Join us on Telegram">
                     <TelegramIcon />
                 </a>
             </Button>
