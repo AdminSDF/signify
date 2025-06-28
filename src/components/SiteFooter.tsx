@@ -1,11 +1,9 @@
-
 "use client";
 
 import React from 'react';
 import DisclaimerMarquee from './DisclaimerMarquee';
 import dynamic from 'next/dynamic';
 import { Button } from './ui/button';
-import { Twitter } from 'lucide-react';
 
 // Dynamically import the FooterAd component with SSR turned off.
 // This prevents it from being rendered on the server, thus avoiding hydration errors.
@@ -39,13 +37,8 @@ const SiteFooter: React.FC = () => {
         </div>
         <div className="flex items-center gap-1">
             <Button asChild variant="ghost" size="icon">
-                <a href="https://t.me/your_telegram_channel" target="_blank" rel="noopener noreferrer" aria-label="Join our Telegram channel">
+                <a href="https://t.me/boost?c=2511117585" target="_blank" rel="noopener noreferrer" aria-label="Join us on Telegram">
                     <TelegramIcon />
-                </a>
-            </Button>
-            <Button asChild variant="ghost" size="icon">
-                <a href="https://twitter.com/your_twitter_handle" target="_blank" rel="noopener noreferrer" aria-label="Follow us on Twitter">
-                    <Twitter className="h-5 w-5" />
                 </a>
             </Button>
         </div>
