@@ -66,8 +66,26 @@ if (missingKeys.length > 0) {
   };
   const missingEnvVars = missingKeys.map(key => envVarMap[key as keyof typeof envVarMap] || key);
 
-  const errorMessage = `FIREBASE_INIT_ERROR: Your .env file is missing required Firebase config keys: ${missingEnvVars.join(', ')}. Please go to your Firebase project settings (gear icon -> Project settings -> General -> Your apps -> SDK setup and configuration -> Config) and add these values to your .env file.`;
-  // Throw an error to stop execution and make the problem clear in the console.
+  // This more descriptive error will be thrown during initialization, making it very visible.
+  const errorMessage = `
+================================================================================
+[FIREBASE CONFIGURATION ERROR]
+Your application cannot connect to Firebase because of missing configuration.
+
+Missing Environment Variables:
+- ${missingEnvVars.join('\n- ')}
+
+How to fix this:
+1. Go to your Firebase project console: https://console.firebase.google.com/
+2. In the left menu, click the Gear icon > Project settings.
+3. In the "General" tab, scroll down to "Your apps".
+4. Select your web app.
+5. In the "SDK setup and configuration" section, choose "Config".
+6. Copy the key-value pairs from the 'firebaseConfig' object into your '.env' file in the root of this project.
+7. Make sure each key is prefixed with 'NEXT_PUBLIC_', for example: 'apiKey' becomes 'NEXT_PUBLIC_FIREBASE_API_KEY'.
+8. Restart your development server after updating the .env file.
+================================================================================
+`;
   throw new Error(errorMessage);
 }
 
