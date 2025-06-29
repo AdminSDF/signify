@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -14,7 +13,6 @@ service cloud.firestore {
     }
 
     function getRole() {
-      // Fetches the role of the currently authenticated user.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
@@ -34,32 +32,27 @@ service cloud.firestore {
       return isAuthenticated() && (getRole() == 'finance-staff' || isAdmin());
     }
     
+    // A user can update their own profile, but NOT their role, balances, spins, or block status.
     function isUpdatingOwnSafeFields() {
-        // Defines the list of fields a user is allowed to change on their own profile.
-        // Balances are now included to allow tournament joining. Server actions must be trusted.
-        let allowedFields = [
-            'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
-            'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted',
-            'friendRequestsSent', 'friendRequestsReceived', 'friends', 'balances'
-        ];
-        // This checks that the incoming request is ONLY trying to modify fields from the allowed list.
+        let nonEditableByOwner = ['role', 'isBlocked', 'spinsAvailable', 'balances', 'totalWinnings', 'totalDeposited', 'totalWithdrawn', 'isAdmin', 'referralEarnings', 'referralCode', 'referrals', 'createdAt', 'uid'];
         return request.resource.data.keys().hasAll(resource.data.keys()) &&
-               request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+               !request.resource.data.diff(resource.data).affectedKeys().hasAny(nonEditableByOwner);
     }
     
     // --- Users Collection ---
     match /users/{userId} {
-      allow get, list: if isAuthenticated();
       allow create: if isOwner(userId);
-      // Admins can update any user. Users can update their own profile with restrictions.
-      allow update: if isAdmin() || (isOwner(userId) && isUpdatingOwnSafeFields());
-      allow delete: if false;
+      allow get, list: if isAuthenticated();
+      
+      // Admins can update any user. Users can update their own safe fields.
+      allow update: if (isOwner(userId) && isUpdatingOwnSafeFields()) || isFinanceStaff();
+      
+      allow delete: if isSuperAdmin();
 
-      // Subcollections
       match /notifications/{notificationId} {
         allow read, list: if isOwner(userId);
-        // Only the server (via admin/system) should create notifications.
-        allow create, update, delete: if isAdmin();
+        allow create, update: if isAdmin(); // Server-side/admin only
+        allow delete: if isOwner(userId) || isAdmin();
       }
     }
 
@@ -70,73 +63,71 @@ service cloud.firestore {
     }
     
     match /systemStats/{docId} {
-      allow read: if isAdmin();
-      // Allow write access for admins (for transactions)
+      allow read: if isFinanceStaff();
+      // Write access is needed for server actions triggered by finance staff
       allow write: if isFinanceStaff();
     }
 
     // --- Financial Collections ---
     match /transactions/{transactionId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
-      // Allow finance staff to create transaction logs as part of approval process.
+      // Allow creation by server actions triggered by finance staff
       allow create: if isFinanceStaff();
-      allow update, delete: if false;
+      allow update, delete: if false; 
     }
 
     match /addFundRequests/{requestId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff(); // Only staff can approve/reject
-      allow delete: if false;
+      allow update: if isFinanceStaff();
+      allow delete: if isFinanceStaff();
     }
 
     match /withdrawalRequests/{requestId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
-      allow delete: if false;
+      allow delete: if isFinanceStaff();
     }
     
     // --- Support Tickets ---
     match /supportTickets/{ticketId} {
       allow get, list: if isOwner(resource.data.userId) || isSupportStaff();
-      // User can create their own ticket.
+      // Allow user to create a ticket for themselves.
       allow create: if isOwner(request.resource.data.userId);
       // Allow owner or support staff to update (e.g., add a message or change status).
       allow update: if isOwner(resource.data.userId) || isSupportStaff();
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
     
     // --- Rewards & Tournaments ---
     match /userRewards/{userId} {
       allow get: if isOwner(userId);
-      // Server actions update this, but they run with user credentials.
-      // This needs to be writable by the user, but only in specific ways validated by server.
-      // For now, we allow the update, trusting the server action.
-      allow update: if isOwner(userId);
-      allow create, delete: if false; 
+      allow create, update, delete: if false; // Server-side only
     }
     
     match /tournaments/{tournamentId} {
         allow get, list: if isAuthenticated();
-        allow create, update, delete: if isAdmin();
-
-        // Allow a user to add themselves to the participants array
-        // This is part of the transaction when joining.
+        allow create: if isAdmin();
+        
+        // Allow updating status or other details by an admin.
+        // Also allow a user to add themselves to the participants list.
+        allow update: if isAdmin() || 
+                      (isAuthenticated() && request.resource.data.participants == resource.data.participants.concat([request.auth.uid]));
+                      
+        allow delete: if isSuperAdmin();
+        
         match /participants/{userId} {
             allow get, list: if isAuthenticated();
             // A user can create their own participant document when joining.
-            allow create: if isOwner(userId) && request.resource.data.userId == userId;
-            // Admin can update score, etc.
-            allow update: if isAdmin();
-            allow delete: if false;
+            allow create: if isOwner(userId);
+            allow update: if isAdmin(); // Scores updated by server/admin
+            allow delete: if isAdmin();
         }
     }
     
-    // --- Admin-Only Collections ---
+    // --- Admin-Only & Server-Side Collections ---
     match /activityLogs/{logId} {
-      // Nobody can write directly. This is server-side logic only.
-      // To enforce this, we can check a custom claim if we had one, or leave as false.
       allow read, write: if false;
     }
     

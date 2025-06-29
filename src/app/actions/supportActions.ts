@@ -5,7 +5,7 @@ import {
   db,
   doc,
   collection,
-  addDoc,
+  setDoc, // Changed from addDoc
   updateDoc,
   arrayUnion,
   Timestamp,
@@ -32,6 +32,7 @@ export async function createTicketAction(args: CreateTicketArgs): Promise<{ succ
   }
 
   try {
+    // This creates a reference with a new, unique, client-side generated ID
     const ticketRef = doc(collection(db, SUPPORT_TICKETS_COLLECTION));
     const now = Timestamp.now();
 
@@ -54,10 +55,12 @@ export async function createTicketAction(args: CreateTicketArgs): Promise<{ succ
     };
 
     if (screenshotFile) {
+        // The screenshot is uploaded to a path using the ticket's generated ID
         newTicketData.screenshotURL = await uploadSupportScreenshot(ticketRef.id, screenshotFile);
     }
     
-    await addDoc(collection(db, SUPPORT_TICKETS_COLLECTION), newTicketData);
+    // Use setDoc with the reference to ensure the document ID matches the screenshot path ID
+    await setDoc(ticketRef, newTicketData);
     
     return { success: true, ticketId: ticketRef.id };
   } catch (error: any) {
