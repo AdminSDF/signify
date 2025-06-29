@@ -63,7 +63,7 @@ import {
 } from '@/lib/firebase';
 import { approveAddFundAndUpdateBalance, approveWithdrawalAndUpdateBalance } from '@/app/actions/financeActions';
 import { addMessageToTicketAction, updateTicketStatusAction } from '@/app/actions/supportActions';
-import { cn } from '@/lib/utils';
+import { cn, formatDisplayDate } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -100,17 +100,6 @@ const getPaymentDetailsString = (req: WithdrawalRequestData): string => {
         return `Bank: ${accountHolderName || 'A/C'}${lastFour}`;
     }
     return 'N/A';
-};
-
-const formatDisplayDate = (dateInput: any, formatType: 'datetime' | 'date' = 'datetime'): string => {
-    if (!dateInput) return 'N/A';
-    let dateObj: Date;
-    if (dateInput instanceof Timestamp) dateObj = dateInput.toDate();
-    else if (dateInput instanceof Date) dateObj = dateInput;
-    else dateObj = new Date(dateInput);
-  
-    if (isNaN(dateObj.getTime())) return 'N/A';
-    return format(dateObj, formatType === 'date' ? "PPP" : "Pp");
 };
 
 const StatCard = ({ title, value, icon, description, valuePrefix = '' }: { title: string, value: string | number, icon: React.ReactNode, description?: string, valuePrefix?: string }) => (

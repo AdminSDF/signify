@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -12,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Lightbulb, AlertTriangle } from 'lucide-react';
+import TipAd from './TipAd';
 
 interface TipModalProps {
   isOpen: boolean;
@@ -35,6 +37,7 @@ const TipModal: React.FC<TipModalProps> = ({ isOpen, onClose, tip, isLoading, er
         <DialogDescription className="mt-2 text-base">
           Here's some advice from our AI to help you win more!
         </DialogDescription>
+        <TipAd />
         <div className="my-6 p-4 min-h-[100px] rounded-md border border-dashed border-border flex items-center justify-center">
           {isLoading ? (
             <div className="space-y-2 w-full">

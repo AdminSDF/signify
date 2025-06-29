@@ -12,39 +12,42 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function getRole() {
+    function getRequestingUserRole() {
       if (!isAuthenticated()) { return 'player'; }
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && getRole() == 'super-admin';
+      return isAuthenticated() && getRequestingUserRole() == 'super-admin';
     }
 
     function isAdmin() {
-      let role = getRole();
+      let role = getRequestingUserRole();
       return isAuthenticated() && (role == 'admin' || role == 'super-admin');
     }
     
     function isSupportStaff() {
-      let role = getRole();
-      return isAuthenticated() && (role == 'support-staff' || role == 'admin' || role == 'super-admin');
+      let role = getRequestingUserRole();
+      return isAuthenticated() && (role == 'support-staff' || isAdmin());
     }
 
     function isFinanceStaff() {
-      let role = getRole();
-      return isAuthenticated() && (role == 'finance-staff' || role == 'admin' || role == 'super-admin');
+      let role = getRequestingUserRole();
+      return isAuthenticated() && (role == 'finance-staff' || isAdmin());
     }
     
-    function isSelfUpdateSafe() {
-        // A user cannot change their own role, block status, or admin flag.
-        // All other field changes (like balance, display name, etc.) are allowed
-        // because the server actions logic is trusted to make the correct calculations.
-        let isChangingRole = request.resource.data.role != resource.data.role;
-        let isChangingBlockStatus = request.resource.data.isBlocked != resource.data.isBlocked;
-        let isChangingAdminStatus = request.resource.data.isAdmin != resource.data.isAdmin;
-
-        return !isChangingRole && !isChangingBlockStatus && !isChangingAdminStatus;
+    function isUpdatingAllowedUserFields() {
+        // Fields a user can update on their own profile.
+        // This is permissive for balances to allow server actions to work.
+        // The app's client-side UI should not allow direct balance editing.
+        let allowedFields = [
+            'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
+            'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted',
+            'balances', 'spinsAvailable', 'dailyPaidSpinsUsed', 'lastPaidSpinDate',
+            'totalSpinsPlayed', 'totalWins', 'recentSpinHistory', 'totalWinnings'
+        ];
+        // Ensure no forbidden fields are being changed.
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
     }
 
     // --- Collections ---
@@ -52,13 +55,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow get, list: if isAuthenticated();
       allow create: if isOwner(userId);
-      // Admins can update anything. Users can update their own doc if it's a safe update.
-      allow update: if isAdmin() || (isOwner(userId) && isSelfUpdateSafe());
+      // Admin can update anything. A user can update their own profile fields via server actions.
+      allow update: if isFinanceStaff() || isAdmin() || (isOwner(userId) && isUpdatingAllowedUserFields());
       allow delete: if isSuperAdmin();
 
       match /notifications/{notificationId} {
         allow read, list: if isOwner(userId);
-        allow create, update, delete: if false; 
+        allow create, update, delete: if false; // Server-side only
       }
     }
 
@@ -68,22 +71,20 @@ service cloud.firestore {
     }
     
     match /systemStats/{docId} {
-      // Allow read for admins, write is handled by server-side transaction triggers implicitly
-      allow read: if isAdmin();
-      allow write: if isAdmin(); // Allow server actions by admins to write
+      allow read, write: if isFinanceStaff(); // Only finance staff and above
     }
 
     match /transactions/{transactionId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
-      // Allow creation by server actions running with admin/finance credentials
-      allow create: if isFinanceStaff();
+      // Allow user to create own transaction, or finance staff to create for anyone (for approvals).
+      allow create: if isOwner(request.resource.data.userId) || isFinanceStaff();
       allow update, delete: if false;
     }
 
     match /addFundRequests/{requestId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff();
+      allow update: if isFinanceStaff(); // Only staff can approve/reject
       allow delete: if false;
     }
 
@@ -108,24 +109,25 @@ service cloud.firestore {
     
     match /tournaments/{tournamentId} {
         allow read, list: if isAuthenticated();
-        // Allow update if it's an admin OR if a user is just adding themselves to the participants list
-        allow update: if isAdmin() || (
-          isAuthenticated() &&
-          request.resource.data.participants == resource.data.participants.concat([request.auth.uid]) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants'])
-        );
+        // Only admin can create or change tournament details like prize pool.
         allow create, delete: if isAdmin();
+        
+        // A user can join a tournament by adding their ID to the participants list.
+        allow update: if isAdmin() || 
+                       (isAuthenticated() && request.resource.data.participants == resource.data.participants.concat([request.auth.uid]));
         
         match /participants/{userId} {
             allow read, list: if isAuthenticated();
             // A user can create their own participant document when joining.
             allow create: if isOwner(userId);
-            allow update, delete: if isAdmin();
+            allow update: if isAdmin(); // Scores updated by server/admin
+            allow delete: if isAdmin();
         }
     }
     
     match /activityLogs/{logId} {
-      allow read, write: if isSuperAdmin(); // Allow admins to read/write for now
+      // No client should read or write these. They are created by server actions.
+      allow read, write: if false;
     }
     
     match /fraudAlerts/{alertId} {

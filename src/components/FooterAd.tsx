@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect } from 'react';
@@ -22,8 +23,8 @@ const FooterAd = () => {
         <ins 
              className="adsbygoogle"
              style={{display:"block"}}
-             data-ad-client="ca-pub-1425274923062587"
-             data-ad-slot="9499288281"
+             data-ad-client={process.env.NEXT_PUBLIC_ADMOB_PUBLISHER_ID}
+             data-ad-slot={process.env.NEXT_PUBLIC_ADMOB_FOOTER_AD_UNIT_ID}
              data-ad-format="auto"
              data-full-width-responsive="true"></ins>
     </div>

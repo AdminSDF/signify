@@ -1,6 +1,9 @@
 
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { format } from 'date-fns';
+import { Timestamp } from '@/lib/firebase';
+
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -34,3 +37,14 @@ export async function copyToClipboard(text: string): Promise<void> {
   }
   await navigator.clipboard.writeText(text);
 }
+
+export const formatDisplayDate = (dateInput: any, formatType: 'datetime' | 'date' = 'datetime'): string => {
+    if (!dateInput) return 'N/A';
+    let dateObj: Date;
+    if (dateInput instanceof Timestamp) dateObj = dateInput.toDate();
+    else if (dateInput instanceof Date) dateObj = dateInput;
+    else dateObj = new Date(dateInput);
+  
+    if (isNaN(dateObj.getTime())) return 'N/A';
+    return format(dateObj, formatType === 'date' ? "PPP" : "Pp");
+};

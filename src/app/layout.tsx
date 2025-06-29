@@ -31,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="google-adsense-account" content="ca-pub-1425274923062587" />
+        <meta name="google-adsense-account" content={process.env.NEXT_PUBLIC_ADMOB_PUBLISHER_ID} />
       </head>
       <body className={`${poppins.className} font-body antialiased min-h-screen flex flex-col`}>
         <AuthProvider>
@@ -49,7 +49,7 @@ export default function RootLayout({
           id="adsbygoogle-init"
           strategy="afterInteractive"
           crossOrigin="anonymous"
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1425274923062587"
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADMOB_PUBLISHER_ID}`}
         />
       </body>
     </html>

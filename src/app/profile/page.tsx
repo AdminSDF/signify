@@ -45,14 +45,13 @@ import {
 } from '@/lib/firebase';
 import { WheelTierConfig, TieredBonus } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
-import { copyToClipboard, cn } from '@/lib/utils';
+import { copyToClipboard, cn, formatDisplayDate } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { addMessageToTicketAction } from '@/app/actions/supportActions';
-import { formatDisplayDate } from '@/app/admin/page';
 
 
 type PaymentMethod = "upi" | "bank";
