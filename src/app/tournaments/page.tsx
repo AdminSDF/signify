@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -6,7 +5,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Swords, Trophy, Users, Calendar, AlertTriangle } from 'lucide-react';
-import { getAllTournaments, joinTournament, Tournament } from '@/lib/firebase';
+import { getAllTournaments, Tournament } from '@/lib/firebase';
+import { joinTournamentAction } from '@/app/actions/tournamentActions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -81,8 +81,15 @@ export default function TournamentsPage() {
     }
     setIsJoining(true);
     try {
-      await joinTournament(tournamentId, user.uid);
-      toast({ title: 'Success!', description: 'You have joined the tournament. Good luck!' });
+      const result = await joinTournamentAction({ tournamentId, userId: user.uid });
+      if (result.success) {
+        toast({ title: 'Success!', description: 'You have joined the tournament. Good luck!' });
+        // Optionally, refetch tournaments to update participant count
+        const all = await getAllTournaments();
+        setTournaments(all.filter(t => t.status === 'active' || t.status === 'upcoming'));
+      } else {
+        throw new Error(result.error);
+      }
     } catch (error: any) {
       console.error("Error joining tournament:", error);
       toast({ title: 'Join Failed', description: error.message, variant: 'destructive'});

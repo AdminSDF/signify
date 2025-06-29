@@ -605,11 +605,13 @@ export const getSupportTickets = async (
 
   if (userId) {
     constraints.push(where("userId", "==", userId));
-  } else if (status) {
-    constraints.push(where("status", "==", status));
+    constraints.push(orderBy("createdAt", "desc"));
+  } else {
+    if (status) {
+      constraints.push(where("status", "==", status));
+    }
+    constraints.push(orderBy("lastUpdatedAt", "desc"));
   }
-
-  constraints.push(orderBy("lastUpdatedAt", "desc"));
 
   const q = query(collection(db, SUPPORT_TICKETS_COLLECTION), ...constraints);
   const querySnapshot = await getDocs(q);
