@@ -161,73 +161,75 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md bg-card text-card-foreground">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-md bg-card text-card-foreground flex flex-col max-h-[90vh]">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-2xl font-headline">
             <CreditCard className="w-7 h-7 text-primary" />
             {modalTitle}
           </DialogTitle>
+           <DialogDescription className="pt-2 text-base text-center">
+            {descriptionText}
+          </DialogDescription>
         </DialogHeader>
-        <DialogDescription className="mt-2 text-base text-center">
-          {descriptionText}
-        </DialogDescription>
         
-        <div className="my-6 space-y-6">
-          {isClient && upiPaymentLink && amount > 0 && (
-            <div className="flex flex-col items-center gap-4 p-4 border rounded-lg bg-muted/20">
-              <p className="text-sm font-medium text-muted-foreground text-center">
-                Scan QR to pay <span className="font-bold text-primary">₹{amount.toFixed(2)}</span>
-              </p>
-              <div className="p-2 bg-white rounded-md shadow-md inline-block">
-                <QRCodeSVG value={upiPaymentLink} size={160} includeMargin={false} />
-              </div>
-            </div>
-          )}
+        <div className="flex-grow overflow-y-auto my-2 -mx-2 px-2">
+            <div className="space-y-6">
+                {isClient && upiPaymentLink && amount > 0 && (
+                    <div className="flex flex-col items-center gap-4 p-4 border rounded-lg bg-muted/20">
+                    <p className="text-sm font-medium text-muted-foreground text-center">
+                        Scan QR to pay <span className="font-bold text-primary">₹{amount.toFixed(2)}</span>
+                    </p>
+                    <div className="p-2 bg-white rounded-md shadow-md inline-block">
+                        <QRCodeSVG value={upiPaymentLink} size={160} includeMargin={false} />
+                    </div>
+                    </div>
+                )}
 
-          <div>
-             <Label className="text-sm font-medium text-muted-foreground text-center block mb-3">
-              Or, pay using your favorite app:
-            </Label>
-            <div className="grid grid-cols-3 gap-4">
-              {isClient && upiApps.map((app) => (
-                 <a 
-                   key={app.name} 
-                   href={getAppSpecificLink(app.scheme)}
-                   target="_blank" 
-                   rel="noopener noreferrer"
-                   className="flex flex-col items-center justify-start gap-2 p-2 rounded-lg hover:bg-muted transition-colors h-24"
-                 >
-                   {app.logo}
-                   <span className="text-xs text-center font-medium text-foreground">{app.name}</span>
-                 </a>
-              ))}
-            </div>
-          </div>
+                <div>
+                    <Label className="text-sm font-medium text-muted-foreground text-center block mb-3">
+                    Or, pay using your favorite app:
+                    </Label>
+                    <div className="grid grid-cols-3 gap-4">
+                    {isClient && upiApps.map((app) => (
+                        <a 
+                        key={app.name} 
+                        href={getAppSpecificLink(app.scheme)}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center justify-start gap-2 p-2 rounded-lg hover:bg-muted transition-colors h-24"
+                        >
+                        {app.logo}
+                        <span className="text-xs text-center font-medium text-foreground">{app.name}</span>
+                        </a>
+                    ))}
+                    </div>
+                </div>
 
-          <div>
-            <Label htmlFor="upiIdDisplay" className="text-sm font-medium text-muted-foreground">
-              Or, manually pay to UPI ID:
-            </Label>
-            <div className="flex items-center gap-2 mt-1">
-              <Input
-                id="upiIdDisplay"
-                type="text"
-                value={upiId}
-                readOnly
-                className="bg-muted/50 border-border focus-visible:ring-primary"
-              />
-              <Button variant="outline" size="icon" onClick={handleCopyUpiId} aria-label="Copy UPI ID">
-                <Copy className="w-4 h-4" />
-              </Button>
+                <div>
+                    <Label htmlFor="upiIdDisplay" className="text-sm font-medium text-muted-foreground">
+                    Or, manually pay to UPI ID:
+                    </Label>
+                    <div className="flex items-center gap-2 mt-1">
+                    <Input
+                        id="upiIdDisplay"
+                        type="text"
+                        value={upiId}
+                        readOnly
+                        className="bg-muted/50 border-border focus-visible:ring-primary"
+                    />
+                    <Button variant="outline" size="icon" onClick={handleCopyUpiId} aria-label="Copy UPI ID">
+                        <Copy className="w-4 h-4" />
+                    </Button>
+                    </div>
+                </div>
+                <p className="text-xs text-center text-muted-foreground">
+                    After completing the payment, click the button below to confirm.
+                    Your request will be reviewed by an admin.
+                </p>
             </div>
-          </div>
-          <p className="text-xs text-center text-muted-foreground">
-            After completing the payment, click the button below to confirm.
-            Your request will be reviewed by an admin.
-          </p>
         </div>
 
-        <DialogFooter className="sm:justify-between gap-2 flex-col sm:flex-row">
+        <DialogFooter className="sm:justify-between gap-2 flex-col sm:flex-row flex-shrink-0">
           <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Cancel
           </Button>
