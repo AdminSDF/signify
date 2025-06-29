@@ -34,8 +34,6 @@ import {
   getAddFundRequests,
   AddFundRequestData,
   updateAddFundRequestStatus,
-  approveAddFundAndUpdateBalance,
-  approveWithdrawalAndUpdateBalance,
   updateUserData,
   getAllTransactions,
   getTransactionsFromFirestore,
@@ -63,6 +61,7 @@ import {
   TournamentReward,
   UserRole,
 } from '@/lib/firebase';
+import { approveAddFundAndUpdateBalance, approveWithdrawalAndUpdateBalance } from '@/app/actions/financeActions';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
