@@ -26,20 +26,30 @@ export const SoundProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => {
     // This check ensures the code runs only in the browser
     if (typeof window !== 'undefined' && !audioRef.current) {
+      const createAudio = (src: string, isLoop = false) => {
+          const audio = new Audio(src);
+          audio.loop = isLoop;
+          audio.onerror = () => {
+              console.error(`Sound Error: Failed to load audio source: ${src}. Make sure the file exists in the /public folder.`);
+          };
+          return audio;
+      };
+        
       audioRef.current = {
-        music: new Audio('/sounds/background.mp3'),
+        music: createAudio('/sounds/background.mp3', true),
         effects: {
-          spin: new Audio('/sounds/spin.mp3'),
-          win: new Audio('/sounds/win.mp3'),
-          tryAgain: new Audio('/sounds/tryAgain.mp3'),
-          error: new Audio('/sounds/error.mp3'),
-          click: new Audio('/sounds/click.mp3'),
-          levelup: new Audio('/sounds/levelup.mp3'),
+          spin: createAudio('/sounds/spin.mp3'),
+          win: createAudio('/sounds/win.mp3'),
+          tryAgain: createAudio('/sounds/tryAgain.mp3'),
+          error: createAudio('/sounds/error.mp3'),
+          click: createAudio('/sounds/click.mp3'),
+          levelup: createAudio('/sounds/levelup.mp3'),
         }
       };
-      // Configure background music
-      audioRef.current.music.loop = true;
-      audioRef.current.music.volume = 0.3;
+      // Configure background music volume
+      if(audioRef.current.music) {
+        audioRef.current.music.volume = 0.3;
+      }
     }
   }, []);
 
