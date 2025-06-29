@@ -1237,7 +1237,10 @@ export const markNotificationAsRead = async (userId: string, notificationId: str
 
 
 export {
-  app, auth, db, storage, doc, getDoc, updateDoc, googleProvider, signInWithPopup, firebaseSignOut,
-  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
-  Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion, arrayRemove
+  app, auth, db, storage, doc, getDoc, setDoc, updateDoc, addDoc, collection,
+  collectionGroup, query, where, getDocs, orderBy, limit, googleProvider,
+  signInWithPopup, firebaseSignOut, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail,
+  Timestamp, FirebaseUser, onSnapshot, FieldValue, increment, arrayUnion,
+  arrayRemove, runTransaction, writeBatch, serverTimestamp, deleteDoc
 };
