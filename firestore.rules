@@ -12,121 +12,106 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function getRole() {
+    function getUserRole(userId) {
+      // Fetches the role of a given user.
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+    
+    function getRequestingUserRole() {
+      // Fetches the role of the user making the request.
+      if (!isAuthenticated()) { return 'player'; }
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && getRole() == 'super-admin';
+      return isAuthenticated() && getRequestingUserRole() == 'super-admin';
     }
 
     function isAdmin() {
-      return isAuthenticated() && (getRole() == 'admin' || isSuperAdmin());
+      let role = getRequestingUserRole();
+      return isAuthenticated() && (role == 'admin' || role == 'super-admin');
     }
     
     function isSupportStaff() {
-      return isAuthenticated() && (getRole() == 'support-staff' || isAdmin());
+      let role = getRequestingUserRole();
+      return isAuthenticated() && (role == 'support-staff' || role == 'admin' || role == 'super-admin');
     }
 
     function isFinanceStaff() {
-      return isAuthenticated() && (getRole() == 'finance-staff' || isAdmin());
+      let role = getRequestingUserRole();
+      return isAuthenticated() && (role == 'finance-staff' || role == 'admin' || role == 'super-admin');
     }
-    
-    // A user can update their own profile, but NOT their role, balances, spins, or block status.
-    function isUpdatingOwnSafeFields() {
-        let nonEditableByOwner = ['role', 'isBlocked', 'spinsAvailable', 'balances', 'totalWinnings', 'totalDeposited', 'totalWithdrawn', 'isAdmin', 'referralEarnings', 'referralCode', 'referrals', 'createdAt', 'uid'];
-        return request.resource.data.keys().hasAll(resource.data.keys()) &&
-               !request.resource.data.diff(resource.data).affectedKeys().hasAny(nonEditableByOwner);
-    }
-    
-    // --- Users Collection ---
+
+    // --- Collections ---
+
     match /users/{userId} {
-      allow create: if isOwner(userId);
       allow get, list: if isAuthenticated();
-      
-      // Admins can update any user. Users can update their own safe fields.
-      allow update: if (isOwner(userId) && isUpdatingOwnSafeFields()) || isFinanceStaff();
-      
+      allow create: if isOwner(userId);
+      // Admins can update any user. Users can only update specific, non-critical fields.
+      allow update: if isAdmin() || 
+                     (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
+                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted'
+                      ]));
       allow delete: if isSuperAdmin();
 
       match /notifications/{notificationId} {
         allow read, list: if isOwner(userId);
-        allow create, update: if isAdmin(); // Server-side/admin only
-        allow delete: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false; // Server-side only
       }
     }
 
-    // --- App Configuration & System Stats ---
     match /appConfiguration/{docId} {
-      allow get: if true;
+      allow read: if true;
       allow write: if isSuperAdmin();
     }
     
     match /systemStats/{docId} {
-      allow read: if isFinanceStaff();
-      // Write access is needed for server actions triggered by finance staff
-      allow write: if isFinanceStaff();
+      allow read, write: if isAdmin();
     }
 
-    // --- Financial Collections ---
     match /transactions/{transactionId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
-      // Allow creation by server actions triggered by finance staff
-      allow create: if isFinanceStaff();
-      allow update, delete: if false; 
+      allow create, update, delete: if false; // Server-side only
     }
 
     match /addFundRequests/{requestId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
-      allow delete: if isFinanceStaff();
+      allow delete: if false;
     }
 
     match /withdrawalRequests/{requestId} {
       allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
-      allow delete: if isFinanceStaff();
+      allow delete: if false;
     }
     
-    // --- Support Tickets ---
     match /supportTickets/{ticketId} {
       allow get, list: if isOwner(resource.data.userId) || isSupportStaff();
-      // Allow user to create a ticket for themselves.
       allow create: if isOwner(request.resource.data.userId);
-      // Allow owner or support staff to update (e.g., add a message or change status).
       allow update: if isOwner(resource.data.userId) || isSupportStaff();
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
     
-    // --- Rewards & Tournaments ---
     match /userRewards/{userId} {
       allow get: if isOwner(userId);
       allow create, update, delete: if false; // Server-side only
     }
     
     match /tournaments/{tournamentId} {
-        allow get, list: if isAuthenticated();
-        allow create: if isAdmin();
-        
-        // Allow updating status or other details by an admin.
-        // Also allow a user to add themselves to the participants list.
-        allow update: if isAdmin() || 
-                      (isAuthenticated() && request.resource.data.participants == resource.data.participants.concat([request.auth.uid]));
-                      
-        allow delete: if isSuperAdmin();
+        allow read, list: if isAuthenticated();
+        allow create, update, delete: if isAdmin();
         
         match /participants/{userId} {
-            allow get, list: if isAuthenticated();
-            // A user can create their own participant document when joining.
+            allow read, list: if isAuthenticated();
             allow create: if isOwner(userId);
-            allow update: if isAdmin(); // Scores updated by server/admin
-            allow delete: if isAdmin();
+            allow update, delete: if isAdmin();
         }
     }
     
-    // --- Admin-Only & Server-Side Collections ---
     match /activityLogs/{logId} {
       allow read, write: if false;
     }
