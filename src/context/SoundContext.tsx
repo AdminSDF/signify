@@ -30,7 +30,7 @@ export const SoundProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const audio = new Audio(src);
           audio.loop = isLoop;
           audio.onerror = () => {
-              console.error(`Sound Error: Failed to load audio source: ${src}. Make sure the file exists in the /public folder.`);
+              console.error(`Sound Error: Failed to load audio source: ${src}. Make sure the file exists in the /public folder and the path is correct.`);
           };
           return audio;
       };
@@ -70,7 +70,7 @@ export const SoundProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const audio = audioRef.current.effects[sound];
       if (audio) {
         audio.currentTime = 0;
-        audio.play().catch(err => console.warn(`Could not play sound "${sound}": ${err.message}. Make sure the file exists at /public/sounds/${sound}.mp3`));
+        audio.play().catch(err => console.warn(`Could not play sound "${sound}": ${err.message}. Make sure the file exists at "/public/sounds/${sound}.mp3"`));
       }
     }
     
