@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send, RefreshCw, Trophy, Award, Medal } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send, RefreshCw, Trophy, Award, Medal, Wallet } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -562,3 +562,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
