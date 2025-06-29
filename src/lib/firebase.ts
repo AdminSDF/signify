@@ -35,6 +35,7 @@ import {
   arrayUnion,
   arrayRemove,
   runTransaction,
+  QueryConstraint,
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { AppSettings, AppConfiguration as AppConfigData, WheelTierConfig, RewardConfig } from '@/lib/appConfig'; // Renamed to avoid conflict
@@ -293,6 +294,7 @@ export const getLeaderboardUsers = async (count: number = 50): Promise<UserDocum
 
 // --- Transaction Functions ---
 export interface TransactionData {
+  id?: string;
   userId: string;
   userEmail: string | null;
   type: 'credit' | 'debit' | 'spin';
@@ -458,13 +460,21 @@ export const createWithdrawalRequest = async (data: Omit<WithdrawalRequestData, 
   return docRef.id;
 };
 
-export const getWithdrawalRequests = async (statusFilter?: WithdrawalRequestData['status']): Promise<(WithdrawalRequestData & {id: string})[]> => {
-  let q;
-  if (statusFilter) {
-    q = query(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), where("status", "==", statusFilter), orderBy("requestDate", "desc"));
-  } else {
-    q = query(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), orderBy("requestDate", "desc"));
+export const getWithdrawalRequests = async (
+  filters: { status?: WithdrawalRequestData['status']; userId?: string } = {}
+): Promise<(WithdrawalRequestData & {id: string})[]> => {
+  const { status, userId } = filters;
+  const constraints: QueryConstraint[] = [];
+
+  if (userId) {
+    constraints.push(where("userId", "==", userId));
+  } else if (status) {
+    constraints.push(where("status", "==", status));
   }
+
+  constraints.push(orderBy("requestDate", "desc"));
+  
+  const q = query(collection(db, WITHDRAWAL_REQUESTS_COLLECTION), ...constraints);
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (WithdrawalRequestData & {id: string})));
 };
@@ -514,13 +524,21 @@ export const createAddFundRequest = async (data: Omit<AddFundRequestData, 'reque
   return docRef.id;
 };
 
-export const getAddFundRequests = async (statusFilter?: AddFundRequestData['status']): Promise<(AddFundRequestData & {id: string})[]> => {
-  let q;
-  if (statusFilter) {
-    q = query(collection(db, ADD_FUND_REQUESTS_COLLECTION), where("status", "==", statusFilter), orderBy("requestDate", "desc"));
-  } else {
-    q = query(collection(db, ADD_FUND_REQUESTS_COLLECTION), orderBy("requestDate", "desc"));
+export const getAddFundRequests = async (
+  filters: { status?: AddFundRequestData['status']; userId?: string } = {}
+): Promise<(AddFundRequestData & {id: string})[]> => {
+  const { status, userId } = filters;
+  const constraints: QueryConstraint[] = [];
+
+  if (userId) {
+    constraints.push(where("userId", "==", userId));
+  } else if (status) {
+    constraints.push(where("status", "==", status));
   }
+  
+  constraints.push(orderBy("requestDate", "desc"));
+
+  const q = query(collection(db, ADD_FUND_REQUESTS_COLLECTION), ...constraints);
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (AddFundRequestData & {id: string})));
 };
@@ -772,15 +790,23 @@ export const createSupportTicket = async (data: { userId: string; userEmail: str
     await setDoc(ticketRef, newTicketData);
 };
 
-export const getSupportTickets = async (statusFilter?: SupportTicketData['status']): Promise<(SupportTicketData & {id: string})[]> => {
-    let q;
-    if (statusFilter) {
-      q = query(collection(db, SUPPORT_TICKETS_COLLECTION), where("status", "==", statusFilter), orderBy("createdAt", "desc"));
-    } else {
-      q = query(collection(db, SUPPORT_TICKETS_COLLECTION), orderBy("createdAt", "desc"));
-    }
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (SupportTicketData & {id: string})));
+export const getSupportTickets = async (
+  filters: { status?: SupportTicketData['status']; userId?: string } = {}
+): Promise<(SupportTicketData & {id: string})[]> => {
+  const { status, userId } = filters;
+  const constraints: QueryConstraint[] = [];
+
+  if (userId) {
+    constraints.push(where("userId", "==", userId));
+  } else if (status) {
+    constraints.push(where("status", "==", status));
+  }
+
+  constraints.push(orderBy("createdAt", "desc"));
+
+  const q = query(collection(db, SUPPORT_TICKETS_COLLECTION), ...constraints);
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (SupportTicketData & {id: string})));
 };
 
 export const updateSupportTicketStatus = async (

@@ -21,7 +21,7 @@ import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
   ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords, LogOut,
-  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search
+  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search, View
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
@@ -37,6 +37,7 @@ import {
   approveWithdrawalAndUpdateBalance,
   updateUserData,
   getAllTransactions,
+  getTransactionsFromFirestore,
   TransactionData,
   getLeaderboardUsers,
   Timestamp,
@@ -69,16 +70,9 @@ import { Slider } from '@/components/ui/slider';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 // --- HELPER FUNCTIONS & COMPONENTS ---
 const getTierName = (tierId: string | null | undefined, wheelConfigs: { [key: string]: WheelTierConfig }): string => {
@@ -195,9 +189,15 @@ export default function AdminPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [draggedSegment, setDraggedSegment] = useState<{ tierId: string; index: number } | null>(null);
-  const [userSortBy, setUserSortBy] = useState('totalWinnings_desc');
+  const [userSortBy, setUserSortBy] = useState('createdAt_desc');
   
-  const [editingUser, setEditingUser] = useState<(UserDocument & {id: string}) | null>(null);
+  // --- DETAILED USER VIEW STATE ---
+  const [detailedUser, setDetailedUser] = useState<(UserDocument & {id: string}) | null>(null);
+  const [userTransactions, setUserTransactions] = useState<TransactionData[]>([]);
+  const [userWithdrawals, setUserWithdrawals] = useState<WithdrawalRequestData[]>([]);
+  const [userDeposits, setUserDeposits] = useState<AddFundRequestData[]>([]);
+  const [userSupportTickets, setUserSupportTickets] = useState<SupportTicketData[]>([]);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [manualWinRate, setManualWinRate] = useState<number>(50);
   const [userTagsInput, setUserTagsInput] = useState<string>('');
   
@@ -218,11 +218,11 @@ export default function AdminPage() {
 
   // Effects
   useEffect(() => { if (!loading) { setCurrentAppSettings(appSettings); setCurrentNewsItems(newsItems); setAddBalancePresetsInput(appSettings.addBalancePresets?.join(', ') || ''); } }, [appSettings, newsItems, loading]);
-  useEffect(() => { if(editingUser) { const rate = editingUser.manualWinRateOverride === null || editingUser.manualWinRateOverride === undefined ? 50 : editingUser.manualWinRateOverride * 100; setManualWinRate(rate); setUserTagsInput((editingUser.tags || []).join(', ')); } }, [editingUser]);
+  useEffect(() => { if(detailedUser) { const rate = detailedUser.manualWinRateOverride === null || detailedUser.manualWinRateOverride === undefined ? 50 : detailedUser.manualWinRateOverride * 100; setManualWinRate(rate); setUserTagsInput((detailedUser.tags || []).join(', ')); } }, [detailedUser]);
   
   useEffect(() => {
     if(!isAdminOrHigher || !db) return;
-    const unsubscribe = onSnapshot(query(collection(db, 'users')), (snapshot) => {
+    const unsubscribe = onSnapshot(query(collection(db, 'users'), orderBy('createdAt', 'desc')), (snapshot) => {
       setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserDocument & { id: string })));
       setIsUsersLoading(false);
     }, (error) => { console.error("Error listening to users:", error); toast({ title: "Real-time Error", variant: "destructive" }); setIsUsersLoading(false); });
@@ -241,6 +241,29 @@ export default function AdminPage() {
       setFraudAlerts(alerts); setGlobalStats(stats); setAllTournaments(tournaments);
     } catch (error) { console.error("Error fetching admin data:", error); toast({ title: "Error Fetching Data", description: "Could not load admin data.", variant: "destructive" });
     } finally { setIsLoadingData(false); }
+  }, [toast]);
+  
+  const handleViewUserDetails = useCallback(async (userToView: UserDocument & { id: string }) => {
+    if (!userToView) return;
+    setDetailedUser(userToView);
+    setIsDetailLoading(true);
+    try {
+        const [transactions, withdrawals, deposits, tickets] = await Promise.all([
+            getTransactionsFromFirestore(userToView.id, 50),
+            getWithdrawalRequests({ userId: userToView.id }),
+            getAddFundRequests({ userId: userToView.id }),
+            getSupportTickets({ userId: userToView.id }),
+        ]);
+        setUserTransactions(transactions);
+        setUserWithdrawals(withdrawals);
+        setUserDeposits(deposits);
+        setUserSupportTickets(tickets);
+    } catch (error: any) {
+        console.error("Error fetching user details:", error);
+        toast({ title: "Error", description: `Could not fetch details for ${userToView.displayName}: ${error.message}`, variant: "destructive" });
+    } finally {
+        setIsDetailLoading(false);
+    }
   }, [toast]);
   
   // Memoized Filters
@@ -315,6 +338,8 @@ export default function AdminPage() {
     return { onlineCount: onlineUsers.length, gameBreakdown: onlineUsers.reduce((acc, user) => { const game = user.currentGame || 'Idle'; acc[game] = (acc[game] || 0) + 1; return acc; }, {} as {[key: string]: number}) };
   }, [allUsers]);
 
+  const recentUsers = useMemo(() => allUsers.slice(0, 5), [allUsers]);
+
   useEffect(() => { if (isAdminOrHigher && !loading) { fetchAdminData(); } }, [isAdminOrHigher, loading, fetchAdminData]);
 
   // --- Handlers for Settings & Actions (Condensed for brevity) ---
@@ -324,7 +349,7 @@ export default function AdminPage() {
   const handleWinRateRuleChange = (index: number, field: keyof WinRateRule, value: string | number) => { const updatedRules = [...currentAppSettings.winRateRules]; if (typeof updatedRules[index][field] === 'number') { updatedRules[index][field] = parseFloat(value as string) || 0; } else { (updatedRules[index][field] as string) = value as string; } if (field === 'rate') { updatedRules[index].rate = (value as number) / 100; } setCurrentAppSettings(prev => ({...prev, winRateRules: updatedRules})); };
   const addWinRateRule = () => { const newRule: WinRateRule = { id: `rule-${Date.now()}`, tag: 'new-tag', rate: 0.5, priority: 99 }; setCurrentAppSettings(prev => ({...prev, winRateRules: [...prev.winRateRules, newRule]})); };
   const removeWinRateRule = (id: string) => { setCurrentAppSettings(prev => ({ ...prev, winRateRules: prev.winRateRules.filter(rule => rule.id !== id) })); };
-  const handleSaveUserChanges = async () => { if (!editingUser) return; try { const tags = userTagsInput.split(',').map(t => t.trim()).filter(Boolean); const rateValue = manualWinRate === 50 ? null : manualWinRate / 100; await updateUserData(editingUser.id, { manualWinRateOverride: rateValue, tags: tags }); toast({ title: 'User Updated' }); setEditingUser(null); } catch (error: any) { toast({ title: 'Update Failed', description: error.message, variant: 'destructive'}); } };
+  const handleSaveUserChanges = async () => { if (!detailedUser) return; try { const tags = userTagsInput.split(',').map(t => t.trim()).filter(Boolean); const rateValue = manualWinRate === 50 ? null : manualWinRate / 100; await updateUserData(detailedUser.id, { manualWinRateOverride: rateValue, tags: tags }); toast({ title: 'User Updated' }); setDetailedUser(null); } catch (error: any) { toast({ title: 'Update Failed', description: error.message, variant: 'destructive'}); } };
   const handleUpdateUserRole = async (userId: string, newRole: UserRole) => { if (!isSuperAdmin) { toast({ title: 'Permission Denied', variant: 'destructive'}); return; } try { await updateUserData(userId, { role: newRole }); toast({ title: 'Role Updated' }); } catch (error: any) { toast({ title: 'Role Update Failed', description: error.message, variant: 'destructive' }); } };
   const handleWheelConfigChange = (tierId: string, field: 'name' | 'description' | 'minWithdrawalAmount', value: string) => setCurrentAppSettings(prev => ({ ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], [field]: field === 'minWithdrawalAmount' ? parseFloat(value) || 0 : value }}}));
   const handleToggleLock = (tierId: string, checked: boolean) => setCurrentAppSettings(prev => ({ ...prev, wheelConfigs: { ...prev.wheelConfigs, [tierId]: { ...prev.wheelConfigs[tierId], isLocked: checked }}}));
@@ -389,21 +414,41 @@ export default function AdminPage() {
                 <StatCard title="Pending Withdrawals" value={pendingWithdrawalsCount} icon={<ClipboardList className="h-4 w-4 text-muted-foreground" />} description="Awaiting approval" />
                 <StatCard title="Open Support Tickets" value={openSupportTicketsCount} icon={<LifeBuoy className="h-4 w-4 text-muted-foreground" />} description="Awaiting resolution" />
             </div>
-            <Card>
-                <CardHeader><CardTitle>Global Cash Flow</CardTitle><CardDescription>High-level financial metrics across the entire platform.</CardDescription></CardHeader>
-                <CardContent>
-                    {isLoadingData ? <div className="grid gap-4 md:grid-cols-5"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>
-                    : globalStats && (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                            <StatCard title="Total Deposited" value={globalStats.totalDeposited.toFixed(2)} valuePrefix="₹" icon={<ArrowUpRight className="h-4 w-4 text-green-500"/>} />
-                            <StatCard title="Total Withdrawn" value={globalStats.totalWithdrawn.toFixed(2)} valuePrefix="₹" icon={<ArrowDownLeft className="h-4 w-4 text-red-500"/>} />
-                            <StatCard title="Current Balance" value={globalStats.currentBalance.toFixed(2)} valuePrefix="₹" icon={<Wallet className="h-4 w-4 text-blue-500"/>} />
-                            <StatCard title="Total Winnings" value={globalStats.totalWinnings.toFixed(2)} valuePrefix="₹" icon={<Trophy className="h-4 w-4 text-yellow-500"/>} />
-                            <StatCard title="GST Collected (2%)" value={globalStats.totalGstCollected.toFixed(2)} valuePrefix="₹" icon={<Landmark className="h-4 w-4 text-gray-500"/>} />
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader><CardTitle>Global Cash Flow</CardTitle><CardDescription>High-level financial metrics across the entire platform.</CardDescription></CardHeader>
+                    <CardContent>
+                        {isLoadingData ? <div className="grid gap-4 md:grid-cols-5"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>
+                        : globalStats && (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                                <StatCard title="Total Deposited" value={globalStats.totalDeposited.toFixed(2)} valuePrefix="₹" icon={<ArrowUpRight className="h-4 w-4 text-green-500"/>} />
+                                <StatCard title="Total Withdrawn" value={globalStats.totalWithdrawn.toFixed(2)} valuePrefix="₹" icon={<ArrowDownLeft className="h-4 w-4 text-red-500"/>} />
+                                <StatCard title="Current Balance" value={globalStats.currentBalance.toFixed(2)} valuePrefix="₹" icon={<Wallet className="h-4 w-4 text-blue-500"/>} />
+                                <StatCard title="Total Winnings" value={globalStats.totalWinnings.toFixed(2)} valuePrefix="₹" icon={<Trophy className="h-4 w-4 text-yellow-500"/>} />
+                                <StatCard title="GST Collected (2%)" value={globalStats.totalGstCollected.toFixed(2)} valuePrefix="₹" icon={<Landmark className="h-4 w-4 text-gray-500"/>} />
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader><CardTitle>Recent Users</CardTitle><CardDescription>The last 5 users to sign up.</CardDescription></CardHeader>
+                    <CardContent>
+                         <Table>
+                            <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Joined</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                                {isUsersLoading ? <TableRow><TableCell colSpan={3} className="h-24 text-center"><Skeleton className="w-full h-8" /></TableCell></TableRow>
+                                : recentUsers.map(u => (
+                                    <TableRow key={u.id}>
+                                        <TableCell><div className="flex items-center gap-3"><Avatar className="w-9 h-9 border-2 border-border"><AvatarImage src={u.photoURL || undefined}/><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar><div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell>
+                                        <TableCell>{formatDisplayDate(u.createdAt, 'date')}</TableCell>
+                                        <TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => handleViewUserDetails(u)}><View className="h-4 w-4 mr-2" />Details</Button></TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                         </Table>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
       );
       case 'users': return (
@@ -431,7 +476,7 @@ export default function AdminPage() {
                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                            <DropdownMenuItem onClick={() => setEditingUser(u)}><Pencil className="mr-2 h-4 w-4" />Manage User</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleViewUserDetails(u)}><View className="mr-2 h-4 w-4" />View Details</DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => handleToggleUserBlock(u.id, u.isBlocked || false)} disabled={u.role === 'super-admin'} className={cn(u.isBlocked && "text-green-600 focus:text-green-600")}>{u.isBlocked ? <Users2 className="mr-2 h-4 w-4" /> : <Ban className="mr-2 h-4 w-4 text-destructive"/>}{u.isBlocked ? 'Unblock' : 'Block'}</DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
@@ -640,7 +685,7 @@ export default function AdminPage() {
            <h1 className="flex-1 text-xl font-semibold capitalize">{activeView.replace(/-/g, ' ')}</h1>
            <div className="flex items-center gap-2">
             {isSuperAdmin && <Button onClick={handleSaveConfiguration} size="sm">Save Changes</Button>}
-            <Button onClick={fetchAdminData} variant="outline" size="sm">Refresh Data</Button>
+            <Button onClick={fetchAdminData} variant="outline" size="sm" disabled={isLoadingData}><RefreshCcw className={cn("mr-2 h-4 w-4", isLoadingData && "animate-spin")} />Refresh Data</Button>
            </div>
          </header>
          <main className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -648,17 +693,60 @@ export default function AdminPage() {
          </main>
        </div>
        
-      <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
-        <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Manage User: {editingUser?.displayName}</DialogTitle><DialogDescription>{editingUser?.email}</DialogDescription></DialogHeader>
-          <div className="py-4 space-y-6">
-             <div className="grid grid-cols-2 gap-4 text-center"><div><Label>Total Spins</Label><p className="font-bold text-2xl">{editingUser?.totalSpinsPlayed || 0}</p></div><div><Label>Win/Loss</Label><p className="font-bold text-2xl">{editingUser?.totalWins || 0} / {(editingUser?.totalSpinsPlayed || 0) - (editingUser?.totalWins || 0)}</p></div></div>
-             <div className="space-y-2"><Label htmlFor="tags">User Tags</Label><Input id="tags" value={userTagsInput} onChange={(e) => setUserTagsInput(e.target.value)} placeholder="e.g. new,vip,high-loss"/><CardDescription className="text-xs">Comma-separated tags for dynamic win rates.</CardDescription></div>
-             <div className="space-y-2"><Label htmlFor="winRate">Manual Win Rate Override: <span className="font-bold text-primary">{manualWinRate}%</span></Label><Slider id="winRate" min={0} max={100} step={1} value={[manualWinRate]} onValueChange={(value) => setManualWinRate(value[0])} /><CardDescription className="text-xs">Set to 50% to disable and use tag-based rules.</CardDescription></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button><Button onClick={handleSaveUserChanges}>Save</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
+      <Sheet open={!!detailedUser} onOpenChange={(isOpen) => !isOpen && setDetailedUser(null)}>
+        <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
+            {detailedUser && (
+                <>
+                    <SheetHeader className="p-6">
+                        <div className="flex items-center gap-4">
+                            <Avatar className="w-16 h-16 border-2 border-primary"><AvatarImage src={detailedUser.photoURL || undefined}/><AvatarFallback>{getAvatarFallback(detailedUser)}</AvatarFallback></Avatar>
+                            <div>
+                                <SheetTitle className="text-2xl">{detailedUser.displayName}</SheetTitle>
+                                <SheetDescription>{detailedUser.email} <Badge variant="secondary" className="ml-2">{detailedUser.role}</Badge></SheetDescription>
+                            </div>
+                        </div>
+                    </SheetHeader>
+                    <div className="p-6">
+                        {isDetailLoading ? <div className="flex items-center justify-center h-64"><RefreshCcw className="h-8 w-8 animate-spin" /></div> : (
+                        <Tabs defaultValue="overview">
+                            <TabsList className="grid w-full grid-cols-5">
+                                <TabsTrigger value="overview">Overview</TabsTrigger>
+                                <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                                <TabsTrigger value="deposits">Deposits</TabsTrigger>
+                                <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
+                                <TabsTrigger value="support">Support</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="overview" className="mt-4">
+                                <Card>
+                                    <CardHeader><CardTitle>User Stats</CardTitle></CardHeader>
+                                    <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <StatCard title="Total Winnings" value={(detailedUser.totalWinnings || 0).toFixed(2)} valuePrefix="₹" icon={<Trophy className="h-4 w-4"/>} />
+                                        <StatCard title="Total Deposited" value={(detailedUser.totalDeposited || 0).toFixed(2)} valuePrefix="₹" icon={<ArrowUpRight className="h-4 w-4"/>} />
+                                        <StatCard title="Total Withdrawn" value={(detailedUser.totalWithdrawn || 0).toFixed(2)} valuePrefix="₹" icon={<ArrowDownLeft className="h-4 w-4"/>} />
+                                        <StatCard title="Total Spins" value={detailedUser.totalSpinsPlayed || 0} icon={<Gamepad2 className="h-4 w-4"/>} />
+                                    </CardContent>
+                                </Card>
+                                <Card className="mt-4">
+                                     <CardHeader><CardTitle>Manage User</CardTitle></CardHeader>
+                                     <CardContent className="space-y-4">
+                                        <div className="space-y-2"><Label htmlFor="tags">User Tags</Label><Input id="tags" value={userTagsInput} onChange={(e) => setUserTagsInput(e.target.value)} placeholder="e.g. new,vip,high-loss"/><CardDescription className="text-xs">Comma-separated tags for dynamic win rates.</CardDescription></div>
+                                        <div className="space-y-2"><Label htmlFor="winRate">Manual Win Rate Override: <span className="font-bold text-primary">{manualWinRate}%</span></Label><Slider id="winRate" min={0} max={100} step={1} value={[manualWinRate]} onValueChange={(value) => setManualWinRate(value[0])} /><CardDescription className="text-xs">Set to 50% to disable and use tag-based rules.</CardDescription></div>
+                                     </CardContent>
+                                     <CardFooter><Button onClick={handleSaveUserChanges}>Save Changes</Button></CardFooter>
+                                </Card>
+                            </TabsContent>
+                            <TabsContent value="transactions" className="mt-4"><Table><TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>{userTransactions.map(t=><TableRow key={t.id}><TableCell>{t.description}</TableCell><TableCell className={cn(t.type === 'credit' ? 'text-green-500' : 'text-red-500')}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="deposits" className="mt-4"><Table><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userDeposits.map(d=><TableRow key={d.id}><TableCell>₹{d.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(d.requestDate)}</TableCell><TableCell><Badge variant={d.status === 'approved' ? 'default' : d.status === 'pending' ? 'secondary' : 'destructive'}>{d.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="withdrawals" className="mt-4"><Table><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userWithdrawals.map(w=><TableRow key={w.id}><TableCell>₹{w.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(w.requestDate)}</TableCell><TableCell><Badge variant={w.status === 'processed' ? 'default' : w.status === 'pending' ? 'secondary' : 'destructive'}>{w.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="support" className="mt-4"><Table><TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userSupportTickets.map(t=><TableRow key={t.id}><TableCell>{t.description}</TableCell><TableCell>{formatDisplayDate(t.createdAt)}</TableCell><TableCell><Badge variant={t.status === 'resolved' ? 'default' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                        </Tabs>
+                        )}
+                    </div>
+                </>
+            )}
+        </SheetContent>
+      </Sheet>
+
       <CreateTournamentDialog isOpen={isTournamentModalOpen} onClose={() => setIsTournamentModalOpen(false)} adminId={user.uid} onTournamentCreated={fetchAdminData} />
       
       <Dialog open={!!viewingTournamentParticipants} onOpenChange={() => setViewingTournamentParticipants(null)}>

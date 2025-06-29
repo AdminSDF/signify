@@ -50,6 +50,14 @@
       ]
     },
     {
+      "collectionGroup": "withdrawalRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "requestDate", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "addFundRequests",
       "queryScope": "COLLECTION",
       "fields": [
@@ -71,6 +79,14 @@
           "fieldPath": "requestDate",
           "order": "DESCENDING"
         }
+      ]
+    },
+    {
+      "collectionGroup": "addFundRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "requestDate", "order": "DESCENDING" }
       ]
     },
     {
@@ -125,6 +141,14 @@
       "collectionGroup": "supportTickets",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "supportTickets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     },
