@@ -136,6 +136,7 @@ export interface UserDocument {
   referredBy?: string;
   referrals?: string[];
   referralEarnings?: number;
+  referralMilestones?: string[]; // e.g., ['Bronze', 'Silver']
   // Dynamic Winning Chance Fields
   tags: string[]; // e.g., ["new", "high-loss", "vip"]
   manualWinRateOverride?: number | null; // Admin-set override (0 to 1)
@@ -208,6 +209,7 @@ export const createUserData = async (
     referralCode: userId,
     referrals: [],
     referralEarnings: 0,
+    referralMilestones: [],
     ...(referredBy && { referredBy }),
     tags: ['new'],
     manualWinRateOverride: null,
@@ -608,35 +610,70 @@ export const approveAddFundAndUpdateBalance = async (
     // Update Global Stats
     transaction.update(globalStatsRef, { totalDeposited: increment(amount) });
     
-    // Handle referral if it's the first deposit
+    // Referral Logic
     if (isFirstDeposit && userData.referredBy) {
       const referrerRef = doc(db, USERS_COLLECTION, userData.referredBy);
       const referrerSnap = await transaction.get(referrerRef);
 
       if (referrerSnap.exists()) {
-          const bonus = appConfig.settings.referralBonusForReferrer;
           const referrerData = referrerSnap.data() as UserDocument;
           const referrerLittleTierBalance = referrerData.balances?.little || 0;
+          let totalCashBonus = 0;
+          let totalSpinBonus = 0;
+          let bonusDescriptions: string[] = [];
 
-          transaction.update(referrerRef, {
-              'balances.little': referrerLittleTierBalance + bonus,
-              referralEarnings: increment(bonus)
-          });
+          // 1. Standard referrer bonus
+          const standardBonus = appConfig.settings.referralBonusForReferrer;
+          if (standardBonus > 0) {
+            totalCashBonus += standardBonus;
+            bonusDescriptions.push(`Std Bonus: ₹${standardBonus}`);
+          }
+          
+          const newReferralCount = (referrerData.referrals?.length || 0) + 1;
+          
+          // 2. Tiered Bonus Check
+          const tieredBonus = appConfig.settings.tieredBonuses.find(b => b.count === newReferralCount);
+          if (tieredBonus) {
+              totalCashBonus += tieredBonus.rewardCash;
+              totalSpinBonus += tieredBonus.rewardSpins;
+              bonusDescriptions.push(`Tier Bonus: ₹${tieredBonus.rewardCash} + ${tieredBonus.rewardSpins} spins`);
+          }
 
-          // Log transaction for referrer
-          const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
-          transaction.set(referrerTransactionDocRef, {
-              userId: userData.referredBy,
-              userEmail: referrerData.email,
-              type: 'credit',
-              amount: bonus,
-              description: `Referral bonus from ${userData.displayName}`,
-              status: 'completed',
-              date: Timestamp.now(),
-              tierId: 'little',
-              balanceBefore: referrerLittleTierBalance,
-              balanceAfter: referrerLittleTierBalance + bonus
-          } as TransactionData);
+          // 3. Milestone Check
+          const milestone = appConfig.settings.referralMilestones.find(m => m.count === newReferralCount);
+          const currentMilestones = referrerData.referralMilestones || [];
+          if (milestone && !currentMilestones.includes(milestone.badge)) {
+              totalSpinBonus += milestone.rewardSpins;
+              transaction.update(referrerRef, { referralMilestones: arrayUnion(milestone.badge) });
+              bonusDescriptions.push(`Milestone: ${milestone.badge} (${milestone.rewardSpins} spins)`);
+          }
+          
+          // 4. Update referrer's document with all bonuses
+          const referrerUpdate: {[key:string]: any} = {
+            referralEarnings: increment(totalCashBonus),
+            referrals: arrayUnion(userId) // Add the new referee to the list
+          };
+          if(totalCashBonus > 0) referrerUpdate['balances.little'] = increment(totalCashBonus);
+          if(totalSpinBonus > 0) referrerUpdate.spinsAvailable = increment(totalSpinBonus);
+
+          transaction.update(referrerRef, referrerUpdate);
+
+          // 5. Log one consolidated transaction for the referrer
+          if (totalCashBonus > 0) {
+              const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+              transaction.set(referrerTransactionDocRef, {
+                  userId: userData.referredBy,
+                  userEmail: referrerData.email,
+                  type: 'credit',
+                  amount: totalCashBonus,
+                  description: `Referral rewards from ${userData.displayName}. (${bonusDescriptions.join(', ')})`,
+                  status: 'completed',
+                  date: Timestamp.now(),
+                  tierId: 'little',
+                  balanceBefore: referrerLittleTierBalance,
+                  balanceAfter: referrerLittleTierBalance + totalCashBonus
+              } as TransactionData);
+          }
       }
     }
 

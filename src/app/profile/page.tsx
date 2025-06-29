@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send, RefreshCw, Trophy } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send, RefreshCw, Trophy, Award, Medal } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -39,7 +39,7 @@ import {
   getFriendsAndRequests,
   FriendAndRequestData,
 } from '@/lib/firebase';
-import { WheelTierConfig } from '@/lib/appConfig';
+import { WheelTierConfig, TieredBonus } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
 import { copyToClipboard, cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
@@ -363,6 +363,15 @@ export default function ProfilePage() {
     { value: 'settings', label: 'Settings', icon: Edit3 },
   ];
 
+  const getNextMilestone = () => {
+    const referralCount = userData?.referrals?.length || 0;
+    return appSettings.referralMilestones.find(m => m.count > referralCount);
+  };
+  
+  const nextMilestone = getNextMilestone();
+  const referralCount = userData.referrals?.length || 0;
+
+
   return (
     <>
       <Steps enabled={isTourOpen} steps={tourSteps} initialStep={0} onExit={onTourExit} options={{ tooltipClass: 'custom-tooltip-class', doneLabel: 'Awesome!', nextLabel: 'Next →', prevLabel: '← Back' }} />
@@ -439,18 +448,71 @@ export default function ProfilePage() {
                   </StyledCard>
                 </TabsContent>
                 <TabsContent value="referrals">
-                  <StyledCard data-tour-id="referral-system">
-                    <CardHeader><CardTitle className="text-xl flex items-center font-headline text-accent"><UsersIcon className="mr-2 h-6 w-6"/>Referral System</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <div><Label htmlFor="referralCode">Your Referral Code</Label><div className="flex items-center gap-2 mt-1"><Input id="referralCode" type="text" readOnly value={userData.referralCode || 'N/A'} className="bg-muted"/><Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode, 'Code')}><Copy className="w-4 h-4" /></Button></div></div>
-                      <div><Label htmlFor="referralLink">Your Referral Link</Label><div className="flex items-center gap-2 mt-1"><Input id="referralLink" type="text" readOnly value={referralLink} className="bg-muted"/><Button variant="outline" size="icon" onClick={() => handleCopy(referralLink, 'Link')}><Share2 className="w-4 h-4" /></Button></div></div>
-                      <div className="grid grid-cols-2 gap-4 text-center pt-2">
-                          <div><p className="text-sm text-muted-foreground">Successful Referrals</p><p className="text-2xl font-bold text-primary">{userData.referrals?.length || 0}</p></div>
-                          <div><p className="text-sm text-muted-foreground">Total Earnings</p><p className="text-2xl font-bold text-primary">₹{(userData.referralEarnings || 0).toFixed(2)}</p></div>
-                      </div>
-                       <CardDescription className="text-xs text-center">New users get ₹{appSettings.referralBonusForNewUser} bonus. You get ₹{appSettings.referralBonusForReferrer} on their first deposit!</CardDescription>
-                    </CardContent>
-                  </StyledCard>
+                   <div data-tour-id="referral-system" className="space-y-6">
+                        <StyledCard>
+                            <CardHeader><CardTitle className="text-xl flex items-center font-headline text-accent"><UsersIcon className="mr-2 h-6 w-6"/>Invite Friends</CardTitle></CardHeader>
+                            <CardContent className="space-y-4">
+                            <div><Label htmlFor="referralCode">Your Referral Code</Label><div className="flex items-center gap-2 mt-1"><Input id="referralCode" type="text" readOnly value={userData.referralCode || 'N/A'} className="bg-muted"/><Button variant="outline" size="icon" onClick={() => handleCopy(userData.referralCode, 'Code')}><Copy className="w-4 h-4" /></Button></div></div>
+                            <div><Label htmlFor="referralLink">Your Referral Link</Label><div className="flex items-center gap-2 mt-1"><Input id="referralLink" type="text" readOnly value={referralLink} className="bg-muted"/><Button variant="outline" size="icon" onClick={() => handleCopy(referralLink, 'Link')}><Share2 className="w-4 h-4" /></Button></div></div>
+                            </CardContent>
+                        </StyledCard>
+
+                        <StyledCard>
+                          <CardHeader><CardTitle>Your Progress</CardTitle></CardHeader>
+                           <CardContent className="space-y-4">
+                             <div className="grid grid-cols-2 gap-4 text-center">
+                                  <div><p className="text-sm text-muted-foreground">Successful Referrals</p><p className="text-3xl font-bold text-primary">{referralCount}</p></div>
+                                  <div><p className="text-sm text-muted-foreground">Total Earnings</p><p className="text-3xl font-bold text-primary">₹{(userData.referralEarnings || 0).toFixed(2)}</p></div>
+                              </div>
+                              {nextMilestone && (
+                                <div className="text-center">
+                                    <Label>Next Milestone: {nextMilestone.badge} ({nextMilestone.count} Referrals)</Label>
+                                    <Progress value={(referralCount / nextMilestone.count) * 100} className="w-full mt-1" />
+                                    <p className="text-xs text-muted-foreground mt-1">{referralCount} / {nextMilestone.count} referrals</p>
+                                </div>
+                              )}
+                              {userData.referralMilestones && userData.referralMilestones.length > 0 && (
+                                <div>
+                                  <h4 className="text-center font-semibold text-sm mb-2">Your Badges</h4>
+                                  <div className="flex justify-center gap-2 flex-wrap">
+                                    {userData.referralMilestones.includes('Bronze') && <Badge variant="secondary" className="border-yellow-700 text-yellow-700"><Medal className="mr-1 h-3 w-3"/>Bronze</Badge>}
+                                    {userData.referralMilestones.includes('Silver') && <Badge variant="secondary" className="border-gray-500 text-gray-500"><Award className="mr-1 h-3 w-3"/>Silver</Badge>}
+                                    {userData.referralMilestones.includes('Gold') && <Badge variant="secondary" className="border-yellow-500 text-yellow-500"><Trophy className="mr-1 h-3 w-3"/>Gold</Badge>}
+                                    {userData.referralMilestones.includes('Platinum') && <Badge variant="secondary" className="border-blue-500 text-blue-500"><Crown className="mr-1 h-3 w-3"/>Platinum</Badge>}
+                                  </div>
+                                </div>
+                              )}
+                           </CardContent>
+                        </StyledCard>
+
+                        <StyledCard>
+                          <CardHeader><CardTitle>Reward Program</CardTitle><CardDescription>Earn more as your network grows!</CardDescription></CardHeader>
+                           <CardContent className="space-y-4">
+                              <div>
+                                <h4 className="font-semibold">One-Time Bonuses</h4>
+                                <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                                    {appSettings.tieredBonuses.map(bonus => (
+                                    <li key={bonus.count} className="flex items-center gap-2">
+                                        <Star className="h-4 w-4 text-yellow-500" />
+                                        <span><span className="font-bold text-foreground">{bonus.count} Referrals:</span> {bonus.rewardCash > 0 ? `₹${bonus.rewardCash} + ` : ''}{bonus.rewardSpins} Spins</span>
+                                    </li>
+                                    ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <h4 className="font-semibold">Milestone Rewards</h4>
+                                 <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                                    {appSettings.referralMilestones.map(m => (
+                                    <li key={m.count} className="flex items-center gap-2">
+                                         <Trophy className="h-4 w-4 text-yellow-600" />
+                                        <span><span className="font-bold text-foreground">{m.badge} Badge ({m.count} Refs):</span> {m.rewardSpins} Bonus Spins</span>
+                                    </li>
+                                    ))}
+                                </ul>
+                              </div>
+                           </CardContent>
+                        </StyledCard>
+                   </div>
                 </TabsContent>
                 <TabsContent value="settings">
                    <StyledCard>
@@ -500,5 +562,3 @@ export default function ProfilePage() {
     </>
   );
 }
-
-    

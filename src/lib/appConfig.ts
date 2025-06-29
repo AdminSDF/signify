@@ -144,6 +144,22 @@ export interface RewardConfig {
   resetIfMissed: boolean;
 }
 
+// --- Referral System ---
+export interface TieredBonus {
+  count: number; // e.g., 1, 5, 10
+  rewardSpins: number;
+  rewardCash: number; // in rupees
+  description: string;
+}
+
+export interface ReferralMilestone {
+  count: number; // e.g., 5, 25, 100
+  rewardSpins: number;
+  badge: string; // e.g., "Bronze Referrer"
+  description: string;
+}
+
+
 // General App Settings Interface
 export interface AppSettings {
   appName: string;
@@ -161,6 +177,9 @@ export interface AppSettings {
   defaultWinRate: number; // Default chance to win (0 to 1)
   winRateRules: WinRateRule[];
   rewardConfig: RewardConfig; // Nesting reward config for simplicity
+  // New Referral System Config
+  tieredBonuses: TieredBonus[];
+  referralMilestones: ReferralMilestone[];
 }
 
 // Initial structure / fallback for general settings if Firestore is unavailable.
@@ -197,6 +216,17 @@ export const initialSettings: AppSettings = {
     ],
     resetIfMissed: true,
   },
+  tieredBonuses: [
+    { count: 1, rewardSpins: 100, rewardCash: 0, description: "for your 1st successful referral" },
+    { count: 5, rewardSpins: 500, rewardCash: 50, description: "for your 5th successful referral" },
+    { count: 10, rewardSpins: 1000, rewardCash: 100, description: "for your 10th successful referral" },
+  ],
+  referralMilestones: [
+    { count: 5, rewardSpins: 50, badge: 'Bronze', description: "Bronze Referrer" },
+    { count: 25, rewardSpins: 200, badge: 'Silver', description: "Silver Referrer" },
+    { count: 100, rewardSpins: 1000, badge: 'Gold', description: "Gold Referrer" },
+    { count: 500, rewardSpins: 5000, badge: 'Platinum', description: "Platinum Referrer" },
+  ],
 };
 
 // --- Other constants ---
