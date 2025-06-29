@@ -12,14 +12,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { HelpCircle, Image as ImageIcon, XCircle, Send } from 'lucide-react';
-import { createSupportTicket } from '@/lib/firebase';
+import { createTicketAction } from '@/app/actions/supportActions';
 
 export default function HelpPage() {
-    const { user, loading } = useAuth();
+    const { user, userData, loading } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
 
-    const [description, setDescription] = useState('');
+    const [subject, setSubject] = useState('');
+    const [message, setMessage] = useState('');
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,7 +43,6 @@ export default function HelpPage() {
             URL.revokeObjectURL(previewUrl);
         }
         setPreviewUrl(null);
-        // Reset file input
         const fileInput = document.getElementById('screenshot') as HTMLInputElement;
         if (fileInput) {
             fileInput.value = '';
@@ -51,30 +51,43 @@ export default function HelpPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) {
+        if (!user || !userData) {
             toast({ title: "Login Required", description: "You must be logged in to submit a ticket.", variant: "destructive" });
             return;
         }
-        if (description.trim().length < 10) {
-            toast({ title: "Description too short", description: "Please describe your issue in at least 10 characters.", variant: "destructive" });
+        if (subject.trim().length < 5) {
+            toast({ title: "Subject too short", description: "Please provide a subject of at least 5 characters.", variant: "destructive" });
+            return;
+        }
+        if (message.trim().length < 10) {
+            toast({ title: "Message too short", description: "Please describe your issue in at least 10 characters.", variant: "destructive" });
             return;
         }
 
         setIsSubmitting(true);
         try {
-            await createSupportTicket({
+            const result = await createTicketAction({
                 userId: user.uid,
                 userEmail: user.email || 'N/A',
-                description: description.trim(),
+                userDisplayName: userData.displayName || 'User',
+                subject,
+                initialMessage: message,
                 screenshotFile: screenshotFile,
             });
-            toast({ title: "Ticket Submitted!", description: "Our team will look into your issue shortly. Thank you!" });
-            setDescription('');
-            handleRemoveScreenshot();
-            router.push('/');
+
+            if(result.success) {
+                toast({ title: "Ticket Submitted!", description: "Our team will look into your issue shortly. You can view your ticket on your profile page." });
+                setSubject('');
+                setMessage('');
+                handleRemoveScreenshot();
+                router.push('/profile?tab=support');
+            } else {
+                 toast({ title: "Submission Failed", description: result.error || "Could not submit your ticket.", variant: "destructive" });
+            }
+
         } catch (error: any) {
             console.error("Error submitting support ticket:", error);
-            toast({ title: "Submission Failed", description: error.message || "Could not submit your ticket. Please try again.", variant: "destructive" });
+            toast({ title: "Submission Failed", description: error.message || "An unexpected error occurred.", variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
@@ -101,18 +114,31 @@ export default function HelpPage() {
             <Card className="w-full max-w-2xl mx-auto shadow-xl">
                 <CardHeader className="text-center">
                     <HelpCircle className="h-12 w-12 mx-auto text-primary mb-4" />
-                    <CardTitle className="text-3xl font-bold font-headline text-primary">Help & Support</CardTitle>
+                    <CardTitle className="text-3xl font-bold font-headline text-primary">Contact Support</CardTitle>
                     <CardDescription className="text-muted-foreground">Having an issue? Let us know!</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="description" className="text-lg">Describe your issue</Label>
+                            <Label htmlFor="subject" className="text-lg">Subject</Label>
+                            <Input
+                                id="subject"
+                                placeholder="e.g., Withdrawal Request Pending"
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                required
+                                minLength={5}
+                                disabled={isSubmitting}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="message" className="text-lg">Your Message</Label>
                             <Textarea
-                                id="description"
+                                id="message"
                                 placeholder="Please provide as much detail as possible, including what you were doing when the problem occurred."
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
                                 required
                                 minLength={10}
                                 rows={6}
@@ -146,7 +172,7 @@ export default function HelpPage() {
                             </div>
                         )}
                         
-                        <Button type="submit" className="w-full text-lg py-6" disabled={isSubmitting || description.trim().length < 10}>
+                        <Button type="submit" className="w-full text-lg py-6" disabled={isSubmitting || subject.trim().length < 5 || message.trim().length < 10}>
                             {isSubmitting ? (
                                 <><div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary-foreground mr-2"></div> Submitting...</>
                             ) : (

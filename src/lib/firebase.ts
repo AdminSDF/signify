@@ -563,18 +563,26 @@ export const updateAddFundRequestStatus = async (
   await updateDoc(requestRef, updateData);
 };
 
-// --- Support Ticket Functions ---
+
+// --- Support Ticket & Messaging Functions ---
+export interface Message {
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: Timestamp;
+}
+
 export interface SupportTicketData {
   id?: string;
   userId: string;
   userEmail: string;
-  description: string;
-  screenshotURL?: string;
-  status: 'open' | 'resolved';
+  userDisplayName: string;
+  subject: string;
+  status: 'open' | 'resolved' | 'customer-reply' | 'admin-reply';
   createdAt: Timestamp;
-  resolvedAt?: Timestamp;
-  processedByAdminId?: string;
-  processedByAdminEmail?: string;
+  lastUpdatedAt: Timestamp;
+  messages: Message[];
+  screenshotURL?: string;
 }
 
 export const uploadSupportScreenshot = async (ticketId: string, file: File): Promise<string> => {
@@ -589,25 +597,6 @@ export const uploadSupportScreenshot = async (ticketId: string, file: File): Pro
     return downloadURL;
 };
 
-export const createSupportTicket = async (data: { userId: string; userEmail: string; description: string; screenshotFile: File | null; }): Promise<void> => {
-    const ticketRef = doc(collection(db, SUPPORT_TICKETS_COLLECTION));
-    
-    const newTicketData: Omit<SupportTicketData, 'id'> = {
-        userId: data.userId,
-        userEmail: data.userEmail,
-        description: data.description,
-        status: 'open',
-        createdAt: Timestamp.now(),
-    };
-
-    if (data.screenshotFile) {
-        const screenshotURL = await uploadSupportScreenshot(ticketRef.id, data.screenshotFile);
-        (newTicketData as SupportTicketData).screenshotURL = screenshotURL;
-    }
-    
-    await setDoc(ticketRef, newTicketData);
-};
-
 export const getSupportTickets = async (
   filters: { status?: SupportTicketData['status']; userId?: string } = {}
 ): Promise<(SupportTicketData & {id: string})[]> => {
@@ -620,30 +609,13 @@ export const getSupportTickets = async (
     constraints.push(where("status", "==", status));
   }
 
-  constraints.push(orderBy("createdAt", "desc"));
+  constraints.push(orderBy("lastUpdatedAt", "desc"));
 
   const q = query(collection(db, SUPPORT_TICKETS_COLLECTION), ...constraints);
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (SupportTicketData & {id: string})));
 };
 
-export const updateSupportTicketStatus = async (
-  ticketId: string,
-  status: SupportTicketData['status'],
-  adminId: string,
-  adminEmail: string
-): Promise<void> => {
-    const ticketRef = doc(db, SUPPORT_TICKETS_COLLECTION, ticketId);
-    const updateData: Partial<SupportTicketData> = {
-      status,
-      processedByAdminId: adminId,
-      processedByAdminEmail: adminEmail,
-    };
-    if (status === "resolved") {
-        updateData.resolvedAt = Timestamp.now();
-    }
-    await updateDoc(ticketRef, updateData);
-};
 
 // --- Activity and Fraud Detection Functions ---
 export type ActivityPeriod = 'morning' | 'afternoon' | 'evening' | 'night';
@@ -958,70 +930,6 @@ export const getAllTournaments = async (): Promise<(Tournament & { id: string })
   return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as (Tournament & { id: string })));
 };
 
-export const joinTournament = async (tournamentId: string, userId: string): Promise<void> => {
-  await runTransaction(db, async (transaction) => {
-    const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, tournamentId);
-    const userRef = doc(db, USERS_COLLECTION, userId);
-    const userParticipantRef = doc(db, 'tournaments', tournamentId, 'participants', userId);
-
-    const [tournamentDoc, userDoc, userParticipantDoc] = await Promise.all([
-      transaction.get(tournamentRef),
-      transaction.get(userRef),
-      transaction.get(userParticipantRef)
-    ]);
-
-    if (!tournamentDoc.exists()) throw new Error("Tournament not found.");
-    if (!userDoc.exists()) throw new Error("User not found.");
-    if (userParticipantDoc.exists()) throw new Error("You have already joined this tournament.");
-
-    const tournament = tournamentDoc.data() as Tournament;
-    const user = userDoc.data() as UserDocument;
-
-    if (tournament.status !== 'active' && tournament.status !== 'upcoming') {
-      throw new Error("This tournament is not available for joining.");
-    }
-    
-    const currentBalance = user.balances?.[tournament.tierId] || 0;
-    if (currentBalance < tournament.entryFee) {
-      throw new Error(`Insufficient balance in ${tournament.tierId} wallet.`);
-    }
-
-    // Deduct entry fee
-    const newBalance = currentBalance - tournament.entryFee;
-    transaction.update(userRef, { [`balances.${tournament.tierId}`]: newBalance });
-
-    // Add user to the participants subcollection
-    const newUserParticipantData: UserTournamentData = {
-      userId,
-      userDisplayName: user.displayName || 'N/A',
-      userPhotoURL: user.photoURL || undefined,
-      tournamentId,
-      score: 0,
-    };
-    transaction.set(userParticipantRef, newUserParticipantData);
-
-    // Also update the participants array on the main tournament doc for simple counting
-    transaction.update(tournamentRef, {
-        participants: arrayUnion(userId)
-    });
-
-    // Add a transaction record for the entry fee
-    const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
-    const transactionPayload: TransactionData = {
-        userId: userId,
-        userEmail: user.email,
-        type: 'debit',
-        amount: tournament.entryFee,
-        description: `Entry fee for tournament: ${tournament.name}`,
-        status: 'completed',
-        date: Timestamp.now(),
-        tierId: tournament.tierId,
-        balanceBefore: currentBalance,
-        balanceAfter: newBalance
-    };
-    transaction.set(transactionDocRef, transactionPayload);
-  });
-};
 
 export const getTournamentParticipants = async (tournamentId: string): Promise<UserTournamentData[]> => {
   const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');

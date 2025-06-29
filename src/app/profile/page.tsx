@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send, RefreshCw, Trophy, Award, Medal, Wallet } from 'lucide-react';
+import { DollarSign, User, Mail, Edit3, ArrowDownCircle, ArrowUpCircle, Library, Smartphone, ShieldAlert, QrCode, Camera, Shield, Gem, Crown, Rocket, Star, Copy, Share2, Users as UsersIcon, CalendarDays, Swords, UserPlus, UserMinus, UserCheck, UserX, Send, RefreshCw, Trophy, Award, Medal, Wallet, LifeBuoy, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 import { Label } from '@/components/ui/label';
@@ -38,6 +38,10 @@ import {
   cancelFriendRequest,
   getFriendsAndRequests,
   FriendAndRequestData,
+  getSupportTickets,
+  SupportTicketData,
+  Message,
+  Timestamp,
 } from '@/lib/firebase';
 import { WheelTierConfig, TieredBonus } from '@/lib/appConfig';
 import { Steps } from 'intro.js-react';
@@ -45,6 +49,10 @@ import { copyToClipboard, cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { addMessageToTicketAction } from '@/app/actions/supportActions';
+import { formatDisplayDate } from '@/app/admin/page';
 
 
 type PaymentMethod = "upi" | "bank";
@@ -168,6 +176,7 @@ const FriendsTabContent: React.FC = () => {
 export default function ProfilePage() {
   const { user, userData, loading, appSettings } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<string>('wallets');
@@ -194,6 +203,23 @@ export default function ProfilePage() {
   const [userRewardData, setUserRewardData] = useState<UserRewardData | null>(null);
   const [userTournaments, setUserTournaments] = useState<UserTournamentData[]>([]);
   const [allTournaments, setAllTournaments] = useState<(Tournament & {id: string})[]>([]);
+  const [userTickets, setUserTickets] = useState<(SupportTicketData & {id: string})[]>([]);
+  const [viewingTicket, setViewingTicket] = useState<(SupportTicketData & {id: string}) | null>(null);
+  const [ticketReply, setTicketReply] = useState('');
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+        setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const fetchSupportTickets = useCallback(async () => {
+    if (user) {
+        const tickets = await getSupportTickets({ userId: user.uid });
+        setUserTickets(tickets);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user && userData) {
@@ -206,8 +232,9 @@ export default function ProfilePage() {
       getUserRewardData(user.uid).then(setUserRewardData);
       getUserTournaments(user.uid).then(setUserTournaments);
       getAllTournaments().then(setAllTournaments); // Fetch all for name mapping
+      fetchSupportTickets();
     }
-  }, [user, userData, loading]);
+  }, [user, userData, loading, fetchSupportTickets]);
 
   const onTourExit = () => {
     setIsTourOpen(false);
@@ -313,6 +340,22 @@ export default function ProfilePage() {
     catch (err) { toast({ title: `Copy Failed`, description: `Could not copy the ${type}.`, variant: "destructive" }); }
   };
 
+  const handleSendTicketReply = async () => {
+    if (!ticketReply.trim() || !viewingTicket || !user || !userData) return;
+    const result = await addMessageToTicketAction({ ticketId: viewingTicket.id, senderId: user.uid, senderName: userData.displayName || "User", text: ticketReply, isUser: true });
+    if(result.success) {
+      setTicketReply('');
+      fetchSupportTickets(); // Refresh tickets to show new message
+      // Optimistically update the viewing ticket
+      const optimisticMessage: Message = {
+        senderId: user.uid, senderName: userData.displayName || "User", text: ticketReply, timestamp: Timestamp.now()
+      };
+      setViewingTicket(prev => prev ? {...prev, messages: [...prev.messages, optimisticMessage]} : null);
+    } else {
+      toast({title: "Reply Failed", description: result.error, variant: 'destructive'});
+    }
+  };
+
   if (loading) { return ( <div className="flex items-center justify-center min-h-[calc(100vh-200px)]"><RefreshCw className="h-12 w-12 animate-spin text-primary" /></div> ); }
   if (!user || !userData) { return ( <div className="flex items-center justify-center min-h-[calc(100vh-200px)]"><Card className="w-full max-w-md p-6 shadow-xl bg-card text-card-foreground rounded-lg text-center"><ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" /><CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle><CardDescription className="text-muted-foreground mt-2">Please log in to view your profile.</CardDescription><Button onClick={() => router.push('/login')} className="mt-6">Go to Login</Button></Card></div> ) }
 
@@ -357,6 +400,7 @@ export default function ProfilePage() {
   const nextBonus = appSettings.rewardConfig.streakBonuses.find(b => b.afterDays > currentStreak);
   const TABS_CONFIG = [
     { value: 'wallets', label: 'Wallets', icon: Wallet },
+    { value: 'support', label: 'Support', icon: LifeBuoy },
     { value: 'friends', label: 'Friends', icon: UsersIcon },
     { value: 'tournaments', label: 'Tournaments', icon: Swords },
     { value: 'referrals', label: 'Referrals', icon: Share2 },
@@ -396,7 +440,7 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="space-y-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 h-auto">
+                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-auto">
                   {TABS_CONFIG.map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value} className="flex-col sm:flex-row h-14 sm:h-10 gap-1 sm:gap-2">
                         <tab.icon className="h-5 w-5" /> <span className="text-xs sm:text-sm">{tab.label}</span>
@@ -428,6 +472,26 @@ export default function ProfilePage() {
                         </Tabs>
                     </div>
                   </div>
+                </TabsContent>
+                <TabsContent value="support">
+                   <StyledCard>
+                     <CardHeader className="flex-row items-center justify-between">
+                       <CardTitle className="text-xl flex items-center font-headline text-accent"><LifeBuoy className="mr-2 h-6 w-6"/>My Support Tickets</CardTitle>
+                       <Button asChild variant="outline" size="sm"><Link href="/help">Create New Ticket</Link></Button>
+                     </CardHeader>
+                     <CardContent className="space-y-3">
+                       {userTickets.length === 0 ? <p className="text-center text-muted-foreground py-4">You have no support tickets.</p>
+                       : userTickets.map(ticket => (
+                           <StyledCard key={ticket.id} className="p-3 flex justify-between items-center cursor-pointer hover:bg-muted/50" onClick={() => setViewingTicket(ticket)}>
+                               <div>
+                                   <p className="font-semibold">{ticket.subject}</p>
+                                   <p className="text-xs text-muted-foreground">Last updated: {formatDisplayDate(ticket.lastUpdatedAt)}</p>
+                               </div>
+                               <Badge variant={ticket.status === 'resolved' ? 'outline' : 'default'} className="capitalize">{ticket.status.replace('-',' ')}</Badge>
+                           </StyledCard>
+                       ))}
+                     </CardContent>
+                   </StyledCard>
                 </TabsContent>
                 <TabsContent value="friends"><FriendsTabContent /></TabsContent>
                 <TabsContent value="tournaments">
@@ -558,6 +622,40 @@ export default function ProfilePage() {
             amount={currentAmountForModal}
             tierName={activeWheelConfig?.name}
           />
+
+          <Dialog open={!!viewingTicket} onOpenChange={(isOpen) => { if (!isOpen) setViewingTicket(null); }}>
+             <DialogContent className="max-w-lg flex flex-col h-[70vh]">
+                 {viewingTicket && (<>
+                    <DialogHeader>
+                        <DialogTitle>{viewingTicket.subject}</DialogTitle>
+                        <DialogDescription>
+                            Conversation with support.
+                        </DialogDescription>
+                    </DialogHeader>
+                     <div className="flex-grow overflow-y-auto p-4 space-y-4 -mx-6 px-6">
+                         {viewingTicket.messages.map((msg, index) => (
+                             <div key={index} className={cn("flex items-end gap-2", msg.senderId === user.uid ? "justify-end" : "justify-start")}>
+                                {msg.senderId !== user.uid && <Avatar className="w-8 h-8"><AvatarFallback>A</AvatarFallback></Avatar>}
+                                <div className={cn("max-w-xs p-3 rounded-lg", msg.senderId === user.uid ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                                     <p className="text-sm">{msg.text}</p>
+                                     <p className="text-xs opacity-70 mt-1 text-right">{formatDisplayDate(msg.timestamp)}</p>
+                                 </div>
+                                {msg.senderId === user.uid && <Avatar className="w-8 h-8"><AvatarImage src={user.photoURL || undefined} /><AvatarFallback>{userData.displayName?.[0]}</AvatarFallback></Avatar>}
+                             </div>
+                         ))}
+                     </div>
+                    <DialogFooter>
+                      {viewingTicket.status !== 'resolved' ? (
+                        <div className="flex w-full gap-2 items-center">
+                            <Textarea placeholder="Type your reply..." value={ticketReply} onChange={(e) => setTicketReply(e.target.value)} />
+                            <Button size="icon" onClick={handleSendTicketReply} disabled={!ticketReply.trim()}><Send className="h-4 w-4" /></Button>
+                        </div>
+                      ) : <p className="text-sm text-muted-foreground w-full text-center">This ticket is resolved.</p>}
+                    </DialogFooter>
+                 </>)}
+             </DialogContent>
+          </Dialog>
+
       </div>
     </>
   );

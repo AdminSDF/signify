@@ -3,168 +3,151 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- HELPER FUNCTIONS ---
-    // These functions make the rules cleaner and easier to read.
-    
-    function isSignedIn() {
+    // Helper Functions
+    function isSuperAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
+    }
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super-admin'];
+    }
+    function isSupportStaff() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['support-staff', 'admin', 'super-admin'];
+    }
+    function isFinanceStaff() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['finance-staff', 'admin', 'super-admin'];
+    }
+    function isAuthenticated() {
       return request.auth != null;
     }
-    
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-    
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-    
-    function getMyData() {
-      return getUserData(request.auth.uid);
-    }
-    
-    function hasRole(role) {
-      // Allows for a single role string or an array of roles.
-      // E.g., hasRole('admin') or hasRole(['admin', 'super-admin'])
-      let userRole = getMyData().role;
-      if (role is string) {
-        return userRole == role;
-      }
-      if (role is list) {
-        return userRole in role;
-      }
-      return false;
-    }
-
-    function isSuperAdmin() {
-      return hasRole('super-admin');
-    }
-
-    function isAdmin() {
-      return hasRole(['admin', 'super-admin']);
-    }
-
-    function isFinanceStaff() {
-      return hasRole(['finance-staff', 'admin', 'super-admin']);
-    }
-
-    function isSupportStaff() {
-      return hasRole(['support-staff', 'admin', 'super-admin']);
+      return request.auth.uid == userId;
     }
 
     // --- COLLECTION RULES ---
 
-    // USERS Collection
-    // - Anyone can read public user data (for leaderboards, profiles).
-    // - Users can create their own document on sign-up.
-    // - Users can only update specific, non-critical fields of their own profile.
-    // - Admins can update any user's data.
+    // Users Collection
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // READ: Any authenticated user can read any profile (for leaderboards, referrals, etc.), but only owners can read their own sensitive info (if any is added).
+      allow read: if isAuthenticated();
 
-      allow create: if isOwner(userId)
-                      && request.resource.data.uid == userId
-                      && request.resource.data.email == request.auth.token.email;
-                      
-      allow update: if (isOwner(userId) && request.resource.data.keys().hasOnly([
-                        'displayName', 'photoURL', 'isOnline', 'currentGame', 'lastActive', 
-                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted', 'tags',
-                        'manualWinRateOverride', 'recentSpinHistory', 'vipUntil'
-                      ])) || isSuperAdmin();
-      
-      // Notifications subcollection
-      match /notifications/{notifId} {
-        allow read, update: if isOwner(userId); // User can read and mark as read.
-        allow create, delete: if false; // Created by server actions.
-      }
+      // CREATE: A user can only create their own document.
+      allow create: if isOwner(userId);
+
+      // UPDATE: A user can only update their own non-critical data.
+      // Admins have more permissions.
+      allow update: if isOwner(userId) && !(
+                        'balances' in request.resource.data ||
+                        'role' in request.resource.data ||
+                        'isBlocked' in request.resource.data ||
+                        'isAdmin' in request.resource.data ||
+                        'totalWinnings' in request.resource.data ||
+                        'referralEarnings' in request.resource.data ||
+                        'referrals' in request.resource.data
+                      ) || isSuperAdmin(); // Super admin can update anything.
+    }
+    
+    // Notifications Subcollection (within Users)
+    match /users/{userId}/notifications/{notificationId} {
+        allow read, write: if isOwner(userId); // Only the user can read/write their own notifications.
     }
 
-    // APP CONFIGURATION Collection
-    // - Any signed-in user can read the app's configuration.
-    // - Only Super Admins can write/update the configuration.
+    // App Configuration Collection
     match /appConfiguration/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow read: if true; // Everyone can read app config.
+      allow write: if isSuperAdmin(); // Only super admins can change settings.
     }
-    
-    // TRANSACTIONS Collection
-    // - Users can read their own transactions. Admins can read all.
-    // - All writes must be performed by the server (via server actions).
-    match /transactions/{txId} {
+
+    // Transactions Collection
+    match /transactions/{transactionId} {
+      allow read: if isOwner(resource.data.userId) || isFinanceStaff(); // User can read their own, Finance/Admins can read all.
+      allow create: if false; // Transactions must be created by server actions ONLY.
+      allow update, delete: if false; // No one can modify transactions.
+    }
+
+    // Add Fund Requests Collection
+    match /addFundRequests/{requestId} {
       allow read: if isOwner(resource.data.userId) || isFinanceStaff();
-      allow write: if false;
+      allow create: if isOwner(request.resource.data.userId); // User can create their own request.
+      allow update: if isFinanceStaff(); // Only finance staff can approve/reject.
+      allow delete: if false;
     }
-    
-    // WITHDRAWAL REQUESTS Collection
-    // - Users can create their own withdrawal requests.
-    // - Users can read their own requests. Admins can read all.
-    // - All updates (approve/reject) must come from the server.
-    match /withdrawalRequests/{reqId} {
+
+    // Withdrawal Requests Collection
+    match /withdrawalRequests/{requestId} {
       allow read: if isOwner(resource.data.userId) || isFinanceStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if false;
+      allow create: if isOwner(request.resource.data.userId); // User can create their own request.
+      allow update: if isFinanceStaff(); // Only finance staff can approve/reject.
+      allow delete: if false;
     }
-    
-    // ADD FUND REQUESTS Collection
-    // - Same rules as withdrawal requests.
-    match /addFundRequests/{reqId} {
-      allow read: if isOwner(resource.data.userId) || isFinanceStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if false;
-    }
-    
-    // SUPPORT TICKETS Collection
-    // - Users can create their own tickets.
-    // - Users can read their own tickets. Support Staff can read all.
-    // - Support Staff can update tickets (e.g., to resolve them).
+
+    // Support Tickets Collection (Conversational)
     match /supportTickets/{ticketId} {
       allow read: if isOwner(resource.data.userId) || isSupportStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isSupportStaff();
+      
+      // CREATE: User creates a ticket with their initial message.
+      allow create: if isOwner(request.resource.data.userId)
+                    && request.resource.data.messages.size() == 1
+                    && request.resource.data.messages[0].senderId == request.auth.uid;
+
+      // UPDATE: Two scenarios for updating a ticket:
+      // 1. User adds a message.
+      // 2. Admin adds a message and/or changes status.
+      allow update: if (
+        // SCENARIO 1: User is adding a new message
+        isOwner(resource.data.userId) &&
+        request.resource.data.messages.size() == resource.data.messages.size() + 1 && // Only one message can be added
+        request.resource.data.messages[-1].senderId == request.auth.uid && // The new message sender is the current user
+        request.resource.data.status == 'customer-reply' && // The new status must be 'customer-reply'
+        request.resource.data.subject == resource.data.subject && // Subject cannot be changed
+        request.resource.data.createdAt == resource.data.createdAt // Creation date cannot be changed
+      ) || (
+        // SCENARIO 2: Support Staff is managing the ticket
+        isSupportStaff() &&
+        (
+          // They can add a message
+          (request.resource.data.messages.size() == resource.data.messages.size() + 1 &&
+           request.resource.data.messages[-1].senderId == request.auth.uid) ||
+          // OR they can just change the status without adding a message
+          request.resource.data.messages.size() == resource.data.messages.size()
+        )
+      );
+
+      allow delete: if isSuperAdmin(); // Only super admins can delete tickets.
     }
-    
-    // ACTIVITY LOGS Collection
-    // - Users can create their own activity logs.
-    // - Only Admins can read logs.
+
+    // Activity Logs Collection
     match /activityLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if false;
+      allow write: if false; // Only server can write logs.
+    }
+
+    // Fraud Alerts Collection
+    match /fraudAlerts/{alertId} {
+       allow read: if isAdmin();
+       allow write: if false; // Only server can write alerts.
     }
     
-    // FRAUD ALERTS Collection
-    // - Client access is denied. This is a server/admin-only collection.
-    match /fraudAlerts/{alertId} {
-      allow read, write: if false;
-    }
-
-    // SYSTEM STATS Collection
-    // - Only Admins can read global stats.
-    // - Writes must come from the server.
+    // System Stats Collection
     match /systemStats/{statId} {
         allow read: if isAdmin();
-        allow write: if false;
+        allow write: if false; // Only server actions can update stats.
     }
-
-    // USER REWARDS Collection
-    // - Users can read their own reward status.
-    // - Writes (claiming rewards) must come from the server.
+    
+    // User Rewards Collection
     match /userRewards/{userId} {
-      allow read: if isOwner(userId);
-      allow write: if false;
+        allow read: if isOwner(userId);
+        allow write: if false; // Only server can write rewards.
     }
-
-    // TOURNAMENTS Collection
-    // - Anyone signed in can view tournaments.
-    // - Only Super Admins can create or modify tournaments.
-    // - Joining a tournament (writing to participants) is handled by the server.
-    match /tournaments/{tourneyId} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
-
+    
+    // Tournaments Collection
+    match /tournaments/{tournamentId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin(); // Only super admins can create/update tournaments directly.
+      
+      // Participants Subcollection
       match /participants/{userId} {
-        allow read: if isAdmin() || isOwner(userId);
-        allow write: if false; // Joining is handled by a server action.
+        allow read: if isAuthenticated();
+        allow write: if false; // All joins/updates handled by server actions.
       }
     }
   }

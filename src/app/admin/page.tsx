@@ -22,7 +22,7 @@ import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
   ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords, LogOut,
-  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search, View
+  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search, View, Send, MessageSquare
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
@@ -43,7 +43,7 @@ import {
   AppConfiguration,
   getSupportTickets,
   SupportTicketData,
-  updateSupportTicketStatus,
+  Message,
   getActivitySummary,
   ActivitySummary,
   getFraudAlerts,
@@ -62,6 +62,7 @@ import {
   UserRole,
 } from '@/lib/firebase';
 import { approveAddFundAndUpdateBalance, approveWithdrawalAndUpdateBalance } from '@/app/actions/financeActions';
+import { addMessageToTicketAction, updateTicketStatusAction } from '@/app/actions/supportActions';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -72,7 +73,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar } from "@/components/ui/calendar"
+import { Calendar } from "@/components/ui/calendar";
 
 
 // --- HELPER FUNCTIONS & COMPONENTS ---
@@ -84,7 +85,7 @@ const getTierName = (tierId: string | null | undefined, wheelConfigs: { [key: st
     return tierId;
 };
 
-const getAvatarFallback = (user: UserDocument): string => {
+const getAvatarFallback = (user: UserDocument | { displayName?: string, email?: string }): string => {
     if (user.displayName && user.displayName.length > 0) return user.displayName[0].toUpperCase();
     if (user.email && user.email.length > 0) return user.email[0].toUpperCase();
     return 'U';
@@ -186,6 +187,8 @@ export default function AdminPage() {
   const [isTournamentModalOpen, setIsTournamentModalOpen] = useState(false);
   const [viewingTournamentParticipants, setViewingTournamentParticipants] = useState<(UserTournamentData[]) | null>(null);
   const [currentTournamentForView, setCurrentTournamentForView] = useState<string | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<(SupportTicketData & {id: string}) | null>(null);
+  const [ticketReply, setTicketReply] = useState('');
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
@@ -214,7 +217,7 @@ export default function AdminPage() {
   // Memoized Counts
   const pendingWithdrawalsCount = useMemo(() => withdrawalRequests.filter(req => req.status === 'pending').length, [withdrawalRequests]);
   const pendingAddFundsCount = useMemo(() => addFundRequests.filter(req => req.status === 'pending').length, [addFundRequests]);
-  const openSupportTicketsCount = useMemo(() => supportTickets.filter(ticket => ticket.status === 'open').length, [supportTickets]);
+  const openSupportTicketsCount = useMemo(() => supportTickets.filter(ticket => ticket.status === 'open' || ticket.status === 'customer-reply').length, [supportTickets]);
   const openFraudAlertsCount = useMemo(() => fraudAlerts.filter(alert => alert.status === 'open').length, [fraudAlerts]);
 
   // Effects
@@ -314,7 +317,7 @@ export default function AdminPage() {
     const lowerCaseSearch = supportTicketSearch.toLowerCase();
     return supportTickets.filter(t => 
         (t.userEmail || '').toLowerCase().includes(lowerCaseSearch) ||
-        (t.description || '').toLowerCase().includes(lowerCaseSearch)
+        (t.subject || '').toLowerCase().includes(lowerCaseSearch)
     );
   }, [supportTickets, supportTicketSearch]);
 
@@ -372,7 +375,8 @@ export default function AdminPage() {
   const handleRejectAddFund = async (requestId: string) => { if (!user?.email) return; try { await updateAddFundRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin."); toast({ title: "Fund Request Rejected" }); fetchAdminData(); } catch (error: any) { toast({ title: "Rejection Failed", description: error.message, variant: "destructive" }); } };
   const handleApproveWithdrawal = async (request: WithdrawalRequestData & {id: string}) => { if (!user?.email) return; try { await approveWithdrawalAndUpdateBalance(request.id, request.userId, request.amount, request.tierId, getPaymentDetailsString(request), user.uid, user.email); toast({ title: "Withdrawal Approved"}); fetchAdminData(); } catch (error: any) { toast({ title: "Approval Failed", description: error.message, variant: "destructive" }); } };
   const handleRejectWithdrawal = async (requestId: string) => { if (!user?.email) return; try { await updateWithdrawalRequestStatus(requestId, "rejected", user.uid, user.email, "Rejected by admin."); toast({ title: "Withdrawal Rejected" }); fetchAdminData(); } catch (error: any) { toast({ title: "Rejection Failed", description: error.message, variant: "destructive" }); } };
-  const handleResolveTicket = async (ticketId: string) => { if (!user?.email) return; try { await updateSupportTicketStatus(ticketId, 'resolved', user.uid, user.email); toast({ title: "Ticket Resolved"}); fetchAdminData(); } catch (error: any) { toast({ title: "Error", variant: "destructive" }); } };
+  const handleResolveTicket = async (ticketId: string) => { const result = await updateTicketStatusAction({ ticketId, status: 'resolved' }); if(result.success) { toast({ title: "Ticket Resolved"}); fetchAdminData(); } else { toast({ title: "Error", variant: "destructive" }); } };
+  const handleSendTicketReply = async () => { if (!ticketReply.trim() || !viewingTicket || !user || !userData) return; const result = await addMessageToTicketAction({ ticketId: viewingTicket.id, senderId: user.uid, senderName: userData.displayName || "Admin", text: ticketReply, isUser: false }); if (result.success) { setTicketReply(''); const updatedTicket = { ...viewingTicket, messages: [...viewingTicket.messages, { senderId: user.uid, senderName: userData.displayName || "Admin", text: ticketReply, timestamp: Timestamp.now() }]}; setViewingTicket(updatedTicket); fetchAdminData(); } else { toast({ title: 'Reply Failed', variant: 'destructive', description: result.error }); }};
   const activityChartData = useMemo(() => { if (!activitySummary) return []; return [ { name: 'Morning', value: activitySummary.morning, fill: '#FFC107' }, { name: 'Afternoon', value: activitySummary.afternoon, fill: '#2196F3' }, { name: 'Evening', value: activitySummary.evening, fill: '#FF9800' }, { name: 'Night', value: activitySummary.night, fill: '#4A148C' } ]; }, [activitySummary]);
   const handleDailyRewardChange = (index: number, field: keyof DailyReward, value: string | number) => { const updatedRewards = [...currentAppSettings.rewardConfig.dailyRewards]; if (typeof updatedRewards[index][field] === 'number') { updatedRewards[index][field] = parseFloat(value as string) || 0; } else { (updatedRewards[index][field] as string) = value as string; } setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, dailyRewards: updatedRewards}})); };
   const handleStreakBonusChange = (index: number, field: keyof StreakBonus, value: string | number) => { const updatedBonuses = [...currentAppSettings.rewardConfig.streakBonuses]; if (typeof updatedBonuses[index][field] === 'number') { updatedBonuses[index][field] = parseFloat(value as string) || 0; } else { (updatedBonuses[index][field] as string) = value as string; } setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, streakBonuses: updatedBonuses}})); };
@@ -405,6 +409,16 @@ export default function AdminPage() {
   if (loading) return <div className="flex-grow flex items-center justify-center"><RefreshCcw className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user || !isAdminOrHigher) return <div className="flex-grow flex items-center justify-center p-4"><Card className="w-full max-w-md p-6 shadow-xl text-center"><ShieldAlert className="h-16 w-16 text-destructive mx-auto mb-4" /><CardTitle className="text-2xl font-bold text-destructive">Access Denied</CardTitle><Button onClick={() => router.push('/')} className="mt-6">Go Home</Button></Card></div>;
   
+  const getStatusVariant = (status: SupportTicketData['status']) => {
+    switch(status) {
+        case 'open': return 'destructive';
+        case 'customer-reply': return 'secondary';
+        case 'admin-reply': return 'default';
+        case 'resolved': return 'outline';
+        default: return 'default';
+    }
+  };
+
   const renderContent = () => {
     switch (activeView) {
       case 'overview': return (
@@ -573,11 +587,11 @@ export default function AdminPage() {
       );
       case 'support': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or description..." value={supportTicketSearch} onChange={(e) => setSupportTicketSearch(e.target.value)} className="pl-8" /></div></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Description</TableHead><TableHead>Screenshot</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or subject..." value={supportTicketSearch} onChange={(e) => setSupportTicketSearch(e.target.value)} className="pl-8" /></div></CardHeader>
+            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Subject</TableHead><TableHead>Last Updated</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
-                  : filteredSupportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell>{ticket.userEmail}</TableCell><TableCell className="max-w-sm whitespace-pre-wrap">{ticket.description}</TableCell><TableCell>{ticket.screenshotURL ? <Dialog><DialogTrigger asChild><Button variant="outline" size="sm">View</Button></DialogTrigger><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Screenshot</DialogTitle><DialogDescription>Screenshot attached to the support ticket.</DialogDescription></DialogHeader><div className="flex justify-center p-4"><Image src={ticket.screenshotURL} alt={`Screenshot`} width={800} height={600} className="rounded-md object-contain max-h-[70vh]"/></div></DialogContent></Dialog> : "N/A"}</TableCell><TableCell>{formatDisplayDate(ticket.createdAt, 'date')}</TableCell><TableCell><Badge variant={ticket.status === 'open' ? 'destructive' : 'default'}>{ticket.status}</Badge></TableCell><TableCell>{ticket.status === 'open' && (<Button variant="outline" size="sm" onClick={() => handleResolveTicket(ticket.id)}>Mark Resolved</Button>)}</TableCell></TableRow>))}
+                  {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
+                  : filteredSupportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell><div className="font-medium">{ticket.userDisplayName}</div><div className="text-xs text-muted-foreground">{ticket.userEmail}</div></TableCell><TableCell className="max-w-sm font-semibold">{ticket.subject}</TableCell><TableCell>{formatDisplayDate(ticket.lastUpdatedAt)}</TableCell><TableCell><Badge variant={getStatusVariant(ticket.status)} className="capitalize">{ticket.status.replace('-', ' ')}</Badge></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => setViewingTicket(ticket)}><View className="h-4 w-4 mr-2" />View Ticket</Button></TableCell></TableRow>))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -703,7 +717,10 @@ export default function AdminPage() {
                             <Avatar className="w-16 h-16 border-2 border-primary"><AvatarImage src={detailedUser.photoURL || undefined}/><AvatarFallback>{getAvatarFallback(detailedUser)}</AvatarFallback></Avatar>
                             <div>
                                 <SheetTitle className="text-2xl">{detailedUser.displayName}</SheetTitle>
-                                <SheetDescription>{detailedUser.email} <Badge variant="secondary" className="ml-2">{detailedUser.role}</Badge></SheetDescription>
+                                <div className="flex items-center gap-2">
+                                  <SheetDescription>{detailedUser.email}</SheetDescription>
+                                  <Badge variant="secondary" className="capitalize">{detailedUser.role}</Badge>
+                                </div>
                             </div>
                         </div>
                     </SheetHeader>
@@ -739,7 +756,7 @@ export default function AdminPage() {
                             <TabsContent value="transactions" className="mt-4"><Table><TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>{userTransactions.map(t=><TableRow key={t.id}><TableCell>{t.description}</TableCell><TableCell className={cn(t.type === 'credit' ? 'text-green-500' : 'text-red-500')}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell></TableRow>)}</TableBody></Table></TabsContent>
                             <TabsContent value="deposits" className="mt-4"><Table><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userDeposits.map(d=><TableRow key={d.id}><TableCell>₹{d.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(d.requestDate)}</TableCell><TableCell><Badge variant={d.status === 'approved' ? 'default' : d.status === 'pending' ? 'secondary' : 'destructive'}>{d.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
                             <TabsContent value="withdrawals" className="mt-4"><Table><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userWithdrawals.map(w=><TableRow key={w.id}><TableCell>₹{w.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(w.requestDate)}</TableCell><TableCell><Badge variant={w.status === 'processed' ? 'default' : w.status === 'pending' ? 'secondary' : 'destructive'}>{w.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
-                            <TabsContent value="support" className="mt-4"><Table><TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userSupportTickets.map(t=><TableRow key={t.id}><TableCell>{t.description}</TableCell><TableCell>{formatDisplayDate(t.createdAt)}</TableCell><TableCell><Badge variant={t.status === 'resolved' ? 'default' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="support" className="mt-4"><Table><TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>{userSupportTickets.map(t=><TableRow key={t.id}><TableCell>{t.subject}</TableCell><TableCell>{formatDisplayDate(t.createdAt)}</TableCell><TableCell><Badge variant={getStatusVariant(t.status)} className="capitalize">{t.status.replace('-',' ')}</Badge></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => setViewingTicket(t)}>View</Button></TableCell></TableRow>)}</TableBody></Table></TabsContent>
                         </Tabs>
                         )}
                     </div>
@@ -747,6 +764,46 @@ export default function AdminPage() {
             )}
         </SheetContent>
       </Sheet>
+
+       <Sheet open={!!viewingTicket} onOpenChange={(isOpen) => { if (!isOpen) setViewingTicket(null); }}>
+            <SheetContent className="w-full sm:max-w-2xl flex flex-col">
+                {viewingTicket && (<>
+                    <SheetHeader className="p-6 border-b">
+                        <SheetTitle className="text-xl">{viewingTicket.subject}</SheetTitle>
+                        <SheetDescription className="flex items-center justify-between">
+                            <span>From: {viewingTicket.userDisplayName} ({viewingTicket.userEmail})</span>
+                            <Badge variant={getStatusVariant(viewingTicket.status)} className="capitalize">{viewingTicket.status.replace('-', ' ')}</Badge>
+                        </SheetDescription>
+                    </SheetHeader>
+                    <div className="flex-grow overflow-y-auto p-4 space-y-4">
+                        {viewingTicket.messages.map((msg, index) => (
+                            <div key={index} className={cn("flex items-end gap-2", msg.senderId === viewingTicket.userId ? "justify-start" : "justify-end")}>
+                                {msg.senderId === viewingTicket.userId && <Avatar className="w-8 h-8"><AvatarFallback>{getAvatarFallback({displayName: viewingTicket.userDisplayName, email: viewingTicket.userEmail})}</AvatarFallback></Avatar>}
+                                <div className={cn("max-w-xs md:max-w-md p-3 rounded-lg", msg.senderId === viewingTicket.userId ? "bg-muted" : "bg-primary text-primary-foreground")}>
+                                    <p className="text-sm">{msg.text}</p>
+                                    <p className="text-xs opacity-70 mt-1 text-right">{formatDisplayDate(msg.timestamp)}</p>
+                                </div>
+                                {msg.senderId !== viewingTicket.userId && <Avatar className="w-8 h-8"><AvatarFallback>A</AvatarFallback></Avatar>}
+                            </div>
+                        ))}
+                    </div>
+                    <SheetFooter className="p-4 border-t bg-background">
+                      {viewingTicket.status !== 'resolved' ? (
+                        <div className="flex w-full gap-2 items-start">
+                          <Textarea placeholder="Type your reply..." value={ticketReply} onChange={(e) => setTicketReply(e.target.value)} className="flex-grow" />
+                          <div className="flex flex-col gap-2">
+                            <Button onClick={handleSendTicketReply} disabled={!ticketReply.trim()}><Send className="h-4 w-4" /></Button>
+                            <Button variant="outline" size="sm" onClick={() => handleResolveTicket(viewingTicket!.id)}>Resolve</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground w-full text-center">This ticket has been resolved.</p>
+                      )}
+                    </SheetFooter>
+                </>)}
+            </SheetContent>
+        </Sheet>
+
 
       <CreateTournamentDialog isOpen={isTournamentModalOpen} onClose={() => setIsTournamentModalOpen(false)} adminId={user.uid} onTournamentCreated={fetchAdminData} />
       
