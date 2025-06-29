@@ -1,22 +1,23 @@
 "use client";
 
 import React, { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
 
 const FooterAd = () => {
-  const pathname = usePathname();
-
   useEffect(() => {
     try {
       // @ts-ignore
       (window.adsbygoogle = window.adsbygoogle || []).push({});
-    } catch (err) {
-      console.error("AdSense error:", err);
+    } catch (err: any) {
+      // This error is common in development with React's Strict Mode,
+      // as it causes effects to run twice. We can safely ignore it.
+      if (!err.message.includes("already have ads in them")) {
+        console.error("AdSense error:", err);
+      }
     }
-  }, [pathname]);
+  }, []); // Empty dependency array ensures this runs once when the component mounts. The key prop in SiteFooter will remount this component on navigation.
 
   return (
-    <div key={pathname} className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
+    <div className="my-4 w-full text-center" style={{ minHeight: '90px' }}>
         {/* Spinify 1 ad */}
         <ins 
              className="adsbygoogle"

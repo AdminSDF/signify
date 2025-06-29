@@ -4,6 +4,7 @@ import React from 'react';
 import DisclaimerMarquee from './DisclaimerMarquee';
 import dynamic from 'next/dynamic';
 import { Button } from './ui/button';
+import { usePathname } from 'next/navigation';
 
 // Dynamically import the FooterAd component with SSR turned off.
 // This prevents it from being rendered on the server, thus avoiding hydration errors.
@@ -26,9 +27,11 @@ const TelegramIcon = () => (
 );
 
 const SiteFooter: React.FC = () => {
+  const pathname = usePathname();
+
   return (
     <footer className="border-t border-border/40 bg-background">
-      <FooterAd />
+      <FooterAd key={pathname} />
       <div className="container flex flex-col items-center justify-between gap-4 py-4 md:h-24 md:flex-row md:py-0">
         <div className="text-center md:text-left">
           <p className="text-balance text-sm leading-loose text-muted-foreground">
