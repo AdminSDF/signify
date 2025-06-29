@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -11,58 +12,58 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+    
+    function getUserData(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
 
     function getRequestingUserRole() {
       if (!isAuthenticated()) { return 'player'; }
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return getUserData(request.auth.uid).role;
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && getRequestingUserRole() == 'super-admin';
+      return getRequestingUserRole() == 'super-admin';
     }
 
     function isAdmin() {
       let role = getRequestingUserRole();
-      return isAuthenticated() && (role == 'admin' || role == 'super-admin');
+      return role == 'admin' || isSuperAdmin();
     }
     
-    function isSupportStaff() {
-      let role = getRequestingUserRole();
-      return isAuthenticated() && (role == 'support-staff' || isAdmin());
-    }
-
     function isFinanceStaff() {
       let role = getRequestingUserRole();
-      return isAuthenticated() && (role == 'finance-staff' || isAdmin());
-    }
-    
-    function isUpdatingAllowedUserFields() {
-        // Fields a user can update on their own profile.
-        // This is permissive for balances to allow server actions to work.
-        // The app's client-side UI should not allow direct balance editing.
-        let allowedFields = [
-            'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
-            'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted',
-            'balances', 'spinsAvailable', 'dailyPaidSpinsUsed', 'lastPaidSpinDate',
-            'totalSpinsPlayed', 'totalWins', 'recentSpinHistory', 'totalWinnings'
-        ];
-        // Ensure no forbidden fields are being changed.
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+      return role == 'finance-staff' || isAdmin();
     }
 
-    // --- Collections ---
+    function isSupportStaff() {
+      let role = getRequestingUserRole();
+      return role == 'support-staff' || isAdmin();
+    }
+    
+    function isUpdatingOwnSafeFields() {
+      let safeFields = ['displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(safeFields);
+    }
+    
+    // --- Collection Rules ---
 
     match /users/{userId} {
       allow get, list: if isAuthenticated();
       allow create: if isOwner(userId);
-      // Admin can update anything. A user can update their own profile fields via server actions.
-      allow update: if isFinanceStaff() || isAdmin() || (isOwner(userId) && isUpdatingAllowedUserFields());
       allow delete: if isSuperAdmin();
 
-      match /notifications/{notificationId} {
-        allow read, list: if isOwner(userId);
-        allow create, update, delete: if false; // Server-side only
-      }
+      allow update: if
+        // 1. Admins can update users.
+        isAdmin() ||
+        // 2. Users can update their own safe profile info.
+        (isOwner(userId) && isUpdatingOwnSafeFields()) ||
+        // 3. Users can update their own balance (for spins/entry fees). We trust the server action for the amount.
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasAny(['balances', 'spinsAvailable'])) ||
+        // 4. Any authenticated user can send a friend request by adding their UID to the other user's request list.
+        (isAuthenticated() && request.resource.data.friendRequestsReceived == resource.data.friendRequestsReceived.concat([request.auth.uid])) ||
+        // 5. A user can update their own friend lists (accepting, rejecting, removing).
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasAny(['friends', 'friendRequestsReceived', 'friendRequestsSent']));
     }
 
     match /appConfiguration/{docId} {
@@ -71,63 +72,62 @@ service cloud.firestore {
     }
     
     match /systemStats/{docId} {
-      allow read, write: if isFinanceStaff(); // Only finance staff and above
+      // Allow finance staff/admins to read and update global stats like total deposits.
+      allow read, write: if isFinanceStaff();
     }
 
     match /transactions/{transactionId} {
-      allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
-      // Allow user to create own transaction, or finance staff to create for anyone (for approvals).
-      allow create: if isOwner(request.resource.data.userId) || isFinanceStaff();
-      allow update, delete: if false;
+      allow read, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      // Allow finance staff (who approve deposits) to create transaction logs.
+      allow create: if isFinanceStaff();
+      allow update, delete: if false; 
     }
 
     match /addFundRequests/{requestId} {
-      allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow read, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff(); // Only staff can approve/reject
+      allow update: if isFinanceStaff();
       allow delete: if false;
     }
 
     match /withdrawalRequests/{requestId} {
-      allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow read, list: if isOwner(resource.data.userId) || isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
       allow delete: if false;
     }
     
     match /supportTickets/{ticketId} {
-      allow get, list: if isOwner(resource.data.userId) || isSupportStaff();
+      allow read, list: if isOwner(resource.data.userId) || isSupportStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isOwner(resource.data.userId) || isSupportStaff();
       allow delete: if false;
     }
     
     match /userRewards/{userId} {
-      allow get: if isOwner(userId);
-      allow create, update, delete: if false; // Server-side only
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false; 
     }
     
     match /tournaments/{tournamentId} {
+      allow read, list: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      // Allow admins to update tournament details, OR
+      // allow any authenticated user to add themselves to the participants list.
+      allow update: if isAdmin() ||
+                     (isAuthenticated() && request.resource.data.participants == resource.data.participants.concat([request.auth.uid]));
+
+      match /participants/{userId} {
         allow read, list: if isAuthenticated();
-        // Only admin can create or change tournament details like prize pool.
-        allow create, delete: if isAdmin();
-        
-        // A user can join a tournament by adding their ID to the participants list.
-        allow update: if isAdmin() || 
-                       (isAuthenticated() && request.resource.data.participants == resource.data.participants.concat([request.auth.uid]));
-        
-        match /participants/{userId} {
-            allow read, list: if isAuthenticated();
-            // A user can create their own participant document when joining.
-            allow create: if isOwner(userId);
-            allow update: if isAdmin(); // Scores updated by server/admin
-            allow delete: if isAdmin();
-        }
+        // A user can create their own participant document when joining.
+        allow create: if isOwner(userId);
+        allow update, delete: if isAdmin();
+      }
     }
     
     match /activityLogs/{logId} {
-      // No client should read or write these. They are created by server actions.
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
     
     match /fraudAlerts/{alertId} {
