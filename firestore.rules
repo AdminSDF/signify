@@ -12,50 +12,46 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function getRequestingUserData() {
-      // Note: This function should only be called within a rule that has already checked isAuthenticated().
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function getUserRole() {
+      if (!isAuthenticated()) { return 'player'; }
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && getRequestingUserData().role == 'super-admin';
+      return isAuthenticated() && getUserRole() == 'super-admin';
     }
 
     function isAdmin() {
-      let userRole = getRequestingUserData().role;
-      return isAuthenticated() && (userRole == 'admin' || userRole == 'super-admin');
+      let role = getUserRole();
+      return isAuthenticated() && (role == 'admin' || role == 'super-admin');
     }
     
     function isSupportStaff() {
-      let userRole = getRequestingUserData().role;
-      return isAuthenticated() && (userRole == 'support-staff' || isAdmin());
+      let role = getUserRole();
+      return isAuthenticated() && (role == 'support-staff' || isAdmin());
     }
 
     function isFinanceStaff() {
-      let userRole = getRequestingUserData().role;
-      return isAuthenticated() && (userRole == 'finance-staff' || isAdmin());
+      let role = getUserRole();
+      return isAuthenticated() && (role == 'finance-staff' || isAdmin());
     }
 
-    // --- Collections Rules ---
+    // --- Collections ---
 
     match /users/{userId} {
-      allow list: if isAdmin();
       allow get: if isAuthenticated();
-      
+      allow list: if isAdmin();
       allow create: if isOwner(userId);
-      
       allow update: if isAdmin() || 
                      (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                         'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
-                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted', 'friends',
-                        'friendRequestsSent', 'friendRequestsReceived'
+                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted', 'tags'
                       ]));
-                          
       allow delete: if isSuperAdmin();
 
       match /notifications/{notificationId} {
         allow read, list: if isOwner(userId);
-        allow create, update, delete: if false; 
+        allow create, update, delete: if false; // Server-side only
       }
     }
 
@@ -65,20 +61,21 @@ service cloud.firestore {
     }
     
     match /systemStats/{docId} {
-      allow read, write: if false; // Server-side only via Admin SDK
+      // Admins need write access to initialize the doc if it doesn't exist.
+      allow read, write: if isAdmin();
     }
 
     match /transactions/{transactionId} {
       allow get: if isOwner(resource.data.userId) || isFinanceStaff();
       allow list: if isFinanceStaff();
-      allow create, update, delete: if false; 
+      allow create, update, delete: if false; // Server-side only
     }
 
     match /addFundRequests/{requestId} {
       allow get: if isOwner(resource.data.userId) || isFinanceStaff();
       allow list: if isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff(); 
+      allow update: if isFinanceStaff(); // Server action handles this, but allow for direct admin actions.
       allow delete: if false;
     }
 
@@ -86,12 +83,13 @@ service cloud.firestore {
       allow get: if isOwner(resource.data.userId) || isFinanceStaff();
       allow list: if isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff();
+      allow update: if isFinanceStaff(); // Server action handles this.
       allow delete: if false;
     }
     
     match /supportTickets/{ticketId} {
-      allow get, list: if isOwner(resource.data.userId) || isSupportStaff();
+      allow get: if isOwner(resource.data.userId) || isSupportStaff();
+      allow list: if isSupportStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isOwner(resource.data.userId) || isSupportStaff();
       allow delete: if false;
@@ -99,7 +97,7 @@ service cloud.firestore {
     
     match /userRewards/{userId} {
       allow get: if isOwner(userId);
-      allow create, update, delete: if false;
+      allow create, update, delete: if false; // Server-side only
     }
     
     match /tournaments/{tournamentId} {
@@ -114,12 +112,12 @@ service cloud.firestore {
     }
     
     match /activityLogs/{logId} {
-      allow read, write: if false; 
+      allow read: if isAdmin();
+      allow write: if false; // Server-side only
     }
     
     match /fraudAlerts/{alertId} {
-      allow read, list: if isAdmin();
-      allow write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }
