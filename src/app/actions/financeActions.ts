@@ -86,6 +86,7 @@ export const approveAddFundAndUpdateBalance = async (
           let totalCashBonus = 0;
           let totalSpinBonus = 0;
           let bonusDescriptions: string[] = [];
+          let newMilestoneBadge: string | null = null;
 
           // 1. Standard referrer bonus
           const standardBonus = appConfig.settings.referralBonusForReferrer;
@@ -109,21 +110,23 @@ export const approveAddFundAndUpdateBalance = async (
           const currentMilestones = referrerData.referralMilestones || [];
           if (milestone && !currentMilestones.includes(milestone.badge)) {
               totalSpinBonus += milestone.rewardSpins;
-              transaction.update(referrerRef, { referralMilestones: arrayUnion(milestone.badge) });
+              newMilestoneBadge = milestone.badge;
               bonusDescriptions.push(`Milestone: ${milestone.badge} (${milestone.rewardSpins} spins)`);
           }
           
-          // 4. Update referrer's document with all bonuses
+          // 4. Create a single update object for the referrer
           const referrerUpdate: {[key:string]: any} = {
             referralEarnings: increment(totalCashBonus),
-            referrals: arrayUnion(userId) // Add the new referee to the list
+            referrals: arrayUnion(userId)
           };
-          if(totalCashBonus > 0) referrerUpdate['balances.little'] = increment(totalCashBonus);
-          if(totalSpinBonus > 0) referrerUpdate.spinsAvailable = increment(totalSpinBonus);
+          if (totalCashBonus > 0) referrerUpdate['balances.little'] = increment(totalCashBonus);
+          if (totalSpinBonus > 0) referrerUpdate.spinsAvailable = increment(totalSpinBonus);
+          if (newMilestoneBadge) referrerUpdate.referralMilestones = arrayUnion(newMilestoneBadge);
 
+          // 5. Apply the single, consolidated update
           transaction.update(referrerRef, referrerUpdate);
 
-          // 5. Log one consolidated transaction for the referrer
+          // 6. Log one consolidated transaction for the referrer
           if (totalCashBonus > 0) {
               const referrerTransactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
               transaction.set(referrerTransactionDocRef, {
