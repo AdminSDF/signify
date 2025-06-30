@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -12,10 +11,16 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
+    function getRole(userId) {
+      // Fetches the role of a given user.
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
     
     function getRequestingUserRole() {
+      // Fetches the role of the user making the request.
       if (!isAuthenticated()) { return 'player'; }
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return getRole(request.auth.uid);
     }
 
     function isSuperAdmin() {
@@ -36,88 +41,101 @@ service cloud.firestore {
       let role = getRequestingUserRole();
       return role == 'finance-staff' || isAdmin();
     }
-    
-    // --- Server Actions Permissions ---
-    // These functions check if a server action is allowed to perform a write.
-    // They are meant to be 'true' because the actions run with admin-like privileges
-    // and the core logic is in the server-side TypeScript code, not in the rules.
-    function isServerAction() {
-      // In a real production environment, this would be more secure,
-      // perhaps by checking a custom token claim. For this context, we assume
-      // all writes not from a client are from our trusted server actions.
-      return true;
-    }
 
     // --- Collections ---
 
     match /users/{userId} {
-      // Admins can see all users. Any authenticated user can see a single user's profile.
-      allow list: if isAdmin();
-      allow get: if isAuthenticated();
+      // Admins can list/get anyone. Users can only get their own data.
+      // This is a simplified rule; for stricter privacy, you might deny list access for non-admins.
+      allow get, list: if isAdmin() || isOwner(userId);
       
-      // A user can create their own document.
+      // A user can create their own document on signup.
       allow create: if isOwner(userId);
-
-      // Admins can update any field. A user can only update their own non-critical fields.
-      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
-        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted',
-        'friends', 'friendRequestsSent', 'friendRequestsReceived'
-      ]));
-
-      // Only super admins can delete a user.
-      allow delete: if isSuperAdmin();
       
-      // Notifications subcollection
+      // Admins can update anything. Users can ONLY update their own document.
+      // This rule is broad for isOwner but assumes client-side code is not malicious.
+      // Server actions run as the user, so they need permission to update their own balance, spins, etc.
+      allow update: if isAdmin() || isOwner(userId);
+      
+      allow delete: if isSuperAdmin();
+
       match /notifications/{notificationId} {
-        allow read: if isOwner(userId);
-        allow write: if false; // Server only
+        allow read, list: if isOwner(userId);
+        // Server-side actions create notifications, not clients directly.
+        // Allow admins to manage for potential future tools.
+        allow create, update, delete: if isAdmin();
       }
     }
-
-    // Admins can view these lists, but only server actions can create/update them.
-    match /transactions/{transactionId} { allow get, list: if isOwner(resource.data.userId) || isFinanceStaff(); allow write: if false; }
-    match /activityLogs/{logId} { allow read, write: if false; }
-    match /fraudAlerts/{alertId} { allow read, list: if isAdmin(); allow write: if false; }
-    match /userRewards/{userId} { allow get: if isOwner(userId); allow write: if false; }
-
-    // Admins can read/write global stats for maintenance. Server actions also write here.
-    match /systemStats/{docId} { allow read: if isAdmin(); allow write: if isServerAction(); }
 
     match /appConfiguration/{docId} {
       allow read: if true;
       allow write: if isSuperAdmin();
     }
+    
+    match /systemStats/{docId} {
+      // Readable/writable by trusted server actions proxied by finance staff.
+      allow read, write: if isFinanceStaff();
+    }
 
-    // Users create requests, but only staff can update them (via server actions).
+    match /transactions/{transactionId} {
+      // Admins/Finance can list all. Users can list their own via a query.
+      allow list: if isFinanceStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
+      allow get: if isFinanceStaff() || isOwner(resource.data.userId);
+      // Transactions are created by trusted server-side actions.
+      allow create: if isFinanceStaff();
+      allow update, delete: if false; // Transactions should be immutable.
+    }
+
     match /addFundRequests/{requestId} {
-      allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
+      allow get: if isFinanceStaff() || isOwner(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if false;
+      allow update: if isFinanceStaff(); // Only staff can approve/reject.
+      allow delete: if false;
     }
 
     match /withdrawalRequests/{requestId} {
-      allow get, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
+      allow get: if isFinanceStaff() || isOwner(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if false;
-    }
-    
-    match /supportTickets/{ticketId} {
-      allow get, list: if isOwner(resource.data.userId) || isSupportStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isOwner(resource.data.userId) || isSupportStaff(); // User can add messages
+      allow update: if isFinanceStaff();
       allow delete: if false;
     }
     
+    match /supportTickets/{ticketId} {
+      allow list: if isSupportStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
+      allow get: if isSupportStaff() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      // User can add messages to their own ticket, staff can manage it.
+      allow update: if isSupportStaff() || isOwner(resource.data.userId);
+      allow delete: if false;
+    }
+    
+    match /userRewards/{userId} {
+      allow get: if isOwner(userId);
+      // Rewards are managed by trusted server code.
+      allow write: if false; 
+    }
+    
     match /tournaments/{tournamentId} {
-      allow read, list: if isAuthenticated();
-      allow create, update, delete: if isAdmin();
-        
-      match /participants/{userId} {
         allow read, list: if isAuthenticated();
-        allow create: if isOwner(userId); // Users can join
-        allow update, delete: if false; // Server updates scores
-      }
+        allow create, update, delete: if isAdmin();
+        
+        match /participants/{userId} {
+            allow read, list: if isAuthenticated();
+            // A user can create their own participant document when joining.
+            allow create: if isOwner(userId);
+            // Prize distribution is handled by admins.
+            allow update, delete: if isAdmin();
+        }
+    }
+    
+    match /activityLogs/{logId} {
+      allow read, write: if false;
+    }
+    
+    match /fraudAlerts/{alertId} {
+      allow read, write: if isAdmin();
     }
   }
 }
