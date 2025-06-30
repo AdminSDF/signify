@@ -134,7 +134,7 @@ export const approveAddFundAndUpdateBalance = async (
                   userEmail: referrerData.email,
                   type: 'credit',
                   amount: totalCashBonus,
-                  description: `Referral rewards from ${userData.displayName}. (${bonusDescriptions.join(', ')})`,
+                  description: `Referral rewards from ${userData.displayName || userData.email}. (${bonusDescriptions.join(', ')})`,
                   status: 'completed',
                   date: Timestamp.now(),
                   tierId: 'little',

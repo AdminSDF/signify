@@ -3,121 +3,165 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-    function isAuthenticated() {
+    // Helper Functions
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    function getUserRole() {
-      if (!isAuthenticated()) { return 'player'; }
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    function getRole() {
+      // Safely access role, default to 'player' if not present
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'player');
     }
 
-    function isSuperAdmin() {
-      return isAuthenticated() && getUserRole() == 'super-admin';
-    }
-
-    function isAdmin() {
-      let role = getUserRole();
-      return isAuthenticated() && (role == 'admin' || role == 'super-admin');
+    function isRole(roles) {
+      return isSignedIn() && getRole() in roles;
     }
     
-    function isSupportStaff() {
-      let role = getUserRole();
-      return isAuthenticated() && (role == 'support-staff' || isAdmin());
+    // Default Deny All - All paths must have explicit rules
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    function isFinanceStaff() {
-      let role = getUserRole();
-      return isAuthenticated() && (role == 'finance-staff' || isAdmin());
-    }
-
-    // --- Collections ---
-
+    //============================================================
+    // Users Collection
+    //============================================================
     match /users/{userId} {
-      allow get: if isAuthenticated();
-      allow list: if isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isAdmin() || 
-                     (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                        'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
-                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted', 'tags'
-                      ]));
-      allow delete: if isSuperAdmin();
+      // READ: Any signed-in user can read public profile data.
+      allow get: if isSignedIn();
+      // LIST: Only admins can list all users for the admin panel.
+      allow list: if isRole(['super-admin', 'admin']);
 
-      match /notifications/{notificationId} {
-        allow read, list: if isOwner(userId);
-        allow create, update, delete: if false; // Server-side only
-      }
+      // CREATE: A user can create their own document upon signup.
+      allow create: if isUser(userId);
+
+      // UPDATE: A user can update their own non-critical fields.
+      // Admins can update any user's document for management.
+      allow update: if (isUser(userId) && !(
+                      'balances' in request.resource.data || 
+                      'role' in request.resource.data || 
+                      'isAdmin' in request.resource.data ||
+                      'totalWinnings' in request.resource.data ||
+                      'referralEarnings' in request.resource.data
+                    )) || isRole(['super-admin', 'admin']);
     }
 
+    //============================================================
+    // App Configuration
+    //============================================================
     match /appConfiguration/{docId} {
-      allow read: if true;
-      allow write: if isSuperAdmin();
+      // READ: Any user can read the app configuration.
+      allow get: if true;
+      // WRITE: Only super-admins can change the app configuration.
+      allow write: if isRole(['super-admin']);
     }
-    
-    match /systemStats/{docId} {
-      // Admins need write access to initialize the doc if it doesn't exist.
-      allow read, write: if isAdmin();
+
+    //============================================================
+    // Financial Collections (Transactions, Requests)
+    //============================================================
+    function canAccessFinance() {
+      return isRole(['super-admin', 'admin', 'finance-staff']);
     }
 
     match /transactions/{transactionId} {
-      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
-      allow list: if isFinanceStaff();
-      allow create, update, delete: if false; // Server-side only
-    }
-
-    match /addFundRequests/{requestId} {
-      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
-      allow list: if isFinanceStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff(); // Server action handles this, but allow for direct admin actions.
-      allow delete: if false;
+      // READ: User can read their own, finance/admins can read any.
+      allow get: if isSignedIn() && (canAccessFinance() || resource.data.userId == request.auth.uid);
+      // LIST: Finance/admins can list transactions for admin panel.
+      allow list: if canAccessFinance();
+      // CREATE: Created by server actions, triggered by users or admins.
+      // An admin approving a deposit will create a transaction for another user.
+      allow create: if isSignedIn();
     }
 
     match /withdrawalRequests/{requestId} {
-      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
-      allow list: if isFinanceStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff(); // Server action handles this.
-      allow delete: if false;
+      allow get: if isSignedIn() && (canAccessFinance() || resource.data.userId == request.auth.uid);
+      allow list: if canAccessFinance();
+      // CREATE: User can create their own request.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // UPDATE: Only finance/admins can approve/reject.
+      allow update: if canAccessFinance();
     }
     
+    match /addFundRequests/{requestId} {
+      allow get: if isSignedIn() && (canAccessFinance() || resource.data.userId == request.auth.uid);
+      allow list: if canAccessFinance();
+      // CREATE: User can create their own request.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // UPDATE: Only finance/admins can approve/reject.
+      allow update: if canAccessFinance();
+    }
+    
+    //============================================================
+    // Support Tickets
+    //============================================================
+    function canAccessSupport() {
+      return isRole(['super-admin', 'admin', 'support-staff']);
+    }
+
     match /supportTickets/{ticketId} {
-      allow get: if isOwner(resource.data.userId) || isSupportStaff();
-      allow list: if isSupportStaff();
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isOwner(resource.data.userId) || isSupportStaff();
-      allow delete: if false;
+        allow get: if isSignedIn() && (canAccessSupport() || resource.data.userId == request.auth.uid);
+        allow list: if canAccessSupport();
+        // CREATE: User can create their own ticket.
+        allow create: if isUser(request.resource.data.userId);
+        // UPDATE: User can add messages to their own ticket. Support/admins can update any.
+        allow update: if canAccessSupport() || (isUser(resource.data.userId) && request.resource.data.status == 'customer-reply');
     }
-    
-    match /userRewards/{userId} {
-      allow get: if isOwner(userId);
-      allow create, update, delete: if false; // Server-side only
-    }
-    
-    match /tournaments/{tournamentId} {
-        allow read, list: if isAuthenticated();
-        allow create, update, delete: if isAdmin();
-        
-        match /participants/{userId} {
-            allow read, list: if isAuthenticated();
-            allow create: if isOwner(userId);
-            allow update, delete: if isAdmin();
-        }
+
+    //============================================================
+    // System & Activity
+    //============================================================
+     match /systemStats/{statId} {
+      // READ/WRITE: Only accessible by admins for analytics and approvals.
+      allow read, write: if canAccessFinance();
     }
     
     match /activityLogs/{logId} {
-      allow read: if isAdmin();
-      allow write: if false; // Server-side only
+        // READ: Only admins for analytics.
+        allow read, list: if isRole(['super-admin', 'admin']);
+        // CREATE: Any signed-in user's actions can be logged by the server.
+        allow create: if isSignedIn();
+    }
+
+    match /fraudAlerts/{alertId} {
+        allow read, list: if isRole(['super-admin', 'admin']);
+        // Server creates these.
+        allow create: if isRole(['super-admin', 'admin']);
+    }
+
+    //============================================================
+    // Tournaments
+    //============================================================
+    match /tournaments/{tournamentId} {
+      // READ: Anyone can see tournament details.
+      allow get, list: if isSignedIn();
+      // WRITE: Only admins can create/update tournaments.
+      allow write: if isRole(['super-admin', 'admin']);
+      
+      // Participants Subcollection
+      match /participants/{userId} {
+        allow get, list: if isSignedIn();
+        // CREATE: A user can join a tournament (create their own participant doc).
+        allow create: if isUser(userId);
+        // UPDATE: Score updates happen via server. User cannot update their own score.
+        // Prize distribution also happens via server. Admins can update.
+        allow update: if isRole(['super-admin', 'admin']);
+      }
     }
     
-    match /fraudAlerts/{alertId} {
-      allow read, write: if isAdmin();
+    //============================================================
+    // User Rewards & Notifications (Subcollections of User)
+    //============================================================
+    match /userRewards/{userId} {
+      // A user can only access their own reward data.
+      allow read, write: if isUser(userId);
+    }
+    
+    match /users/{userId}/notifications/{notificationId} {
+       // A user can only access their own notifications.
+       allow read, list, write: if isUser(userId);
     }
   }
 }
