@@ -12,58 +12,50 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function getRole(userId) {
-      // Fetches the role of a given user.
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
-    }
-    
-    function getRequestingUserRole() {
-      // Fetches the role of the user making the request.
-      if (!isAuthenticated()) { return 'player'; }
-      return getRole(request.auth.uid);
+    function getRequestingUserData() {
+      // Note: This function should only be called within a rule that has already checked isAuthenticated().
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isSuperAdmin() {
-      return getRequestingUserRole() == 'super-admin';
+      return isAuthenticated() && getRequestingUserData().role == 'super-admin';
     }
 
     function isAdmin() {
-      let role = getRequestingUserRole();
-      return role == 'admin' || role == 'super-admin';
+      let userRole = getRequestingUserData().role;
+      return isAuthenticated() && (userRole == 'admin' || userRole == 'super-admin');
     }
     
     function isSupportStaff() {
-      let role = getRequestingUserRole();
-      return role == 'support-staff' || isAdmin();
+      let userRole = getRequestingUserData().role;
+      return isAuthenticated() && (userRole == 'support-staff' || isAdmin());
     }
 
     function isFinanceStaff() {
-      let role = getRequestingUserRole();
-      return role == 'finance-staff' || isAdmin();
+      let userRole = getRequestingUserData().role;
+      return isAuthenticated() && (userRole == 'finance-staff' || isAdmin());
     }
 
-    // --- Collections ---
+    // --- Collections Rules ---
 
     match /users/{userId} {
-      // Admins can list/get anyone. Users can only get their own data.
-      // This is a simplified rule; for stricter privacy, you might deny list access for non-admins.
-      allow get, list: if isAdmin() || isOwner(userId);
+      allow list: if isAdmin();
+      allow get: if isAuthenticated();
       
-      // A user can create their own document on signup.
       allow create: if isOwner(userId);
       
-      // Admins can update anything. Users can ONLY update their own document.
-      // This rule is broad for isOwner but assumes client-side code is not malicious.
-      // Server actions run as the user, so they need permission to update their own balance, spins, etc.
-      allow update: if isAdmin() || isOwner(userId);
-      
+      allow update: if isAdmin() || 
+                     (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
+                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted', 'friends',
+                        'friendRequestsSent', 'friendRequestsReceived'
+                      ]));
+                          
       allow delete: if isSuperAdmin();
 
       match /notifications/{notificationId} {
         allow read, list: if isOwner(userId);
-        // Server-side actions create notifications, not clients directly.
-        // Allow admins to manage for potential future tools.
-        allow create, update, delete: if isAdmin();
+        allow create, update, delete: if false; 
       }
     }
 
@@ -73,48 +65,41 @@ service cloud.firestore {
     }
     
     match /systemStats/{docId} {
-      // Readable/writable by trusted server actions proxied by finance staff.
-      allow read, write: if isFinanceStaff();
+      allow read, write: if false; // Server-side only via Admin SDK
     }
 
     match /transactions/{transactionId} {
-      // Admins/Finance can list all. Users can list their own via a query.
-      allow list: if isFinanceStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
-      allow get: if isFinanceStaff() || isOwner(resource.data.userId);
-      // Transactions are created by trusted server-side actions.
-      allow create: if isFinanceStaff();
-      allow update, delete: if false; // Transactions should be immutable.
+      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff();
+      allow create, update, delete: if false; 
     }
 
     match /addFundRequests/{requestId} {
-      allow list: if isFinanceStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
-      allow get: if isFinanceStaff() || isOwner(resource.data.userId);
+      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
-      allow update: if isFinanceStaff(); // Only staff can approve/reject.
+      allow update: if isFinanceStaff(); 
       allow delete: if false;
     }
 
     match /withdrawalRequests/{requestId} {
-      allow list: if isFinanceStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
-      allow get: if isFinanceStaff() || isOwner(resource.data.userId);
+      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
       allow delete: if false;
     }
     
     match /supportTickets/{ticketId} {
-      allow list: if isSupportStaff() || (isAuthenticated() && query.get('userId') == request.auth.uid);
-      allow get: if isSupportStaff() || isOwner(resource.data.userId);
+      allow get, list: if isOwner(resource.data.userId) || isSupportStaff();
       allow create: if isOwner(request.resource.data.userId);
-      // User can add messages to their own ticket, staff can manage it.
-      allow update: if isSupportStaff() || isOwner(resource.data.userId);
+      allow update: if isOwner(resource.data.userId) || isSupportStaff();
       allow delete: if false;
     }
     
     match /userRewards/{userId} {
       allow get: if isOwner(userId);
-      // Rewards are managed by trusted server code.
-      allow write: if false; 
+      allow create, update, delete: if false;
     }
     
     match /tournaments/{tournamentId} {
@@ -123,19 +108,18 @@ service cloud.firestore {
         
         match /participants/{userId} {
             allow read, list: if isAuthenticated();
-            // A user can create their own participant document when joining.
             allow create: if isOwner(userId);
-            // Prize distribution is handled by admins.
             allow update, delete: if isAdmin();
         }
     }
     
     match /activityLogs/{logId} {
-      allow read, write: if false;
+      allow read, write: if false; 
     }
     
     match /fraudAlerts/{alertId} {
-      allow read, write: if isAdmin();
+      allow read, list: if isAdmin();
+      allow write: if false;
     }
   }
 }
