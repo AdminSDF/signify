@@ -12,126 +12,118 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    function getUserData(userId) {
-        return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
 
+    function getRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+    
     function getRequestingUserRole() {
       if (!isAuthenticated()) { return 'player'; }
-      return getUserData(request.auth.uid).role;
+      return getRole(request.auth.uid);
     }
 
     function isSuperAdmin() {
-      return getRequestingUserRole() == 'super-admin';
+      return isAuthenticated() && getRequestingUserRole() == 'super-admin';
     }
 
     function isAdmin() {
       let role = getRequestingUserRole();
-      return role == 'admin' || isSuperAdmin();
+      return isAuthenticated() && (role == 'admin' || role == 'super-admin');
     }
     
-    function isFinanceStaff() {
-      let role = getRequestingUserRole();
-      return role == 'finance-staff' || isAdmin();
-    }
-
     function isSupportStaff() {
       let role = getRequestingUserRole();
-      return role == 'support-staff' || isAdmin();
+      return isAuthenticated() && (role == 'support-staff' || isAdmin());
     }
-    
-    function isUpdatingOwnSafeFields() {
-      let safeFields = ['displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted'];
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(safeFields);
+
+    function isFinanceStaff() {
+       let role = getRequestingUserRole();
+      return isAuthenticated() && (role == 'finance-staff' || isAdmin());
     }
-    
-    // --- Collection Rules ---
+
+    // --- Collections Rules ---
 
     match /users/{userId} {
-      allow get, list: if isAuthenticated();
+      allow get: if isAuthenticated();
+      allow list: if isAdmin(); // Only admins can list all users
       allow create: if isOwner(userId);
+      // Admins can update any user. Users can only update specific, non-critical fields.
+      allow update: if isAdmin() || (isOwner(userId) && 
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'displayName', 'photoURL', 'lastActive', 'isOnline', 'currentGame', 
+                        'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'toursCompleted',
+                        'friendRequestsSent', 'friendRequestsReceived', 'friends', 'tags',
+                        'manualWinRateOverride', 'recentSpinHistory', 'vipUntil'
+                      ]));
       allow delete: if isSuperAdmin();
 
-      allow update: if
-        // 1. Admins can update users.
-        isAdmin() ||
-        // 2. Users can update their own safe profile info.
-        (isOwner(userId) && isUpdatingOwnSafeFields()) ||
-        // 3. Users can update their own balance (for spins/entry fees). We trust the server action for the amount.
-        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasAny(['balances', 'spinsAvailable'])) ||
-        // 4. Any authenticated user can send a friend request by adding their UID to the other user's request list.
-        (isAuthenticated() && request.resource.data.friendRequestsReceived == resource.data.friendRequestsReceived.concat([request.auth.uid])) ||
-        // 5. A user can update their own friend lists (accepting, rejecting, removing).
-        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasAny(['friends', 'friendRequestsReceived', 'friendRequestsSent']));
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId);
+        allow create, update, delete: if isAdmin(); // Server-side/admin only
+      }
     }
 
     match /appConfiguration/{docId} {
-      allow read: if true;
+      allow get: if true;
       allow write: if isSuperAdmin();
     }
     
     match /systemStats/{docId} {
-      // Allow finance staff/admins to read and update global stats like total deposits.
-      allow read, write: if isFinanceStaff();
+      allow read, write: if false; // Server-side actions only
     }
 
     match /transactions/{transactionId} {
-      allow read, list: if isOwner(resource.data.userId) || isFinanceStaff();
-      // Allow finance staff (who approve deposits) to create transaction logs.
-      allow create: if isFinanceStaff();
-      allow update, delete: if false; 
+      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff();
+      allow create, update, delete: if false; // Server-side only
     }
 
     match /addFundRequests/{requestId} {
-      allow read, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
       allow delete: if false;
     }
 
     match /withdrawalRequests/{requestId} {
-      allow read, list: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow get: if isOwner(resource.data.userId) || isFinanceStaff();
+      allow list: if isFinanceStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isFinanceStaff();
       allow delete: if false;
     }
     
     match /supportTickets/{ticketId} {
-      allow read, list: if isOwner(resource.data.userId) || isSupportStaff();
+      allow get: if isOwner(resource.data.userId) || isSupportStaff();
+      allow list: if isSupportStaff();
       allow create: if isOwner(request.resource.data.userId);
       allow update: if isOwner(resource.data.userId) || isSupportStaff();
       allow delete: if false;
     }
     
     match /userRewards/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update, delete: if false; 
+      allow get, update: if isOwner(userId);
+      allow create, list, delete: if false; 
     }
     
     match /tournaments/{tournamentId} {
-      allow read, list: if isAuthenticated();
-      allow create, delete: if isAdmin();
-      // Allow admins to update tournament details, OR
-      // allow any authenticated user to add themselves to the participants list.
-      allow update: if isAdmin() ||
-                     (isAuthenticated() && request.resource.data.participants == resource.data.participants.concat([request.auth.uid]));
-
-      match /participants/{userId} {
-        allow read, list: if isAuthenticated();
-        // A user can create their own participant document when joining.
-        allow create: if isOwner(userId);
-        allow update, delete: if isAdmin();
-      }
+        allow get, list: if isAuthenticated();
+        allow create, update, delete: if isAdmin();
+        
+        match /participants/{userId} {
+            allow read, list: if isAuthenticated();
+            allow create: if isOwner(userId);
+            allow update, delete: if isAdmin(); // Server/admin updates scores
+        }
     }
     
     match /activityLogs/{logId} {
-      allow read: if isAdmin();
-      allow write: if false;
+      allow read, write: if false;
     }
     
     match /fraudAlerts/{alertId} {
-      allow read, write: if isAdmin();
+      allow read, list, write: if isAdmin();
     }
   }
 }
