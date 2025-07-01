@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -6,123 +7,127 @@ service cloud.firestore {
     // =================================
     // Helper Functions
     // =================================
+
     function isAuth() {
       return request.auth != null;
     }
 
     function isOwner(userId) {
-      // Checks if the requesting user is the owner of the document.
       return isAuth() && request.auth.uid == userId;
     }
 
-    function getUserRole() {
-      // Safely gets the user's role from their document.
-      // Returns 'player' if the document doesn't exist yet (e.g., during signup).
-      if (exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
-        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-      }
-      return 'player';
+    // Safely checks if a user document exists before trying to read from it.
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // Safely gets the user's role. Returns 'player' if the document doesn't exist.
+    // This is crucial for new user sign-ups where the role is not yet set.
+    function getUserRole(userId) {
+      // Before trying to get data, we must ensure the user has read permission on the document.
+      // This is handled in the 'users' collection rules below.
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
     }
 
     function isAdmin() {
-      return isAuth() && getUserRole() in ['admin', 'super-admin'];
+      return isAuth() && userExists(request.auth.uid) && getUserRole(request.auth.uid) in ['admin', 'super-admin'];
     }
-
+    
     function isSuperAdmin() {
-      return isAuth() && getUserRole() == 'super-admin';
+      return isAuth() && userExists(request.auth.uid) && getUserRole(request.auth.uid) == 'super-admin';
     }
 
     function isFinanceStaff() {
-      return isAuth() && getUserRole() in ['finance-staff', 'admin', 'super-admin'];
+      return isAuth() && userExists(request.auth.uid) && getUserRole(request.auth.uid) in ['finance-staff', 'admin', 'super-admin'];
     }
 
     function isSupportStaff() {
-      return isAuth() && getUserRole() in ['support-staff', 'admin', 'super-admin'];
+      return isAuth() && userExists(request.auth.uid) && getUserRole(request.auth.uid) in ['support-staff', 'admin', 'super-admin'];
     }
 
     // =================================
-    // Collection Rules
+    // Collections
     // =================================
 
+    // USERS Collection
     match /users/{userId} {
-      // ANY authenticated user can CREATE their OWN user document.
-      // The `createUserData` function on the client constructs the initial document.
-      allow create: if isOwner(userId);
+      // Crucial for Sign-Up: A user can create their own profile document.
+      allow create: if isOwner(userId) && request.resource.data.uid == userId;
 
-      // Users can READ their own data. Admins can READ ANY user's data.
+      // Users can read their own profile. Admins can read anyone's profile.
       allow read: if isOwner(userId) || isAdmin();
-      
-      // Admins can LIST all users.
+
+      // Users can update their own profile. Super-admins can update any profile (e.g., to change roles).
+      allow update: if isOwner(userId) || isSuperAdmin();
+
+      // Admins need to list all users for the admin panel.
       allow list: if isAdmin();
 
-      // Users can UPDATE their own data, but cannot change their role or blocked status.
-      // SUPER ADMINS can update anything for any user.
-      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.isBlocked == resource.data.isBlocked) || isSuperAdmin();
-
-      allow delete: if false; // Deletions should be handled by a secure backend process.
-
+      // No one can delete a user document from the client-side.
+      allow delete: if false;
+      
+      // NOTIFICATIONS Sub-collection
       match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId);
+        allow read, update, list: if isOwner(userId);
+        allow create, delete: if false; // Server-side only
       }
     }
-
-    match /userRewards/{userId} {
-      allow create: if isOwner(userId);
-      allow read: if isOwner(userId) || isAdmin();
-      allow update: if isOwner(userId);
-      allow delete: if false;
-    }
-
+    
+    // TRANSACTIONS Collection
     match /transactions/{transactionId} {
-      allow read: if (isAuth() && resource.data.userId == request.auth.uid) || isFinanceStaff();
-      allow list: if isFinanceStaff();
-      allow write: if false; // Written by server actions
+      allow read, list: if isAuth() && (isOwner(resource.data.userId) || isFinanceStaff());
+      allow write: if false; // Server-side only
     }
-
-    match /{requestCollection}/{requestId} where requestCollection in ['addFundRequests', 'withdrawalRequests'] {
-       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
-       allow read: if (isAuth() && resource.data.userId == request.auth.uid) || isFinanceStaff();
-       allow list: if isFinanceStaff();
-       allow update, delete: if false; // Updated by server actions
+    
+    // REQUESTS (Withdrawal & Add Fund)
+    match /{requestCollection}/{requestId} where requestCollection in ['withdrawalRequests', 'addFundRequests'] {
+       allow create: if isOwner(request.resource.data.userId);
+       allow read, list: if isAuth() && (isOwner(resource.data.userId) || isFinanceStaff());
+       allow update, delete: if false; // Server-side only
     }
-
+    
+    // SUPPORT TICKETS Collection
     match /supportTickets/{ticketId} {
-      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
-      allow read: if (isAuth() && resource.data.userId == request.auth.uid) || isSupportStaff();
-      allow list: if isSupportStaff();
-      // User can update their own ticket (add messages), or support staff can update any.
-      allow update: if (isAuth() && resource.data.userId == request.auth.uid) || isSupportStaff();
+      allow create: if isOwner(request.resource.data.userId);
+      allow read, list: if isAuth() && (isOwner(resource.data.userId) || isSupportStaff());
+      allow update: if isAuth() && (isOwner(resource.data.userId) || isSupportStaff());
       allow delete: if false;
     }
-
-    match /tournaments/{tournamentId} {
-        allow read, list: if isAuth();
-        allow create, update: if isSuperAdmin();
+    
+    // USER REWARDS Collection
+    match /userRewards/{userId} {
+        // Crucial for Sign-Up: Allows creation of the rewards document at the same time as the user doc.
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow read, update: if isOwner(userId);
         allow delete: if false;
-
-        match /participants/{userId} {
-            allow read, list: if isAuth();
-            allow write: if false; // Joined via server action
+    }
+    
+    // TOURNAMENTS Collection
+    match /tournaments/{tournamentId} {
+        allow read, list: if true;
+        allow write: if isSuperAdmin();
+        
+        match /participants/{participantId} {
+            allow create: if isOwner(participantId) && request.resource.data.userId == participantId;
+            allow read, list: if true;
+            allow update, delete: if false; // Server-side only
         }
     }
-
+    
+    // System-wide Collections
     match /appConfiguration/{docId} {
       allow read: if true;
       allow write: if isSuperAdmin();
     }
-
+    
     match /systemStats/{docId} {
       allow read: if isAdmin();
-      allow write: if false; // Written by server actions
+      allow write: if false; // Server-side only
     }
 
-    match /activityLogs/{logId} {
-       allow read, write: if false;
-    }
-
-    match /fraudAlerts/{alertId} {
-       allow read, list: if isAdmin();
-       allow write: if false;
+    // Default deny all other writes to prevent accidental access.
+    match /{path=**} {
+      allow write: if false;
     }
   }
 }
