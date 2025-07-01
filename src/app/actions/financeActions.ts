@@ -54,11 +54,6 @@ export const approveAddFundAndUpdateBalance = async (
     
     const userData = userSnap.data() as UserDocument;
     
-    // Create global stats doc if it doesn't exist
-    if (!globalStatsSnap.exists()) {
-        transaction.set(globalStatsRef, { totalDeposited: 0, totalWithdrawn: 0, totalGstCollected: 0 });
-    }
-
     const isFirstDeposit = (userData.totalDeposited || 0) === 0;
 
     const userBalances = userData.balances || {};
@@ -72,8 +67,13 @@ export const approveAddFundAndUpdateBalance = async (
       totalDeposited: totalDeposited
     });
     
-    // Update Global Stats
-    transaction.update(globalStatsRef, { totalDeposited: increment(amount) });
+    // Update Global Stats - FIXED
+    if (globalStatsSnap.exists()) {
+      transaction.update(globalStatsRef, { totalDeposited: increment(amount) });
+    } else {
+      // If the doc doesn't exist, create it with the initial deposited amount
+      transaction.set(globalStatsRef, { totalDeposited: amount, totalWithdrawn: 0, totalGstCollected: 0 });
+    }
     
     // Referral Logic
     if (isFirstDeposit && userData.referredBy) {
@@ -196,11 +196,6 @@ export const approveWithdrawalAndUpdateBalance = async (
 
     if (!userSnap.exists()) throw new Error("User not found for balance update.");
     
-    // Create global stats doc if it doesn't exist
-    if (!globalStatsSnap.exists()) {
-        transaction.set(globalStatsRef, { totalDeposited: 0, totalWithdrawn: 0, totalGstCollected: 0 });
-    }
-
     const userData = userSnap.data() as UserDocument;
     const userBalances = (userData.balances || {});
     const currentBalance = userBalances[effectiveTierId] || 0;
@@ -217,11 +212,19 @@ export const approveWithdrawalAndUpdateBalance = async (
       totalWithdrawn: totalWithdrawn 
     });
     
-    // Update Global Stats
-    transaction.update(globalStatsRef, {
-      totalWithdrawn: increment(amount),
-      totalGstCollected: increment(gstAmount),
-    });
+    // Update Global Stats - FIXED
+    if (globalStatsSnap.exists()) {
+        transaction.update(globalStatsRef, {
+            totalWithdrawn: increment(amount),
+            totalGstCollected: increment(gstAmount),
+        });
+    } else {
+        transaction.set(globalStatsRef, {
+            totalDeposited: 0,
+            totalWithdrawn: amount,
+            totalGstCollected: gstAmount,
+        });
+    }
 
     // Log Transaction
     const transactionDocRef = doc(collection(db, TRANSACTIONS_COLLECTION));
