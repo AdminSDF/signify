@@ -4,143 +4,128 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-    // Safely checks if the request is from an authenticated user and if their UID matches the given userId.
+    // HELPER FUNCTIONS
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function getUserData(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
-    // Safely gets the role of the currently authenticated user. Returns 'none' if not authenticated.
-    function getRole() {
-      if (request.auth == null) {
-        return 'none';
-      }
-      // Use .get() to safely access the 'role' field, providing a default value if it doesn't exist.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'player');
+    function getRole(userId) {
+        // Before checking the role, we MUST check if the document exists.
+        // This is critical for new user creation, where the user doc doesn't exist yet.
+        return exists(/databases/$(database)/documents/users/$(userId))
+               ? getUserData(userId).role
+               : 'player'; // Default to 'player' if doc doesn't exist
     }
 
-    // Safely checks for the legacy 'isAdmin' flag to support older admin accounts.
-    function isLegacyAdmin() {
-       if (request.auth == null) {
+    function isAtLeastRole(role) {
+      if (!isSignedIn()) {
         return false;
       }
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+      let userRole = getRole(request.auth.uid);
+      if (role == 'player') {
+        return userRole in ['player', 'support-staff', 'finance-staff', 'admin', 'super-admin'];
+      }
+      if (role == 'support-staff') {
+        return userRole in ['support-staff', 'admin', 'super-admin'];
+      }
+      if (role == 'finance-staff') {
+        return userRole in ['finance-staff', 'admin', 'super-admin'];
+      }
+      if (role == 'admin') {
+        return userRole in ['admin', 'super-admin'];
+      }
+      if (role == 'super-admin') {
+        return userRole == 'super-admin';
+      }
+      return false;
     }
 
-    // --- Role-Based Permission Functions ---
-    function isSuperAdmin() {
-      return getRole() == 'super-admin' || isLegacyAdmin();
-    }
-    
-    function isAdmin() {
-      return isSuperAdmin() || getRole() == 'admin';
-    }
-
-    function isFinanceStaff() {
-      return isAdmin() || getRole() == 'finance-staff';
-    }
-
-    function isSupportStaff() {
-      return isAdmin() || getRole() == 'support-staff';
-    }
-
-    // --- Collection Rules ---
-
-    // USERS collection
+    // --- USERS COLLECTION ---
     match /users/{userId} {
-      // A user can create their own document during signup.
+      // New users can create their OWN document. This is key for signup.
       allow create: if isOwner(userId);
-
-      // A user can read or update their own data. Admins can read or update any user's data.
-      allow read, update: if isOwner(userId) || isAdmin();
-
-      // Only admins can see the full list of all users.
-      allow list: if isAdmin();
       
-      // NOTIFICATIONS subcollection within a user document.
+      // Users can read own data. Staff can read any user's data.
+      allow read: if isOwner(userId) || isAtLeastRole('support-staff');
+      
+      // CRITICAL FIX: Users can update own data. Finance Staff (and above) can update ANY user's data for balances.
+      allow update: if isOwner(userId) || isAtLeastRole('finance-staff');
+      
+      // Only super admins can delete users.
+      allow delete: if isAtLeastRole('super-admin');
+      
+      // All staff can list users for the admin panel.
+      allow list: if isAtLeastRole('support-staff');
+
+      // --- Sub-collections ---
       match /notifications/{notificationId} {
         allow read, list, update: if isOwner(userId);
-        // Server (acting as admin) can create notifications.
-        allow create: if isAdmin();
+        allow create: if isAtLeastRole('support-staff');
       }
     }
-    
-    // USER REWARDS collection
-    match /userRewards/{userId} {
-       // A user can create their own rewards document during signup.
-       allow create: if isOwner(userId);
-       // A user can read and update their own reward data (e.g., claiming rewards).
-       allow read, update: if isOwner(userId);
-    }
-    
-    // APP CONFIGURATION
+
+    // --- APP CONFIGURATION & STATS ---
     match /appConfiguration/{docId} {
-      // Any authenticated user can read the app configuration.
-      allow read: if request.auth != null;
-      // Only super admins can change the configuration.
-      allow write: if isSuperAdmin();
-    }
-
-    // --- Finance Collections ---
-    match /addFundRequests/{requestId} {
-      // A user can create their own fund request.
-      allow create: if isOwner(request.resource.data.userId);
-      // A user can read their own request. Finance staff can read any request.
-      allow read: if isOwner(get(/databases/$(database)/documents/addFundRequests/$(requestId)).data.userId) || isFinanceStaff();
-      // Finance staff can list all requests and update them (approve/reject).
-      allow list, update: if isFinanceStaff();
-    }
-
-    match /withdrawalRequests/{requestId} {
-      allow create: if isOwner(request.resource.data.userId);
-      allow read: if isOwner(get(/databases/$(database)/documents/withdrawalRequests/$(requestId)).data.userId) || isFinanceStaff();
-      allow list, update: if isFinanceStaff();
+      allow read: if true;
+      allow write: if isAtLeastRole('super-admin');
     }
     
-    match /transactions/{transactionId} {
-      // Server (acting as finance staff/admin) creates transactions during approvals.
-      allow create: if isFinanceStaff();
-      // User can read their own transactions. Finance staff can read any.
-      allow read: if isOwner(get(/databases/$(database)/documents/transactions/$(transactionId)).data.userId) || isFinanceStaff();
-      // Finance staff can list all transactions.
-      allow list: if isFinanceStaff();
-    }
-    
-    // SYSTEM STATS
     match /systemStats/{docId} {
-      // Admins read stats. Finance staff write to them during approvals.
-      allow read: if isAdmin();
-      allow create, update, write: if isFinanceStaff();
+      // Allow finance staff to read and write. CRITICAL for the approval transaction.
+      allow read, write: if isAtLeastRole('finance-staff');
     }
 
-    // SUPPORT TICKETS
-    match /supportTickets/{ticketId} {
+    // --- FINANCIAL REQUESTS ---
+    match /{collectionName}/{requestId} where collectionName in ['withdrawalRequests', 'addFundRequests'] {
       allow create: if isOwner(request.resource.data.userId);
-      allow read, update: if isOwner(get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId) || isSupportStaff();
-      allow list: if isSupportStaff();
+      allow read, list: if isAtLeastRole('finance-staff') || (isSignedIn() && get(/databases/$(database)/documents/$(collectionName)/$(requestId)).data.userId == request.auth.uid);
+      allow update: if isAtLeastRole('finance-staff');
+      allow delete: if isAtLeastRole('admin');
     }
     
-    // TOURNAMENTS
+    // --- TRANSACTIONS ---
+    match /transactions/{transactionId} {
+      // The approval action runs with the admin's auth, so they need create permission.
+      allow create: if isAtLeastRole('finance-staff');
+      allow read, list: if isAtLeastRole('finance-staff') || (isSignedIn() && get(/databases/$(database)/documents/transactions/$(transactionId)).data.userId == request.auth.uid);
+      allow update, delete: if false;
+    }
+    
+    // --- OTHER COLLECTIONS ---
+    match /supportTickets/{ticketId} {
+      allow read, update: if isAtLeastRole('support-staff') || isOwner(get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow list: if isAtLeastRole('support-staff');
+    }
+    
+    match /userRewards/{userId} {
+      allow create: if isOwner(userId); // For new user signup
+      allow read: if isOwner(userId);
+      allow update: if isOwner(userId); // For daily claims initiated by the user
+    }
+
     match /tournaments/{tournamentId} {
-      allow read, list: if request.auth != null;
-      allow create, update: if isAdmin();
+      allow read, list: if true;
+      allow create, update: if isAtLeastRole('admin');
       
       match /participants/{userId} {
-        allow read, list: if request.auth != null;
+        allow read: if true;
         allow create: if isOwner(userId);
-        allow update: if isAdmin();
+        allow update: if isAtLeastRole('admin');
       }
     }
     
-    // LOGGING (write-only for authenticated clients)
-    match /activityLogs/{logId} {
-      allow create: if request.auth != null;
-    }
-    
-    match /fraudAlerts/{alertId} {
-      // Server can create alerts, admins can read them.
-      allow create: if request.auth != null; 
-      allow read, list: if isAdmin();
+    // Default deny all other paths that are not explicitly defined.
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }
