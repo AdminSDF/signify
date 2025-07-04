@@ -3,144 +3,160 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- Helper Functions ---
-    // These functions make the rules easier to read and maintain.
-    
-    // Is the requesting user the owner of the document?
+
+    // ===== HELPER FUNCTIONS =====
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
-    
-    // Does the requesting user's document exist in the 'users' collection?
-    function userExists() {
-      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-    
-    // Get the role of the requesting user.
-    function getRole() {
+
+    // Safely get user data for role checks.
+    // This will not throw an error if the document doesn't exist yet (important for user creation).
+    function getUserRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
-    
-    // Check if the user has a 'super-admin' role.
+
+    // Role-based access functions
     function isSuperAdmin() {
-      return userExists() && getRole() == 'super-admin';
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole() == 'super-admin';
     }
 
-    // Check if the user has an 'admin' or 'super-admin' role.
     function isAdmin() {
-      return userExists() && (getRole() == 'admin' || getRole() == 'super-admin');
+      if (!isSignedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
+        return false;
+      }
+      let userRole = getUserRole();
+      return userRole == 'admin' || userRole == 'super-admin';
     }
     
-    // Check if the user has a 'finance-staff' role or higher.
     function isFinanceStaff() {
-      return userExists() && (getRole() in ['finance-staff', 'admin', 'super-admin']);
+      if (!isSignedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
+        return false;
+      }
+      let userRole = getUserRole();
+       return userRole == 'finance-staff' || userRole == 'admin' || userRole == 'super-admin';
     }
     
-    // Check if the user has a 'support-staff' role or higher.
     function isSupportStaff() {
-      return userExists() && (getRole() in ['support-staff', 'admin', 'super-admin']);
+      if (!isSignedIn() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) {
+        return false;
+      }
+       let userRole = getUserRole();
+       return userRole == 'support-staff' || userRole == 'admin' || userRole == 'super-admin';
     }
 
-    // Check if the user is any type of staff member.
-    function isStaff() {
-        return userExists() && (getRole() in ['support-staff', 'finance-staff', 'admin', 'super-admin']);
-    }
+    // ===== COLLECTION RULES =====
 
-    // --- Collection Rules ---
-
-    // Users Collection
+    // USERS
     match /users/{userId} {
-      // A new user can create their own profile.
+      allow read: if isSignedIn(); // Allow any signed-in user to read public profiles for features like Friends.
+      allow list: if isAdmin(); // Only admins can list all users for the admin panel.
+      
+      // A new user can create their own document. This is critical for sign-up.
       allow create: if isOwner(userId);
       
-      // A user can read their own profile. Staff can read any profile.
-      allow get: if isOwner(userId) || isStaff();
-
-      // Admins can list all users for the admin panel.
-      allow list: if isAdmin();
+      // A user can update their own profile. Admins can update any user's profile.
+      allow update: if isOwner(userId) || isAdmin();
       
-      // A user can update their own non-critical profile info. Super Admins can update anything.
-      allow update: if (isOwner(userId) && request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'upiIdForWithdrawal', 'bankDetailsForWithdrawal', 'isOnline', 'lastActive', 'currentGame', 'toursCompleted'])) || isSuperAdmin();
-
-      // Nobody can delete users from the client.
-      allow delete: if false;
-
-      // Notifications subcollection
+      // Only super-admins can delete user accounts.
+      allow delete: if isSuperAdmin();
+      
+      // Notifications subcollection for each user
       match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId);
+        allow read, list, update: if isOwner(userId);
+        allow create, delete: if false; // Only the server should create/delete notifications.
       }
     }
     
-    // App Configuration
-    match /appConfiguration/main {
-      // Anyone can read the app configuration.
-      allow get: if true;
-      // Only super-admins can write the configuration.
-      allow write: if isSuperAdmin();
-    }
-    
-    // System Statistics
-    match /systemStats/global {
-      // Staff can read the global stats document.
-      allow get: if isStaff();
-      // Allow staff to CREATE the document if it doesn't exist, but not update it from the client.
-      // This is the key fix for the "could not load admin data" error.
-      allow create: if isStaff();
-      // Updates should only happen via server-side actions (transactions).
-      allow update, delete: if false;
+    // TRANSACTIONS
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.userId) || isFinanceStaff());
+      allow list: if isFinanceStaff();
+      
+      // Transactions are created by the server (via actions) on behalf of the user.
+      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      
+      allow update, delete: if false; // No client-side updates/deletes.
     }
 
-    // Financial & Support Requests
-    match /{collectionName}/{docId} 
-      where collectionName in ['withdrawalRequests', 'addFundRequests', 'transactions', 'supportTickets', 'activityLogs', 'fraudAlerts'] {
-      
-      // Allow staff to list and get any document in these collections for the admin panel.
-      allow list, get: if isStaff();
-      
-      // Specific creation rules are below. All client-side updates/deletes are disallowed.
-      allow update, delete: if false; 
-    }
-
-    match /withdrawalRequests/{requestId} {
-      // A user can create their own withdrawal request.
-      allow create: if isOwner(request.resource.data.userId);
-    }
-    
-    match /addFundRequests/{reqId} {
-      // A user can create their own fund request.
-      allow create: if isOwner(request.resource.data.userId);
+    // FUNDING REQUESTS (A single rule for both collections)
+    match /{collectionName}/{requestId}
+      where collectionName in ['withdrawalRequests', 'addFundRequests'] {
+        allow read: if isSignedIn() && (isOwner(resource.data.userId) || isFinanceStaff());
+        allow list: if isFinanceStaff();
+        
+        // A user can create their own fund or withdrawal request.
+        allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+        
+        // Only Finance staff/Admins can update (to approve/reject).
+        allow update: if isFinanceStaff();
+        
+        allow delete: if isAdmin();
     }
     
+    // SUPPORT TICKETS
     match /supportTickets/{ticketId} {
-      // A user can create their own support ticket.
-      allow create: if isOwner(request.resource.data.userId);
-      // A user can update their own ticket (add messages). Support staff can also update any ticket.
-      allow update: if isOwner(request.resource.data.userId) || isSupportStaff();
+       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isSupportStaff());
+       
+       // A user can create their own support ticket.
+       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+       
+       // A user can update their own ticket (e.g., add a message), and support staff can update any ticket.
+       allow update: if isSignedIn() && (isOwner(resource.data.userId) || isSupportStaff());
+       
+       allow delete: if isAdmin();
     }
-
-    // User Rewards
+    
+    // APP CONFIGURATION (Public settings)
+    match /appConfiguration/main {
+      allow read: if true; // Publicly readable settings like wheel configs.
+      allow write: if isSuperAdmin(); // Only super admins can change app-wide settings.
+    }
+    
+    // SYSTEM STATS (Global platform metrics)
+    // This fixes the "Could not load admin data" error.
+    match /systemStats/global {
+       allow read: if isFinanceStaff();
+       // Admins/Finance can create the doc if it doesn't exist, or update it.
+       allow write: if isFinanceStaff();
+    }
+    
+    // USER REWARDS (Daily login streaks, etc.)
     match /userRewards/{userId} {
-      // A user can only read their own reward data.
-      allow read: if isOwner(userId);
-      // Creation happens during sign-up. Updates happen via server action.
+      allow read, update: if isOwner(userId);
+      
+      // A user needs to be able to create their own reward document during sign-up.
       allow create: if isOwner(userId);
-      allow update, delete: if false;
+      
+      allow delete: if false;
     }
-
-    // Tournaments
+    
+    // TOURNAMENTS
     match /tournaments/{tournamentId} {
-      // Anyone can read tournament details.
-      allow read: if true;
-      // Only super-admins can create/update tournaments from the admin panel.
-      allow write: if isSuperAdmin();
-
+      allow read, list: if isSignedIn();
+      allow write: if isAdmin(); // Only admins can create/edit tournaments.
+      
+      // Participants subcollection for each tournament
       match /participants/{userId} {
-        // Anyone can read the list of participants.
-        allow read: if true;
-        // Joining (creating a participant doc) is handled by server-side actions, not client.
-        allow create, update, delete: if false;
+        allow read: if isSignedIn();
+        // A user can join a tournament by creating their own participant document.
+        allow create: if isOwner(userId);
+        // Only admins can update scores or delete participants.
+        allow update, delete: if isAdmin(); 
       }
+    }
+    
+    // SERVER-ONLY COLLECTIONS (No client-side writes)
+    match /activityLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /fraudAlerts/{alertId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }
