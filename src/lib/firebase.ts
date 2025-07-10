@@ -1,4 +1,5 @@
 
+
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import {
   getAuth,
@@ -378,7 +379,6 @@ export const getTransactionsFromFirestore = async (userId: string, count: number
 export const getAllTransactions = async (count: number = 100): Promise<(TransactionData & {id: string})[]> => {
   const q = query(
     collection(db, TRANSACTIONS_COLLECTION),
-    orderBy("date", "desc"),
     limit(count)
   );
   const querySnapshot = await getDocs(q);
@@ -762,6 +762,9 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
     statsFromDoc.totalWithdrawn = data.totalWithdrawn || 0;
     statsFromDoc.totalGstCollected = data.totalGstCollected || 0;
   } else {
+    // If the doc doesn't exist, we should create it.
+    // This action might fail if rules don't permit it, which can be a source of error.
+    // The rules file has been updated to allow FinanceStaff to write to this doc.
     await setDoc(globalStatsRef, statsFromDoc);
   }
 
