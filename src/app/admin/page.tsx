@@ -22,10 +22,10 @@ import {
   ShieldCheck, Settings, Users, Home, ShieldAlert, ListPlus, Trash2, Save, Edit2, X, ClipboardList, Banknote, History,
   PackageCheck, PackageX, Newspaper, Trophy, RefreshCcw, ArrowDownLeft, ArrowUpRight, PlusCircle, Wand2, LifeBuoy, GripVertical, Ban,
   ArrowRightLeft, Activity, BarChart2, Sunrise, Sun, Sunset, Moon, Lock, Wallet, Landmark, Pencil, Star, Gamepad2, BrainCircuit, Users2, Gift, Swords, LogOut,
-  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search, View, Send, MessageSquare
+  UserCog, PanelLeft, Calendar as CalendarIcon, MoreHorizontal, Search, View, Send, MessageSquare, Megaphone
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus } from '@/lib/appConfig';
+import { AppSettings, initialSettings as fallbackAppSettings, DEFAULT_NEWS_ITEMS as fallbackNewsItems, WheelTierConfig, SegmentConfig, WinRateRule, RewardConfig, DailyReward, StreakBonus, CustomAd } from '@/lib/appConfig';
 import {
   saveAppConfigurationToFirestore,
   getWithdrawalRequests,
@@ -162,6 +162,10 @@ export default function AdminPage() {
   const [newNewsItem, setNewNewsItem] = useState('');
   const [editingNewsItemIndex, setEditingNewsItemIndex] = useState<number | null>(null);
   const [editingNewsItemText, setEditingNewsItemText] = useState('');
+
+  // Custom Ad State
+  const [editingAd, setEditingAd] = useState<CustomAd | null>(null);
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   
   const [withdrawalRequests, setWithdrawalRequests] = useState<(WithdrawalRequestData & {id: string})[]>([]);
   const [addFundRequests, setAddFundRequests] = useState<(AddFundRequestData & {id:string})[]>([]);
@@ -371,6 +375,37 @@ export default function AdminPage() {
   const handleStreakBonusChange = (index: number, field: keyof StreakBonus, value: string | number) => { const updatedBonuses = [...currentAppSettings.rewardConfig.streakBonuses]; if (typeof updatedBonuses[index][field] === 'number') { updatedBonuses[index][field] = parseFloat(value as string) || 0; } else { (updatedBonuses[index][field] as string) = value as string; } setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, streakBonuses: updatedBonuses}})); };
   const handleViewParticipants = async (tournamentId: string) => { setCurrentTournamentForView(tournamentId); setViewingTournamentParticipants([]); try { const participants = await getTournamentParticipants(tournamentId); setViewingTournamentParticipants(participants); } catch (error) { toast({ title: "Error", variant: "destructive"}); } };
   const handleDistributePrizes = async (tournamentId: string) => { try { await endTournamentAndDistributePrizes(tournamentId); toast({ title: "Prizes Distributed!"}); fetchAdminData(); } catch (error: any) { toast({ title: "Error", description: `Could not distribute prizes: ${error.message}`, variant: "destructive"}); } };
+  const handleSaveAd = (adData: CustomAd) => {
+    setCurrentAppSettings(prev => {
+      const existingAdIndex = prev.customAds.findIndex(ad => ad.id === adData.id);
+      const newAds = [...prev.customAds];
+      if (existingAdIndex !== -1) {
+        newAds[existingAdIndex] = adData;
+      } else {
+        newAds.push({ ...adData, id: `ad-${Date.now()}` });
+      }
+      return { ...prev, customAds: newAds };
+    });
+    setIsAdModalOpen(false);
+    setEditingAd(null);
+  };
+  const handleAddNewAd = () => {
+    setEditingAd({ id: '', title: '', description: '', imageUrl: '', linkUrl: '', isActive: true });
+    setIsAdModalOpen(true);
+  };
+  const handleEditAd = (ad: CustomAd) => {
+    setEditingAd(ad);
+    setIsAdModalOpen(true);
+  };
+  const handleDeleteAd = (adId: string) => {
+    setCurrentAppSettings(prev => ({ ...prev, customAds: prev.customAds.filter(ad => ad.id !== adId) }));
+  };
+  const handleToggleAdStatus = (adId: string, currentStatus: boolean) => {
+    setCurrentAppSettings(prev => {
+      const newAds = prev.customAds.map(ad => ad.id === adId ? { ...ad, isActive: !currentStatus } : ad);
+      return { ...prev, customAds: newAds };
+    });
+  };
   // --- End of Handlers ---
   
   const navItems = [
@@ -391,8 +426,9 @@ export default function AdminPage() {
     { id: 'winning-rules', label: 'Winning Rules', icon: BrainCircuit, permission: isSuperAdmin },
     { id: 'daily-rewards', label: 'Daily Rewards', icon: Gift, permission: isSuperAdmin },
     { id: 'wheel-settings', label: 'Wheel Settings', icon: Wand2, permission: isSuperAdmin },
-    { id: 'game-settings', label: 'App Settings', icon: Settings, permission: isSuperAdmin },
     { id: 'news-ticker', label: 'News Ticker', icon: Newspaper, permission: isSuperAdmin },
+    { id: 'custom-ads', label: 'Custom Ads', icon: Megaphone, permission: isSuperAdmin },
+    { id: 'game-settings', label: 'App Settings', icon: Settings, permission: isSuperAdmin },
   ];
 
   if (loading) return <div className="flex-grow flex items-center justify-center"><RefreshCcw className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -662,6 +698,45 @@ export default function AdminPage() {
             </CardContent>
         </Card>
       );
+      case 'custom-ads': return (
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div><CardTitle>Custom Ads</CardTitle><CardDescription>Manage custom ads displayed in the app.</CardDescription></div>
+              <Button onClick={handleAddNewAd}><PlusCircle className="mr-2 h-4 w-4" /> Add New Ad</Button>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Image</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {currentAppSettings.customAds.length === 0 ? (
+                            <TableRow><TableCell colSpan={4} className="h-24 text-center">No custom ads created yet.</TableCell></TableRow>
+                        ) : (
+                            currentAppSettings.customAds.map(ad => (
+                                <TableRow key={ad.id}>
+                                    <TableCell className="font-medium">{ad.title}</TableCell>
+                                    <TableCell>
+                                        <Image src={ad.imageUrl || "https://placehold.co/100x50"} alt={ad.title} width={100} height={50} className="rounded-md object-cover" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Switch
+                                            checked={ad.isActive}
+                                            onCheckedChange={() => handleToggleAdStatus(ad.id, ad.isActive)}
+                                        />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex gap-2 justify-end">
+                                            <Button variant="outline" size="sm" onClick={() => handleEditAd(ad)}><Edit2 className="mr-2 h-4 w-4" /> Edit</Button>
+                                            <Button variant="destructive" size="sm" onClick={() => handleDeleteAd(ad.id)}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+      );
       default: return <Card><CardHeader><CardTitle>Select a view</CardTitle></CardHeader></Card>;
     }
   };
@@ -793,6 +868,12 @@ export default function AdminPage() {
             </SheetContent>
         </Sheet>
 
+      <AdEditorDialog 
+        isOpen={isAdModalOpen}
+        onClose={() => { setIsAdModalOpen(false); setEditingAd(null); }}
+        onSave={handleSaveAd}
+        ad={editingAd}
+      />
 
       <CreateTournamentDialog isOpen={isTournamentModalOpen} onClose={() => setIsTournamentModalOpen(false)} adminId={user.uid} onTournamentCreated={fetchAdminData} />
       
@@ -810,6 +891,72 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+// --- Create Ad Dialog Component ---
+const AdEditorDialog = ({ isOpen, onClose, onSave, ad }: { isOpen: boolean, onClose: () => void, onSave: (ad: CustomAd) => void, ad: CustomAd | null }) => {
+  const [currentAd, setCurrentAd] = useState<CustomAd | null>(null);
+
+  useEffect(() => {
+    setCurrentAd(ad);
+  }, [ad]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!currentAd) return;
+    const { name, value } = e.target;
+    setCurrentAd({ ...currentAd, [name]: value });
+  };
+  
+  const handleToggle = (checked: boolean) => {
+    if (!currentAd) return;
+    setCurrentAd({ ...currentAd, isActive: checked });
+  };
+
+  const handleSave = () => {
+    if (currentAd) {
+      onSave(currentAd);
+    }
+  };
+
+  if (!currentAd) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{ad?.id ? 'Edit Custom Ad' : 'Create New Ad'}</DialogTitle>
+          <DialogDescription>Fill in the details for your custom advertisement.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">Title</Label>
+            <Input id="title" name="title" value={currentAd.title} onChange={handleChange} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea id="description" name="description" value={currentAd.description} onChange={handleChange} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="imageUrl">Image URL</Label>
+            <Input id="imageUrl" name="imageUrl" value={currentAd.imageUrl} onChange={handleChange} placeholder="https://placehold.co/300x150.png" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="linkUrl">Link URL (when clicked)</Label>
+            <Input id="linkUrl" name="linkUrl" value={currentAd.linkUrl} onChange={handleChange} placeholder="https://example.com" />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Switch id="isActive" checked={currentAd.isActive} onCheckedChange={handleToggle} />
+            <Label htmlFor="isActive">Ad is Active</Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave}>Save Ad</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 
 // --- Create Tournament Dialog Component ---
