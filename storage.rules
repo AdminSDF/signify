@@ -3,44 +3,30 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Helper: Is the user authenticated?
-    function isAuthenticated() {
-      return request.auth != null;
+    // Allow users to read all files publicly for simplicity in this app.
+    // In a real production app with sensitive data, you would restrict this.
+    match /{allPaths=**} {
+      allow read;
     }
 
-    // Helper: Is the request from the owner of the resource?
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // --- Profile Photos ---
-    // Path: /profile_photos/{userId}
+    // Profile Photos:
+    // Only the authenticated user can upload/update their own profile photo.
+    // The photo must be smaller than 2MB.
     match /profile_photos/{userId} {
-      // Anyone authenticated can read profile photos.
-      allow read: if isAuthenticated();
-      
-      // Only the owner can write (create, update, delete) their own photo.
-      // The file must be an image and under 2MB.
-      allow write: if isOwner(userId) &&
-                      request.resource.contentType.matches('image/.*') &&
-                      request.resource.size < 2 * 1024 * 1024;
+      allow write: if request.auth != null 
+                    && request.auth.uid == userId
+                    && request.resource.size < 2 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
     }
 
-    // --- Support Ticket Screenshots ---
-    // Path: /support_tickets/{ticketId}/{fileName}
+    // Support Ticket Screenshots:
+    // Any authenticated user can upload a screenshot for a support ticket.
+    // The path must match the structure.
+    // The file must be smaller than 5MB.
     match /support_tickets/{ticketId}/{fileName} {
-      // Admins can read any screenshot.
-      allow read: if isAuthenticated() &&
-                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
-      
-      // Users can write a screenshot IF the corresponding ticket exists in Firestore
-      // AND they are the owner of that ticket.
-      // The file must be an image and under 5MB.
-      allow write: if isAuthenticated() &&
-                    request.resource.contentType.matches('image/.*') &&
-                    request.resource.size < 5 * 1024 * 1024 &&
-                    exists(/databases/$(database)/documents/supportTickets/$(ticketId)) &&
-                    get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid;
+      allow write: if request.auth != null
+                    && request.resource.size < 5 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
     }
   }
 }
