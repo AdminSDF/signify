@@ -299,7 +299,7 @@ export const getAllUsers = async (
     limit(count)
   );
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (UserDocument & {id: string})));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as (UserDocument & { id: string })));
 };
 
 export const getLeaderboardUsers = async (count: number = 50): Promise<UserDocument[]> => {
@@ -379,6 +379,7 @@ export const getTransactionsFromFirestore = async (userId: string, count: number
 export const getAllTransactions = async (count: number = 100): Promise<(TransactionData & {id: string})[]> => {
   const q = query(
     collection(db, TRANSACTIONS_COLLECTION),
+    orderBy("date", "desc"),
     limit(count)
   );
   const querySnapshot = await getDocs(q);
