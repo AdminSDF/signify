@@ -29,13 +29,11 @@ import {
 
 
 export const approveAddFundAndUpdateBalance = async (
-  requestId: string,
-  userId: string,
-  amount: number,
-  tierId: string,
+  request: AddFundRequestData & { id: string },
   adminId: string,
   adminEmail: string,
 ) => {
+  const { id: requestId, userId, amount, tierId } = request;
   const effectiveTierId = tierId || 'little';
   
   await runTransaction(db, async (transaction) => {
@@ -150,7 +148,7 @@ export const approveAddFundAndUpdateBalance = async (
     const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
     transaction.set(transactionDocRef, {
       userId: userId,
-      userEmail: userData.email,
+      userEmail: userData.email || request.userEmail, // Fallback to request email
       type: 'credit',
       amount: amount,
       description: `Balance added to ${tierName} (Req ID: ${requestId.substring(0,6)})`,
@@ -173,15 +171,13 @@ export const approveAddFundAndUpdateBalance = async (
 };
 
 export const approveWithdrawalAndUpdateBalance = async (
-  requestId: string,
-  userId: string,
-  amount: number,
-  tierId: string,
-  paymentMethodDetails: string,
+  request: WithdrawalRequestData & { id: string },
   adminId: string,
   adminEmail: string,
 ) => {
+  const { id: requestId, userId, amount, tierId, paymentMethod, upiId, bankDetails } = request;
   const effectiveTierId = tierId || 'little';
+  const paymentMethodDetails = paymentMethod === 'upi' ? upiId || '' : JSON.stringify(bankDetails || {});
 
   await runTransaction(db, async (transaction) => {
     const userRef = doc(db, USERS_COLLECTION, userId);
@@ -231,7 +227,7 @@ export const approveWithdrawalAndUpdateBalance = async (
     const tierName = appConfig.settings.wheelConfigs[effectiveTierId]?.name || 'Unknown Tier';
     transaction.set(transactionDocRef, {
       userId: userId,
-      userEmail: userData.email,
+      userEmail: userData.email || request.userEmail, // Fallback to request email
       type: 'debit',
       amount: amount,
       description: `Withdrawal from ${tierName}. Gross: ₹${amount.toFixed(2)}, GST: -₹${gstAmount.toFixed(2)}. (Req ID: ${requestId.substring(0,6)})`,
