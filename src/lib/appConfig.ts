@@ -6,7 +6,7 @@ export interface SegmentConfig {
   id: string;
   text: string;
   emoji: string;
-  amount: number; // Replaced 'multiplier' with 'amount'
+  amount: number; // This now represents the BASE amount for the lowest bet
   probability: number; // Chance of this segment being picked
   color: string;
   textColor?: string;
@@ -20,14 +20,10 @@ export interface WheelTierConfig {
   themeClass: string;
   isLocked: boolean; // Controls if the arena is playable/withdrawable
   minWithdrawalAmount: number; // Moved from global settings
-  costSettings: {
-    type: 'tiered' | 'fixed';
-    baseCost?: number; // for fixed cost wheels
-    tier1Limit?: number; // for tiered cost wheels
-    tier1Cost?: number;
-    tier2Limit?: number;
-    tier2Cost?: number;
-    tier3Cost?: number;
+  // NEW: Defines selectable bet amounts and the base bet for prize calculation
+  betOptions: {
+    options: number[]; // e.g., [5, 10, 20, 50]
+    baseBet: number;   // The bet amount for which the segment `amount` is defined, e.g., 5
   };
   segments: SegmentConfig[];
 }
@@ -42,13 +38,9 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     themeClass: 'theme-little',
     isLocked: false,
     minWithdrawalAmount: 500,
-    costSettings: {
-      type: 'tiered',
-      tier1Limit: 30,
-      tier1Cost: 2,
-      tier2Limit: 60,
-      tier2Cost: 3,
-      tier3Cost: 5,
+    betOptions: {
+      options: [2, 5, 10, 20],
+      baseBet: 2, // The segment amounts below are for a ₹2 bet
     },
     segments: [
       { id: 's-big', text: 'Big Win', emoji: '🎉', amount: 20, probability: 5, color: '300 80% 60%', textColor: '0 0% 100%' },
@@ -64,9 +56,9 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     themeClass: 'theme-big',
     isLocked: false,
     minWithdrawalAmount: 1000,
-    costSettings: {
-      type: 'fixed',
-      baseCost: 10,
+    betOptions: {
+      options: [10, 25, 50, 100],
+      baseBet: 10, // The segment amounts below are for a ₹10 bet
     },
     segments: [
       { id: 'b-big', text: 'Big Win', emoji: '👑', amount: 50, probability: 5, color: '45 100% 50%', textColor: '0 0% 0%' },
@@ -80,11 +72,11 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     name: 'Mega Millions',
     description: 'The ultimate risk for the ultimate reward!',
     themeClass: 'theme-more-big',
-    isLocked: false,
-    costSettings: {
-        type: 'fixed',
-        baseCost: 20,
+    betOptions: {
+        options: [20, 50, 100, 250],
+        baseBet: 20, // The segment amounts below are for a ₹20 bet
     },
+    isLocked: false,
     minWithdrawalAmount: 2000,
     segments: [
         { id: 'm-big', text: 'Big Win', emoji: '🚀', amount: 100, probability: 5, color: '210 100% 50%', textColor: '0 0% 100%' },
@@ -100,9 +92,9 @@ export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
     themeClass: 'theme-stall-machine',
     isLocked: false,
     minWithdrawalAmount: 1500,
-    costSettings: {
-      type: 'fixed',
-      baseCost: 15,
+    betOptions: {
+      options: [15, 30, 75, 150],
+      baseBet: 15, // The segment amounts below are for a ₹15 bet
     },
     segments: [
       { id: 'sm-777', text: 'JACKPOT', emoji: '🎰', amount: 1500, probability: 2, color: '0 80% 60%', textColor: '0 0% 100%' },

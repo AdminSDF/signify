@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -31,6 +31,8 @@ import {
 import { Steps } from 'intro.js-react';
 import { UserDocument } from '@/lib/firebase';
 import { AppSettings } from '@/lib/appConfig';
+import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 
 const ConfettiRain = dynamic(() => import('@/components/ConfettiRain').then(mod => mod.ConfettiRain), { ssr: false });
@@ -40,7 +42,9 @@ const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: f
 const determineSpinOutcome = (
   user: UserDocument,
   appSettings: AppSettings,
-  segments: SegmentConfig[]
+  segments: SegmentConfig[],
+  betAmount: number,
+  baseBet: number
 ): { winningSegment: SegmentConfig, isWin: boolean } => {
   
   // 1. Calculate effective win rate
@@ -86,11 +90,17 @@ const determineSpinOutcome = (
   }
   
   if (!chosenSegment) {
-    // Ultimate fallback
-    return { winningSegment: segments[0], isWin: segments[0].amount > 0 };
+    chosenSegment = segments[0];
   }
 
-  return { winningSegment: chosenSegment, isWin: chosenSegment.amount > 0 };
+  // 4. Scale the prize amount based on the bet
+  const prizeScaleFactor = baseBet > 0 ? betAmount / baseBet : 1;
+  const scaledPrizeAmount = chosenSegment.amount * prizeScaleFactor;
+
+  return { 
+    winningSegment: { ...chosenSegment, amount: scaledPrizeAmount }, 
+    isWin: chosenSegment.amount > 0
+  };
 };
 
 
@@ -101,6 +111,7 @@ export default function GamePage() {
   const tier = params.tier as string;
 
   const [wheelConfig, setWheelConfig] = useState<WheelTierConfig | null>(null);
+  const [selectedBet, setSelectedBet] = useState<number>(0);
   
   const [isSpinning, setIsSpinning] = useState(false);
   const [targetSegmentIndex, setTargetSegmentIndex] = useState<number | null>(null);
@@ -116,9 +127,6 @@ export default function GamePage() {
   const [userBalance, setUserBalance] = useState<number>(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalAmount, setPaymentModalAmount] = useState(0);
-
-  const [dailyPaidSpinsUsed, setDailyPaidSpinsUsed] = useState<number>(0);
-  const [lastPaidSpinDate, setLastPaidSpinDate] = useState<string>(new Date().toLocaleDateString('en-CA'));
 
   const { playSound } = useSound();
   const { toast } = useToast();
@@ -202,8 +210,8 @@ export default function GamePage() {
       intro: 'This is the main prize wheel. Click it to spin and test your luck!',
     },
     {
-      element: '[data-tour-id="spin-cost"]',
-      intro: 'Each spin costs a certain amount, which is shown here. Some spins might be free!',
+      element: '[data-tour-id="bet-selector"]',
+      intro: 'Use these buttons to select your bet amount. Higher bets lead to bigger potential prizes!',
     },
     {
       element: '[data-tour-id="prize-display"]',
@@ -220,6 +228,7 @@ export default function GamePage() {
     const config = appSettings.wheelConfigs ? appSettings.wheelConfigs[tier] : null;
     if (config) {
       setWheelConfig(config);
+      setSelectedBet(config.betOptions.options[0]); // Default to the first bet option
       if (config.isLocked) {
         toast({
             title: "Arena Locked",
@@ -247,22 +256,8 @@ export default function GamePage() {
     if (!user || authLoading || !userData) {
       return;
     }
-    
     setUserBalance(userData.balances?.[tier] ?? 0);
     setSpinsAvailable(userData.spinsAvailable ?? 0);
-
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    if (userData.lastPaidSpinDate === todayStr) {
-      setDailyPaidSpinsUsed(userData.dailyPaidSpinsUsed ?? 0);
-    } else {
-      setDailyPaidSpinsUsed(0);
-      if (user) {
-        updateUserData(user.uid, { dailyPaidSpinsUsed: 0, lastPaidSpinDate: todayStr })
-          .catch(err => console.warn("Failed to reset daily spins on date change:", err));
-      }
-    }
-    setLastPaidSpinDate(userData.lastPaidSpinDate || todayStr);
-
   }, [isClient, user, userData, authLoading, tier]);
   
     const fetchAssistantMessage = useCallback(async (
@@ -349,15 +344,6 @@ export default function GamePage() {
     setTargetSegmentIndex(winningSegmentIndex);
   }, [playSound, wheelConfig]);
 
-  const getLittleTierSpinCost = useCallback((spinsUsedToday: number): number => {
-    const costSettings = wheelConfig?.costSettings;
-    if (costSettings?.type !== 'tiered') return costSettings?.baseCost || 0;
-    
-    if (spinsUsedToday < (costSettings.tier1Limit || 0)) return costSettings.tier1Cost || 0;
-    if (spinsUsedToday < (costSettings.tier2Limit || 0)) return costSettings.tier2Cost || 0;
-    return costSettings.tier3Cost || 0;
-  }, [wheelConfig]);
-
   const handleSpinClick = useCallback(async () => {
     if (!isClient || isSpinning || !user || authLoading || !userData || !wheelConfig) {
       if (!user && isClient && !authLoading) {
@@ -385,8 +371,7 @@ export default function GamePage() {
     if (tier === 'little' && spinsAvailable > 0) {
       isFreeSpin = true;
     } else {
-        spinCost = (tier === 'little') ? getLittleTierSpinCost(dailyPaidSpinsUsed) : (wheelConfig.costSettings.baseCost || 0);
-
+        spinCost = selectedBet;
         if (userBalance < spinCost) {
             setPaymentModalAmount(spinCost > appSettings.minAddBalanceAmount ? spinCost : appSettings.minAddBalanceAmount);
             setShowPaymentModal(true);
@@ -399,12 +384,6 @@ export default function GamePage() {
         setSpinsAvailable(prev => prev - 1);
     } else {
         setUserBalance(prev => prev - spinCost);
-        if (tier === 'little') {
-            const todayStr = new Date().toLocaleDateString('en-CA');
-            const newDailySpinsUsed = (lastPaidSpinDate === todayStr ? dailyPaidSpinsUsed : 0) + 1;
-            setDailyPaidSpinsUsed(newDailySpinsUsed);
-            setLastPaidSpinDate(todayStr);
-        }
     }
     
     try {
@@ -414,30 +393,22 @@ export default function GamePage() {
     }
     
     // --- NEW DYNAMIC SPIN LOGIC ---
-    const { winningSegment, isWin } = determineSpinOutcome(userData, appSettings, wheelConfig.segments);
+    const { winningSegment, isWin } = determineSpinOutcome(userData, appSettings, wheelConfig.segments, selectedBet, wheelConfig.betOptions.baseBet);
 
-    if (!winningSegment) {
-        toast({ title: "Config Error", description: `Could not determine a spin outcome. The wheel might be misconfigured.`, variant: "destructive" });
-        return;
-    }
-    
-    const winningSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
+    const originalSegmentIndex = wheelConfig.segments.findIndex(s => s.id === winningSegment.id);
 
-    if (winningSegmentIndex === -1) {
+    if (originalSegmentIndex === -1) {
         toast({ title: "Internal Error", description: `Could not locate the winning segment on the wheel. Please contact support.`, variant: "destructive" });
         return;
     }
     
-    // Store the result and cost. The cost is now for logging purposes.
     pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost, isWin };
     
-    // Start the animation.
-    startSpinProcess(winningSegmentIndex);
+    startSpinProcess(originalSegmentIndex);
 
   }, [
     isClient, isSpinning, user, authLoading, userData, wheelConfig, tier, spinsAvailable,
-    userBalance, dailyPaidSpinsUsed, lastPaidSpinDate, appSettings, resetIdleTimer,
-    startSpinProcess, getLittleTierSpinCost, toast, router
+    userBalance, appSettings, resetIdleTimer, startSpinProcess, toast, router, selectedBet
   ]);
 
   const handleSpinComplete = useCallback(async () => {
@@ -491,14 +462,8 @@ export default function GamePage() {
     if (cost === 0) { // It was a free spin
         updates.spinsAvailable = spinsAvailable; // `spinsAvailable` state was already updated
     }
-
-    if (cost > 0 && tier === 'little') { // It was a paid 'little' spin
-        updates.dailyPaidSpinsUsed = dailyPaidSpinsUsed; // state was already updated
-        updates.lastPaidSpinDate = lastPaidSpinDate; // state was already updated
-    }
         
     try {
-        // Single write to Firestore with all consolidated changes.
         await updateUserData(user.uid, updates);
 
         await addTransaction({
@@ -509,9 +474,7 @@ export default function GamePage() {
             balanceAfter: finalBalance,
         });
         
-        // Sync UI state with final DB value
         setUserBalance(finalBalance);
-        
         setCurrentPrize(prize);
         
         if (isWin) {
@@ -538,7 +501,7 @@ export default function GamePage() {
         pendingPrizeRef.current = null;
     }
   }, [
-    user, userData, tier, userBalance, dailyPaidSpinsUsed, spinsAvailable, lastPaidSpinDate,
+    user, userData, tier, userBalance, spinsAvailable,
     playSound, spinHistory, fetchAssistantMessage, toast, addTransaction
   ]);
   
@@ -547,6 +510,23 @@ export default function GamePage() {
     toast({ title: "Action Required", description: `Please go to your profile to add balance to the ${wheelConfig?.name} wallet.` });
     router.push('/profile');
   }, [router, toast, wheelConfig]);
+
+  const scaledSegments = useMemo(() => {
+    if (!wheelConfig) return [];
+    const scaleFactor = wheelConfig.betOptions.baseBet > 0 ? selectedBet / wheelConfig.betOptions.baseBet : 1;
+    return wheelConfig.segments.map(segment => ({
+      ...segment,
+      amount: segment.amount * scaleFactor,
+    }));
+  }, [wheelConfig, selectedBet]);
+
+  const handleBetChange = (value: string) => {
+    const newBet = Number(value);
+    if(newBet > 0) {
+      playSound('click');
+      setSelectedBet(newBet);
+    }
+  };
   
   if (!isClient || authLoading || !userData || !wheelConfig) {
     return (
@@ -593,8 +573,6 @@ export default function GamePage() {
       </div>
     );
   }
-
-  const costOfNextPaidSpin = tier === 'little' ? getLittleTierSpinCost(dailyPaidSpinsUsed) : wheelConfig.costSettings.baseCost || 0;
 
   return (
     <>
@@ -651,7 +629,7 @@ export default function GamePage() {
           )}
           <div data-tour-id="spin-wheel">
             <SpinWheel
-              segments={wheelConfig.segments}
+              segments={scaledSegments}
               onSpinComplete={handleSpinComplete}
               targetSegmentIndex={targetSegmentIndex}
               isSpinning={isSpinning}
@@ -660,14 +638,25 @@ export default function GamePage() {
             />
           </div>
           
-          <div className="my-2 w-full flex flex-col items-center gap-4">
+          <div className="my-4 w-full flex flex-col items-center gap-4">
+             {user && tier !== 'little' && (
+              <div data-tour-id="bet-selector" className="w-full max-w-xs">
+                <ToggleGroup type="single" value={String(selectedBet)} onValueChange={handleBetChange} className="grid grid-cols-4" disabled={isSpinning}>
+                  {wheelConfig.betOptions.options.map(option => (
+                    <ToggleGroupItem key={option} value={String(option)} aria-label={`Bet ₹${option}`}>
+                      ₹{option}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+            )}
+            
             {user && (
-                <div data-tour-id="spin-cost" className="text-center text-lg font-semibold text-foreground mb-1 p-2 bg-primary-foreground/20 rounded-md shadow">
+                <div className="text-center text-lg font-semibold text-foreground p-2 bg-primary-foreground/20 rounded-md shadow">
                     {tier === 'little' && spinsAvailable > 0
                         ? <>Free Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle}</>
-                        : <>Next Spin Cost: <span className="font-bold text-primary">₹{costOfNextPaidSpin.toFixed(2)}</span></>
+                        : <>Spin Cost: <span className="font-bold text-primary">₹{selectedBet.toFixed(2)}</span></>
                     }
-                    {tier === 'little' && spinsAvailable <= 0 && <>. Paid today: {dailyPaidSpinsUsed}</>}
                 </div>
             )}
               <div data-tour-id="prize-display" className="min-h-[140px]">
