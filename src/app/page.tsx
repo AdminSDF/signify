@@ -8,7 +8,7 @@ import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Lock, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Lock, ShieldAlert, Download } from 'lucide-react';
 import type { WheelTierConfig, RewardConfig } from '@/lib/appConfig';
 import { updateUserData, getUserRewardData, UserRewardData, claimDailyReward } from '@/lib/firebase';
 import { Steps } from 'intro.js-react';
@@ -87,6 +87,14 @@ export default function GameSelectionPage() {
   const handleCardClick = () => {
     playSound('click');
   };
+
+  const handleDownloadClick = () => {
+    playSound('click');
+    toast({
+        title: "Coming Soon!",
+        description: "The downloadable app is not yet available. Please check back later.",
+    });
+  }
 
   const tourSteps = [
     {
@@ -190,6 +198,15 @@ export default function GameSelectionPage() {
             Choose Your Arena
           </h1>
           <p className="text-lg text-muted-foreground mt-2">Select a wheel and spin to win!</p>
+           <Button 
+            onClick={handleDownloadClick} 
+            className="mt-4 animate-fade-in" 
+            size="lg"
+            variant="secondary"
+            >
+            <Download className="mr-2 h-5 w-5" />
+            Download App
+          </Button>
         </div>
 
         <div data-tour-id="game-cards-grid" className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full max-w-7xl">
