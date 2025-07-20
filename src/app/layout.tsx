@@ -21,6 +21,7 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: 'Spinify - Spin to Earn!',
   description: 'A fun and engaging Spin to Earn game by Firebase Studio',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({

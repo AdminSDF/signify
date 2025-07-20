@@ -1,0 +1,21 @@
+{
+  "name": "Spinify",
+  "short_name": "Spinify",
+  "description": "A fun and engaging Spin to Earn game by Firebase Studio",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8BBD0",
+  "theme_color": "#E91E63"
+}

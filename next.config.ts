@@ -1,5 +1,12 @@
 
 import type {NextConfig} from 'next';
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+});
+
 
 const nextConfig: NextConfig = {
   typescript: {
@@ -30,4 +37,4 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['https://6000-firebase-studio-1750317228730.cluster-6dx7corvpngoivimwvvljgokdw.cloudworkstations.dev'],
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);
