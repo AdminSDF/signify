@@ -4,15 +4,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Lock, ShieldAlert, Download } from 'lucide-react';
-import type { WheelTierConfig, RewardConfig } from '@/lib/appConfig';
+import { ArrowRight, ShieldAlert, Download } from 'lucide-react';
+import type { RewardConfig } from '@/lib/appConfig';
 import { updateUserData, getUserRewardData, UserRewardData, claimDailyReward } from '@/lib/firebase';
 import { Steps } from 'intro.js-react';
-import { cn } from '@/lib/utils';
 import DailyRewardModal from '@/components/DailyRewardModal';
 import { useToast } from '@/hooks/use-toast';
 import { useSound } from '@/hooks/useSound';
@@ -84,8 +82,9 @@ export default function GameSelectionPage() {
     }
   };
   
-  const handleCardClick = () => {
+  const handlePlayClick = () => {
     playSound('click');
+    router.push('/game/main');
   };
 
   const handleDownloadClick = () => {
@@ -99,15 +98,11 @@ export default function GameSelectionPage() {
   const tourSteps = [
     {
       element: '[data-tour-id="page-title"]',
-      intro: '<strong>Welcome to Spinify!</strong> 👋<br/>This is your main dashboard where you can choose a game to play.',
+      intro: '<strong>Welcome to Spinify!</strong> 👋<br/>This is your main dashboard where you can start playing.',
     },
     {
-      element: '[data-tour-id="game-cards-grid"]',
-      intro: 'Here you can see the different game arenas. Each has different stakes and prizes.',
-    },
-    {
-      element: '[data-tour-id="game-card-little"]',
-      intro: 'This is the "Little Lux" arena. It\'s great for beginners with smaller bets and frequent wins!',
+      element: '[data-tour-id="play-now-button"]',
+      intro: 'Click here to enter the game arena and start winning!',
     },
     {
       element: '[data-tour-id="header-profile-button"]',
@@ -138,36 +133,6 @@ export default function GameSelectionPage() {
     );
   }
 
-  const wheelConfigs = appSettings.wheelConfigs;
-
-  const renderCard = (config: WheelTierConfig) => (
-     <Link href={`/game/${config.id}`} passHref key={config.id}>
-      <Card onClick={handleCardClick} data-tour-id={`game-card-${config.id}`} className={cn(
-          "h-full flex flex-col justify-between text-center shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 border-2 relative",
-          config.isLocked ? "border-destructive/50" : "border-primary",
-          config.themeClass
-        )}>
-        {config.isLocked && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
-            <Lock className="h-12 w-12 text-destructive" />
-            <p className="mt-2 font-bold text-xl text-destructive-foreground">Arena Locked</p>
-          </div>
-        )}
-        <CardHeader>
-          <Image src={appSettings.logoUrl} alt={`${config.name} Logo`} width={64} height={64} className="h-16 w-16 mx-auto animate-glow-pulse rounded-full" priority />
-          <CardTitle className="text-3xl font-bold text-primary mt-4">{config.name}</CardTitle>
-          <CardDescription className="text-muted-foreground mt-1 text-base">{config.description}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button className="w-full text-lg">
-            {config.isLocked ? "View Arena" : "Play Now"}
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-
   return (
     <>
       <Steps
@@ -195,25 +160,31 @@ export default function GameSelectionPage() {
       <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-8">
         <div data-tour-id="page-title" className="text-center">
           <h1 className="text-5xl md:text-6xl font-bold text-primary-foreground animate-glow-pulse font-headline">
-            Choose Your Arena
+            Welcome to Spinify
           </h1>
-          <p className="text-lg text-muted-foreground mt-2">Select a wheel and spin to win!</p>
-           <Button 
-            onClick={handleDownloadClick} 
-            className="mt-4 animate-fade-in" 
-            size="lg"
-            variant="secondary"
-            >
-            <Download className="mr-2 h-5 w-5" />
-            Download App
-          </Button>
+          <p className="text-lg text-muted-foreground mt-2">Click below to spin and win!</p>
         </div>
 
-        <div data-tour-id="game-cards-grid" className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full max-w-7xl">
-          {wheelConfigs.little && renderCard(wheelConfigs.little)}
-          {wheelConfigs.big && renderCard(wheelConfigs.big)}
-          {wheelConfigs['more-big'] && renderCard(wheelConfigs['more-big'])}
-          {wheelConfigs['stall-machine'] && renderCard(wheelConfigs['stall-machine'])}
+        <div className="flex flex-col items-center gap-4">
+            <Button 
+                data-tour-id="play-now-button"
+                onClick={handlePlayClick}
+                className="text-2xl font-bold h-16 px-12 rounded-full shadow-lg animate-pulse"
+                size="lg"
+                >
+                Play Now
+                <ArrowRight className="ml-3 h-6 w-6" />
+            </Button>
+
+            <Button 
+                onClick={handleDownloadClick} 
+                className="mt-4" 
+                size="lg"
+                variant="secondary"
+                >
+                <Download className="mr-2 h-5 w-5" />
+                Download App
+            </Button>
         </div>
       </div>
     </>

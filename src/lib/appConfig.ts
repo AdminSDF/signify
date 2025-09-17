@@ -14,7 +14,7 @@ export interface SegmentConfig {
 
 // Interface for a full wheel configuration
 export interface WheelTierConfig {
-  id: 'little' | 'big' | 'more-big' | 'stall-machine';
+  id: string; // Keep as string for flexibility, e.g., 'main'
   name: string;
   description: string;
   themeClass: string;
@@ -31,63 +31,9 @@ export interface WheelTierConfig {
 // Initial, fallback configuration for all wheels.
 // This is used ONLY if data is not found in Firestore.
 export const initialWheelConfigs: { [key: string]: WheelTierConfig } = {
-  little: {
-    id: 'little',
-    name: 'Little Lux',
-    description: 'Classic fun with frequent small wins!',
-    themeClass: 'theme-little',
-    isLocked: false,
-    minWithdrawalAmount: 500,
-    betOptions: {
-      options: [2, 5, 10, 20],
-      baseBet: 2, // The segment amounts below are for a ₹2 bet
-    },
-    segments: [
-      { id: 's-big', text: 'Big Win', emoji: '🎉', amount: 20, probability: 5, color: '300 80% 60%', textColor: '0 0% 100%' },
-      { id: 's-med',  text: 'Medium Win',  emoji: '💰', amount: 5, probability: 10,  color: '270 80% 65%', textColor: '0 0% 100%' },
-      { id: 's-small',  text: 'Small Win',  emoji: '💸', amount: 1, probability: 25,  color: '0 80% 60%',   textColor: '0 0% 100%' },
-      { id: 's-lose1',   text: 'Try Again', emoji: '🔁', amount: 0, probability: 60,   color: '60 90% 55%',  textColor: '0 0% 0%' },
-    ],
-  },
-  big: {
-    id: 'big',
-    name: 'Big Bonanza',
-    description: 'Higher stakes, bigger prizes!',
-    themeClass: 'theme-big',
-    isLocked: false,
-    minWithdrawalAmount: 1000,
-    betOptions: {
-      options: [10, 25, 50, 100],
-      baseBet: 10, // The segment amounts below are for a ₹10 bet
-    },
-    segments: [
-      { id: 'b-big', text: 'Big Win', emoji: '👑', amount: 50, probability: 5, color: '45 100% 50%', textColor: '0 0% 0%' },
-      { id: 'b-med',  text: 'Medium Win', emoji: '🏆', amount: 20, probability: 10,  color: '50 100% 60%', textColor: '0 0% 0%' },
-      { id: 'b-small',  text: 'Small Win', emoji: '🌟', amount: 5, probability: 25,  color: '35 100% 55%', textColor: '0 0% 0%' },
-      { id: 'b-lose1',   text: 'Try Again', emoji: '💀', amount: 0, probability: 60,   color: '190 20% 25%', textColor: '0 0% 100%' },
-    ],
-  },
-  'more-big': {
-    id: 'more-big',
-    name: 'Mega Millions',
-    description: 'The ultimate risk for the ultimate reward!',
-    themeClass: 'theme-more-big',
-    betOptions: {
-        options: [20, 50, 100, 250],
-        baseBet: 20, // The segment amounts below are for a ₹20 bet
-    },
-    isLocked: false,
-    minWithdrawalAmount: 2000,
-    segments: [
-        { id: 'm-big', text: 'Big Win', emoji: '🚀', amount: 100, probability: 5, color: '210 100% 50%', textColor: '0 0% 100%' },
-        { id: 'm-med', text: 'Medium Win', emoji: '🌌', amount: 40, probability: 10, color: '190 100% 45%', textColor: '0 0% 100%' },
-        { id: 'm-small', text: 'Small Win', emoji: '👑', amount: 10, probability: 25, color: '180 90% 40%', textColor: '0 0% 100%' },
-        { id: 'm-lose1',  text: 'Try Again', emoji: '💀', amount: 0, probability: 60,  color: '170 80% 35%', textColor: '0 0% 100%' },
-    ]
-  },
-  'stall-machine': {
-    id: 'stall-machine',
-    name: 'Stall Machine',
+  main: {
+    id: 'main',
+    name: 'Spinify Arena',
     description: 'Classic slot machine fun. Match the symbols to win!',
     themeClass: 'theme-stall-machine',
     isLocked: false,

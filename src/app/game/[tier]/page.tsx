@@ -123,7 +123,6 @@ export default function GamePage() {
   const [isAssistantLoading, setIsAssistantLoading] = useState(true);
 
   const [showConfetti, setShowConfetti] = useState(false);
-  const [spinsAvailable, setSpinsAvailable] = useState<number>(0);
   const [userBalance, setUserBalance] = useState<number>(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalAmount, setPaymentModalAmount] = useState(0);
@@ -257,7 +256,6 @@ export default function GamePage() {
       return;
     }
     setUserBalance(userData.balances?.[tier] ?? 0);
-    setSpinsAvailable(userData.spinsAvailable ?? 0);
   }, [isClient, user, userData, authLoading, tier]);
   
     const fetchAssistantMessage = useCallback(async (
@@ -365,26 +363,15 @@ export default function GamePage() {
     resetIdleTimer();
     setCurrentPrize(null);
 
-    let spinCost = 0;
-    let isFreeSpin = false;
-
-    if (tier === 'little' && spinsAvailable > 0) {
-      isFreeSpin = true;
-    } else {
-        spinCost = selectedBet;
-        if (userBalance < spinCost) {
-            setPaymentModalAmount(spinCost > appSettings.minAddBalanceAmount ? spinCost : appSettings.minAddBalanceAmount);
-            setShowPaymentModal(true);
-            return;
-        }
+    let spinCost = selectedBet;
+    if (userBalance < spinCost) {
+        setPaymentModalAmount(spinCost > appSettings.minAddBalanceAmount ? spinCost : appSettings.minAddBalanceAmount);
+        setShowPaymentModal(true);
+        return;
     }
     
     // --- IMMEDIATE DEDUCTION FROM UI STATE ---
-    if (isFreeSpin) {
-        setSpinsAvailable(prev => prev - 1);
-    } else {
-        setUserBalance(prev => prev - spinCost);
-    }
+    setUserBalance(prev => prev - spinCost);
     
     try {
       await logUserActivity(user.uid, user.email, 'spin');
@@ -399,16 +386,18 @@ export default function GamePage() {
 
     if (originalSegmentIndex === -1) {
         toast({ title: "Internal Error", description: `Could not locate the winning segment on the wheel. Please contact support.`, variant: "destructive" });
+        // Refund the spin cost to the UI state
+        setUserBalance(prev => prev + spinCost);
         return;
     }
     
-    pendingPrizeRef.current = { prize: winningSegment, cost: isFreeSpin ? 0 : spinCost, isWin };
+    pendingPrizeRef.current = { prize: winningSegment, cost: spinCost, isWin };
     
     startSpinProcess(originalSegmentIndex);
 
   }, [
-    isClient, isSpinning, user, authLoading, userData, wheelConfig, tier, spinsAvailable,
-    userBalance, appSettings, resetIdleTimer, startSpinProcess, toast, router, selectedBet
+    isClient, isSpinning, user, authLoading, userData, wheelConfig,
+    userBalance, appSettings, resetIdleTimer, startSpinProcess, toast, router, selectedBet, tier
   ]);
 
   const handleSpinComplete = useCallback(async () => {
@@ -458,10 +447,6 @@ export default function GamePage() {
             updates.tags = arrayRemove('high-loss');
         }
     }
-    
-    if (cost === 0) { // It was a free spin
-        updates.spinsAvailable = spinsAvailable; // `spinsAvailable` state was already updated
-    }
         
     try {
         await updateUserData(user.uid, updates);
@@ -501,7 +486,7 @@ export default function GamePage() {
         pendingPrizeRef.current = null;
     }
   }, [
-    user, userData, tier, userBalance, spinsAvailable,
+    user, userData, tier, userBalance,
     playSound, spinHistory, fetchAssistantMessage, toast, addTransaction
   ]);
   
@@ -639,7 +624,7 @@ export default function GamePage() {
           </div>
           
           <div className="my-4 w-full flex flex-col items-center gap-4">
-             {user && tier !== 'little' && (
+             {user && (
               <div data-tour-id="bet-selector" className="w-full max-w-xs">
                 <ToggleGroup type="single" value={String(selectedBet)} onValueChange={handleBetChange} className="grid grid-cols-4" disabled={isSpinning}>
                   {wheelConfig.betOptions.options.map(option => (
@@ -653,10 +638,7 @@ export default function GamePage() {
             
             {user && (
                 <div className="text-center text-lg font-semibold text-foreground p-2 bg-primary-foreground/20 rounded-md shadow">
-                    {tier === 'little' && spinsAvailable > 0
-                        ? <>Free Spins Left: <span className="font-bold text-primary">{spinsAvailable}</span> / {appSettings.maxSpinsInBundle}</>
-                        : <>Spin Cost: <span className="font-bold text-primary">₹{selectedBet.toFixed(2)}</span></>
-                    }
+                    Spin Cost: <span className="font-bold text-primary">₹{selectedBet.toFixed(2)}</span>
                 </div>
             )}
               <div data-tour-id="prize-display" className="min-h-[140px]">

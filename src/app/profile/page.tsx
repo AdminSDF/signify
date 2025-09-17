@@ -57,10 +57,7 @@ import { addMessageToTicketAction } from '@/app/actions/supportActions';
 type PaymentMethod = "upi" | "bank";
 
 const tierIcons: { [key: string]: React.ReactNode } = {
-  little: <Gem className="mr-2 h-5 w-5" />,
-  big: <Crown className="mr-2 h-5 w-5" />,
-  'more-big': <Rocket className="mr-2 h-5 w-5" />,
-  'stall-machine': <Star className="mr-2 h-5 w-5" />,
+  main: <Star className="mr-2 h-5 w-5" />,
 };
 
 const StyledCard: React.FC<React.ComponentProps<typeof Card>> = ({ className, ...props }) => (
@@ -179,7 +176,7 @@ export default function ProfilePage() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<string>('wallets');
-  const [activeTier, setActiveTier] = useState<string>('little');
+  const [activeTier, setActiveTier] = useState<string>('main');
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
   const [addBalanceAmount, setAddBalanceAmount] = useState<string>('');
   
@@ -245,7 +242,7 @@ export default function ProfilePage() {
   const tourSteps = [
     { element: '[data-tour-id="profile-avatar"]', intro: 'Here you can see your profile picture and name. Click the camera icon to upload a new photo!', },
     { element: '[data-tour-id="daily-streak"]', intro: 'This shows your daily login streak. Keep it going to earn bigger bonuses!', },
-    { element: '[data-tour-id="tier-selector-tabs"]', intro: 'You have a separate balance for each game arena. Click these tabs to switch between your wallets.', },
+    { element: '[data-tour-id="tier-selector-tabs"]', intro: 'This is your main game wallet.', },
     { element: '[data-tour-id="referral-system"]', intro: 'Share your referral code with friends! You get a bonus when they make their first deposit, and they get a bonus for signing up!', },
     { element: '[data-tour-id="withdraw-funds-section"]', intro: 'Ready to cash out? You can request a withdrawal of your winnings here. Make sure your payment details below are correct!', },
   ];
@@ -463,12 +460,7 @@ export default function ProfilePage() {
                         </CardContent>
                     </StyledCard>
                     <div data-tour-id="tier-selector-tabs">
-                        <Tabs value={activeTier} onValueChange={setActiveTier} className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
-                            {Object.values(appSettings.wheelConfigs).map(tier => (<TabsTrigger key={tier.id} value={tier.id} className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm h-12">{tierIcons[tier.id]} {tier.name}</TabsTrigger>))}
-                        </TabsList>
-                        {Object.values(appSettings.wheelConfigs).map(tier => (<TabsContent key={tier.id} value={tier.id} className="pt-4">{renderWalletContent(tier)}</TabsContent>))}
-                        </Tabs>
+                      {renderWalletContent(appSettings.wheelConfigs['main'])}
                     </div>
                   </div>
                 </TabsContent>
