@@ -588,30 +588,30 @@ export default function GamePage() {
           prevLabel: '← Back',
         }}
       />
-      <div className="flex flex-col items-center justify-start min-h-screen pt-0 p-4 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-start min-h-screen pt-0 md:p-4 relative overflow-hidden">
         {showConfetti && <ConfettiRain />}
         
-        <div className="w-full max-w-4xl flex items-center justify-between">
+        <div className="w-full max-w-4xl flex items-center justify-between px-2 md:px-0">
            <Button asChild variant="outline">
              <Link href="/">
-               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Selection
+               <ArrowLeft className="mr-2 h-4 w-4" /> Back
              </Link>
            </Button>
           <SpinifyGameHeader />
-          <div style={{width: '112px'}}></div> {/* Spacer */}
+          <div style={{width: '90px'}}></div> {/* Spacer */}
         </div>
         
         {isClient && user && (
-          <div data-tour-id="balance-card" className="w-full max-w-md flex justify-center my-6">
+          <div data-tour-id="balance-card" className="w-full max-w-md flex justify-center my-4 md:my-6">
               <Card className="p-4 sm:p-6 w-full shadow-xl bg-card/70 dark:bg-card/50 backdrop-blur-md border-2 border-primary/50 rounded-2xl">
                   <div className="flex justify-between items-center">
                       <div>
                           <p className="text-sm font-medium text-foreground/90 tracking-wider uppercase">{wheelConfig.name} Balance</p>
-                          <p className="text-4xl sm:text-5xl font-bold text-white glow mt-1">
+                          <p className="text-4xl font-bold text-white glow mt-1">
                               ₹{typeof userBalance === 'number' ? userBalance.toFixed(2) : '0.00'}
                           </p>
                       </div>
-                      <DollarSign className="h-12 w-12 sm:h-16 sm:w-16 text-primary/70" />
+                      <DollarSign className="h-10 w-10 sm:h-16 sm:w-16 text-primary/70" />
                   </div>
               </Card>
           </div>

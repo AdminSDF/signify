@@ -467,10 +467,10 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <Card>
                     <CardHeader><CardTitle>Global Cash Flow</CardTitle><CardDescription>High-level financial metrics across the entire platform.</CardDescription></CardHeader>
-                    <CardContent>
+                    <CardContent className="overflow-x-auto">
                         {isLoadingData ? <div className="grid gap-4 md:grid-cols-5"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>
                         : globalStats && (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5 min-w-[600px] md:min-w-full">
                                 <StatCard title="Total Deposited" value={globalStats.totalDeposited.toFixed(2)} valuePrefix="₹" icon={<ArrowUpRight className="h-4 w-4 text-green-500"/>} />
                                 <StatCard title="Total Withdrawn" value={globalStats.totalWithdrawn.toFixed(2)} valuePrefix="₹" icon={<ArrowDownLeft className="h-4 w-4 text-red-500"/>} />
                                 <StatCard title="Current Balance" value={globalStats.currentBalance.toFixed(2)} valuePrefix="₹" icon={<Wallet className="h-4 w-4 text-blue-500"/>} />
@@ -482,8 +482,8 @@ export default function AdminPage() {
                 </Card>
                 <Card>
                     <CardHeader><CardTitle>Recent Users</CardTitle><CardDescription>The last 5 users to sign up.</CardDescription></CardHeader>
-                    <CardContent>
-                         <Table>
+                    <CardContent className="overflow-x-auto">
+                         <Table className="min-w-[600px] md:min-w-full">
                             <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Joined</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                             <TableBody>
                                 {isUsersLoading ? <TableRow><TableCell colSpan={3} className="h-24 text-center"><Skeleton className="w-full h-8" /></TableCell></TableRow>
@@ -503,12 +503,12 @@ export default function AdminPage() {
       );
       case 'users': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div><CardTitle>User Management</CardTitle><CardDescription>View and manage all registered users.</CardDescription></div>
-              <div className="flex items-center gap-2"><div className="relative w-full max-w-sm"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or email..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} className="pl-8" /></div><Select value={userSortBy} onValueChange={setUserSortBy}><SelectTrigger id="user-sort" className="w-[180px]"><SelectValue placeholder="Sort by..." /></SelectTrigger><SelectContent><SelectItem value="totalWinnings_desc">Highest Winnings</SelectItem><SelectItem value="lastActive_desc">Most Recently Active</SelectItem><SelectItem value="totalDeposited_desc">Highest Deposits</SelectItem><SelectItem value="createdAt_desc">Newest First</SelectItem></SelectContent></Select></div>
+              <div className="flex items-center gap-2 w-full md:w-auto"><div className="relative w-full max-w-sm"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or email..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} className="pl-8" /></div><Select value={userSortBy} onValueChange={setUserSortBy}><SelectTrigger id="user-sort" className="w-full md:w-[180px]"><SelectValue placeholder="Sort by..." /></SelectTrigger><SelectContent><SelectItem value="totalWinnings_desc">Highest Winnings</SelectItem><SelectItem value="lastActive_desc">Most Recently Active</SelectItem><SelectItem value="totalDeposited_desc">Highest Deposits</SelectItem><SelectItem value="createdAt_desc">Newest First</SelectItem></SelectContent></Select></div>
             </CardHeader>
-            <CardContent>
-                <Table>
+            <CardContent className="overflow-x-auto">
+                <Table className="min-w-[1200px]">
                     <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Live Status</TableHead>{Object.keys(appSettings.wheelConfigs).map(tierId => <TableHead key={tierId}>{getTierName(tierId, appSettings.wheelConfigs)} Bal.</TableHead>)}<TableHead>Joined</TableHead><TableHead>Last Active</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
                         {isUsersLoading ? <TableRow><TableCell colSpan={10} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading users...</TableCell></TableRow>
@@ -558,17 +558,17 @@ export default function AdminPage() {
       );
       case 'tournaments': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div><CardTitle>Tournament Management</CardTitle><CardDescription>Create, monitor, and manage tournaments.</CardDescription></div>
-              <div className="flex items-center gap-2">
-                <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name..." value={tournamentSearch} onChange={(e) => setTournamentSearch(e.target.value)} className="pl-8" /></div>
-                <Button onClick={() => setIsTournamentModalOpen(true)}>Create Tournament</Button>
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="relative w-full"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name..." value={tournamentSearch} onChange={(e) => setTournamentSearch(e.target.value)} className="pl-8" /></div>
+                <Button onClick={() => setIsTournamentModalOpen(true)}>Create</Button>
               </div>
             </CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead>Dates</TableHead><TableHead>Participants</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[700px]"><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead>Dates</TableHead><TableHead>Participants</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                     {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading tournaments...</TableCell></TableRow>
-                    : filteredTournaments.map((t) => (<TableRow key={t.id}><TableCell className="font-bold">{t.name}</TableCell><TableCell>{t.type}</TableCell><TableCell><Badge variant={t.status === 'active' ? 'default' : t.status === 'ended' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell><TableCell>{formatDisplayDate(t.startDate, 'date')} to {formatDisplayDate(t.endDate, 'date')}</TableCell><TableCell>{t.participants?.length || 0}</TableCell><TableCell className="flex gap-2"><Button variant="outline" size="sm" onClick={() => handleViewParticipants(t.id!)}>View</Button>{t.status === 'active' && <Button variant="destructive" size="sm" onClick={() => handleDistributePrizes(t.id!)}>End & Distribute</Button>}</TableCell></TableRow>))}
+                    : filteredTournaments.map((t) => (<TableRow key={t.id}><TableCell className="font-bold">{t.name}</TableCell><TableCell>{t.type}</TableCell><TableCell><Badge variant={t.status === 'active' ? 'default' : t.status === 'ended' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell><TableCell>{formatDisplayDate(t.startDate, 'date')} to {formatDisplayDate(t.endDate, 'date')}</TableCell><TableCell>{t.participants?.length || 0}</TableCell><TableCell className="flex gap-2"><Button variant="outline" size="sm" onClick={() => handleViewParticipants(t.id!)}>View</Button>{t.status === 'active' && <Button variant="destructive" size="sm" onClick={() => handleDistributePrizes(t.id!)}>End</Button>}</TableCell></TableRow>))}
                     {!isLoadingData && filteredTournaments.length === 0 && <TableRow><TableCell colSpan={6} className="text-center h-24">No tournaments found.</TableCell></TableRow>}
                 </TableBody></Table>
             </CardContent>
@@ -576,8 +576,8 @@ export default function AdminPage() {
       );
       case 'withdrawal-req': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email..." value={withdrawalSearch} onChange={(e) => setWithdrawalSearch(e.target.value)} className="pl-8" /></div></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Gross Amt.</TableHead><TableHead>Net Pay</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><div><CardTitle>Withdrawal Requests</CardTitle><CardDescription>Manage pending user withdrawals.</CardDescription></div><div className="relative w-full md:w-auto"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email..." value={withdrawalSearch} onChange={(e) => setWithdrawalSearch(e.target.value)} className="pl-8" /></div></CardHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[800px]"><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Gross Amt.</TableHead><TableHead>Net Pay</TableHead><TableHead>Tier</TableHead><TableHead>Details</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={8} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                   : filteredWithdrawals.map((req) => (<TableRow key={req.id}><TableCell>{req.userEmail}</TableCell><TableCell>₹{req.amount.toFixed(2)}</TableCell><TableCell className="font-semibold text-primary">₹{(req.amount - req.amount * 0.02).toFixed(2)}</TableCell><TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell><TableCell className="text-xs">{getPaymentDetailsString(req)}</TableCell><TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell><TableCell><Badge variant={req.status === 'pending' ? 'secondary' : (req.status === 'processed' || req.status === 'approved') ? 'default' : 'destructive'}>{req.status}</Badge></TableCell><TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveWithdrawal(req)}>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectWithdrawal(req.id)}>Reject</Button></div>)}</TableCell></TableRow>))}
@@ -588,8 +588,8 @@ export default function AdminPage() {
       );
       case 'add-fund': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or reference..." value={addFundSearch} onChange={(e) => setAddFundSearch(e.target.value)} className="pl-8" /></div></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Amount</TableHead><TableHead>Tier</TableHead><TableHead>Reference</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><div><CardTitle>Add Fund Requests</CardTitle><CardDescription>Manage pending user fund additions.</CardDescription></div><div className="relative w-full md:w-auto"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or reference..." value={addFundSearch} onChange={(e) => setAddFundSearch(e.target.value)} className="pl-8" /></div></CardHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[700px]"><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Amount</TableHead><TableHead>Tier</TableHead><TableHead>Reference</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={7} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                   : filteredAddFunds.map((req) => (<TableRow key={req.id}><TableCell>{req.userEmail}</TableCell><TableCell>₹{req.amount.toFixed(2)}</TableCell><TableCell><Badge variant="outline">{getTierName(req.tierId, appSettings.wheelConfigs)}</Badge></TableCell><TableCell className="text-xs">{req.paymentReference}</TableCell><TableCell>{formatDisplayDate(req.requestDate, 'date')}</TableCell><TableCell><Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>{req.status}</Badge></TableCell><TableCell>{req.status === 'pending' && (<div className="flex gap-1"><Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApproveAddFund(req)}>Approve</Button><Button variant="destructive" size="sm" onClick={() => handleRejectAddFund(req.id)}>Reject</Button></div>)}</TableCell></TableRow>))}
@@ -600,8 +600,8 @@ export default function AdminPage() {
       );
       case 'transactions': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or description..." value={transactionSearch} onChange={(e) => setTransactionSearch(e.target.value)} className="pl-8" /></div></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Type</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><div><CardTitle>All Transactions</CardTitle><CardDescription>History of all transactions across all users.</CardDescription></div><div className="relative w-full md:w-auto"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or description..." value={transactionSearch} onChange={(e) => setTransactionSearch(e.target.value)} className="pl-8" /></div></CardHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[800px]"><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Type</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={6} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                   : filteredTransactions.map((t) => (<TableRow key={t.id}><TableCell>{t.userEmail}</TableCell><TableCell><span className={`flex items-center gap-1 ${t.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'credit' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}{t.type}</span></TableCell><TableCell className={`font-semibold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>₹{t.amount.toFixed(2)}</TableCell><TableCell className="max-w-xs whitespace-pre-wrap">{t.description}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell><TableCell><Badge variant={t.status === 'completed' ? 'default' : t.status === 'pending' ? 'secondary' : 'destructive'}>{t.status}</Badge></TableCell></TableRow>))}
@@ -612,7 +612,7 @@ export default function AdminPage() {
       );
       case 'leaderboard': return (
         <Card><CardHeader><CardTitle>Leaderboard</CardTitle><CardDescription>Top players by total winnings.</CardDescription></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead className="text-right">Total Winnings (₹)</TableHead></TableRow></TableHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[500px]"><TableHeader><TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead className="text-right">Total Winnings (₹)</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={3} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                   : leaderboard.map((player, index) => (<TableRow key={player.uid}><TableCell className="font-bold">{index + 1}</TableCell><TableCell>{player.displayName || player.email}</TableCell><TableCell className="text-right font-semibold text-primary">₹{(player.totalWinnings || 0).toFixed(2)}</TableCell></TableRow>))}
@@ -622,8 +622,8 @@ export default function AdminPage() {
       );
       case 'support': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4"><div><CardTitle>Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></div><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or subject..." value={supportTicketSearch} onChange={(e) => setSupportTicketSearch(e.target.value)} className="pl-8" /></div></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Subject</TableHead><TableHead>Last Updated</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><div><CardTitle>Support Tickets</CardTitle><CardDescription>Manage user-submitted issues and questions.</CardDescription></div><div className="relative w-full md:w-auto"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by email or subject..." value={supportTicketSearch} onChange={(e) => setSupportTicketSearch(e.target.value)} className="pl-8" /></div></CardHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[700px]"><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Subject</TableHead><TableHead>Last Updated</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={5} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                   : filteredSupportTickets.map((ticket) => (<TableRow key={ticket.id}><TableCell><div className="font-medium">{ticket.userDisplayName}</div><div className="text-xs text-muted-foreground">{ticket.userEmail}</div></TableCell><TableCell className="max-w-sm font-semibold">{ticket.subject}</TableCell><TableCell>{formatDisplayDate(ticket.lastUpdatedAt)}</TableCell><TableCell><Badge variant={getStatusVariant(ticket.status)} className="capitalize">{ticket.status.replace('-', ' ')}</Badge></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => setViewingTicket(ticket)}><View className="h-4 w-4 mr-2" />View Ticket</Button></TableCell></TableRow>))}
@@ -634,7 +634,7 @@ export default function AdminPage() {
       );
       case 'fraud-alerts': return (
         <Card><CardHeader><CardTitle>Fraud Alerts</CardTitle><CardDescription>Alerts for suspicious user activities.</CardDescription></CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Reason</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[600px]"><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Reason</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {isLoadingData ? <TableRow><TableCell colSpan={4} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                   : fraudAlerts.map((alert) => (<TableRow key={alert.id}><TableCell>{alert.userEmail}</TableCell><TableCell className="font-medium text-destructive">{alert.reason}</TableCell><TableCell>{formatDisplayDate(alert.timestamp)}</TableCell><TableCell><Badge variant={alert.status === 'open' ? 'destructive' : 'default'}>{alert.status}</Badge></TableCell></TableRow>))}
@@ -644,11 +644,11 @@ export default function AdminPage() {
       );
       case 'staff-management': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div><CardTitle>Staff Management</CardTitle><CardDescription>Assign roles to users to manage the application.</CardDescription></div>
-              <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or email..." value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} className="pl-8" /></div>
+              <div className="relative w-full md:w-auto"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or email..." value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} className="pl-8" /></div>
             </CardHeader>
-            <CardContent><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Current Role</TableHead><TableHead>Change Role</TableHead></TableRow></TableHeader>
+            <CardContent className="overflow-x-auto"><Table className="min-w-[600px]"><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Current Role</TableHead><TableHead>Change Role</TableHead></TableRow></TableHeader>
                 <TableBody>
                     {isUsersLoading ? <TableRow><TableCell colSpan={3} className="text-center h-24"><RefreshCcw className="h-5 w-5 animate-spin inline mr-2"/>Loading...</TableCell></TableRow>
                     : filteredStaff.map((u) => (<TableRow key={u.id}><TableCell><div className="flex items-center gap-2"><Avatar className="w-8 h-8"><AvatarImage src={u.photoURL || undefined} /><AvatarFallback>{getAvatarFallback(u)}</AvatarFallback></Avatar><div><p className="font-semibold">{u.displayName || 'N/A'}</p><p className="text-xs text-muted-foreground">{u.email}</p></div></div></TableCell><TableCell><Badge variant={u.role === 'super-admin' ? 'destructive' : (u.role === 'admin' ? 'default' : 'secondary')} className="capitalize">{u.role || 'player'}</Badge></TableCell><TableCell><Select defaultValue={u.role || 'player'} onValueChange={(newRole) => handleUpdateUserRole(u.id, newRole as UserRole)} disabled={u.role === 'super-admin' && u.uid !== user.uid}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="player">Player</SelectItem><SelectItem value="support-staff">Support Staff</SelectItem><SelectItem value="finance-staff">Finance Staff</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="super-admin">Super Admin</SelectItem></SelectContent></Select></TableCell></TableRow>))}
@@ -660,15 +660,15 @@ export default function AdminPage() {
         <Card><CardHeader><CardTitle>Dynamic Winning Rules</CardTitle><CardDescription>Control win probability for user groups. Lower priority number = higher priority.</CardDescription></CardHeader>
             <CardContent className="space-y-6">
                 <div><Label htmlFor="defaultWinRate">Default Win Rate (%)</Label><Input id="defaultWinRate" type="number" value={(currentAppSettings.defaultWinRate * 100).toFixed(0)} onChange={(e) => handleDefaultWinRateChange(e.target.value)} className="max-w-xs mt-1" /><p className="text-xs text-muted-foreground mt-1">Base win chance if no other rules apply.</p></div>
-                <div className="border-t pt-4"><h3 className="font-semibold text-lg mb-2">Tag-Based Rules</h3><Table><TableHeader><TableRow><TableHead>Priority</TableHead><TableHead>Tag</TableHead><TableHead>Win Rate (%)</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{currentAppSettings.winRateRules.sort((a,b) => a.priority - b.priority).map((rule, index) => (<TableRow key={rule.id}><TableCell><Input type="number" value={rule.priority} onChange={(e) => handleWinRateRuleChange(index, 'priority', e.target.value)} className="w-20" /></TableCell><TableCell><Input value={rule.tag} onChange={(e) => handleWinRateRuleChange(index, 'tag', e.target.value)} /></TableCell><TableCell><Input type="number" value={(rule.rate * 100).toFixed(0)} onChange={(e) => handleWinRateRuleChange(index, 'rate', e.target.value)} className="w-24" /></TableCell><TableCell><Button variant="destructive" size="icon" onClick={() => removeWinRateRule(rule.id)}><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>))}</TableBody></Table><Button onClick={addWinRateRule} variant="outline" className="mt-4">Add Rule</Button></div>
+                <div className="border-t pt-4 overflow-x-auto"><h3 className="font-semibold text-lg mb-2">Tag-Based Rules</h3><Table className="min-w-[600px]"><TableHeader><TableRow><TableHead>Priority</TableHead><TableHead>Tag</TableHead><TableHead>Win Rate (%)</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{currentAppSettings.winRateRules.sort((a,b) => a.priority - b.priority).map((rule, index) => (<TableRow key={rule.id}><TableCell><Input type="number" value={rule.priority} onChange={(e) => handleWinRateRuleChange(index, 'priority', e.target.value)} className="w-20" /></TableCell><TableCell><Input value={rule.tag} onChange={(e) => handleWinRateRuleChange(index, 'tag', e.target.value)} /></TableCell><TableCell><Input type="number" value={(rule.rate * 100).toFixed(0)} onChange={(e) => handleWinRateRuleChange(index, 'rate', e.target.value)} className="w-24" /></TableCell><TableCell><Button variant="destructive" size="icon" onClick={() => removeWinRateRule(rule.id)}><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>))}</TableBody></Table><Button onClick={addWinRateRule} variant="outline" className="mt-4">Add Rule</Button></div>
             </CardContent>
         </Card>
       );
       case 'daily-rewards': return (
         <Card><CardHeader><CardTitle>Daily Rewards & Streaks</CardTitle><CardDescription>Configure daily login and streak rewards.</CardDescription></CardHeader>
             <CardContent className="space-y-8">
-                <div><h3 className="font-semibold text-lg mb-2">Daily Login Rewards (7-Day Cycle)</h3><Table><TableHeader><TableRow><TableHead>Day</TableHead><TableHead>Emoji</TableHead><TableHead>Type</TableHead><TableHead>Value</TableHead></TableRow></TableHeader><TableBody>{currentAppSettings.rewardConfig.dailyRewards.map((reward, index) => (<TableRow key={reward.day}><TableCell className="font-bold">{reward.day}</TableCell><TableCell><Input value={reward.emoji} onChange={(e) => handleDailyRewardChange(index, 'emoji', e.target.value)} className="w-16"/></TableCell><TableCell><Select value={reward.type} onValueChange={(value) => handleDailyRewardChange(index, 'type', value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="spin">Spins</SelectItem><SelectItem value="credit">Credits (₹)</SelectItem></SelectContent></Select></TableCell><TableCell><Input type="number" value={reward.value} onChange={(e) => handleDailyRewardChange(index, 'value', e.target.value)} className="w-24"/></TableCell></TableRow>))}</TableBody></Table></div>
-                <div className="border-t pt-6"><h3 className="font-semibold text-lg mb-2">Streak Bonuses</h3><Table><TableHeader><TableRow><TableHead>After X Days</TableHead><TableHead>Emoji</TableHead><TableHead>Type</TableHead><TableHead>Value</TableHead></TableRow></TableHeader><TableBody>{currentAppSettings.rewardConfig.streakBonuses.map((bonus, index) => (<TableRow key={bonus.afterDays}><TableCell><Input type="number" value={bonus.afterDays} onChange={(e) => handleStreakBonusChange(index, 'afterDays', e.target.value)} className="w-24"/></TableCell><TableCell><Input value={bonus.emoji} onChange={(e) => handleStreakBonusChange(index, 'emoji', e.target.value)} className="w-16"/></TableCell><TableCell><Select value={bonus.type} onValueChange={(value) => handleStreakBonusChange(index, 'type', value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="spin">Spins</SelectItem><SelectItem value="credit">Credits (₹)</SelectItem></SelectContent></Select></TableCell><TableCell><Input type="number" value={bonus.value} onChange={(e) => handleStreakBonusChange(index, 'value', e.target.value)} className="w-24"/></TableCell></TableRow>))}</TableBody></Table></div>
+                <div className="overflow-x-auto"><h3 className="font-semibold text-lg mb-2">Daily Login Rewards (7-Day Cycle)</h3><Table className="min-w-[500px]"><TableHeader><TableRow><TableHead>Day</TableHead><TableHead>Emoji</TableHead><TableHead>Type</TableHead><TableHead>Value</TableHead></TableRow></TableHeader><TableBody>{currentAppSettings.rewardConfig.dailyRewards.map((reward, index) => (<TableRow key={reward.day}><TableCell className="font-bold">{reward.day}</TableCell><TableCell><Input value={reward.emoji} onChange={(e) => handleDailyRewardChange(index, 'emoji', e.target.value)} className="w-16"/></TableCell><TableCell><Select value={reward.type} onValueChange={(value) => handleDailyRewardChange(index, 'type', value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="spin">Spins</SelectItem><SelectItem value="credit">Credits (₹)</SelectItem></SelectContent></Select></TableCell><TableCell><Input type="number" value={reward.value} onChange={(e) => handleDailyRewardChange(index, 'value', e.target.value)} className="w-24"/></TableCell></TableRow>))}</TableBody></Table></div>
+                <div className="border-t pt-6 overflow-x-auto"><h3 className="font-semibold text-lg mb-2">Streak Bonuses</h3><Table className="min-w-[500px]"><TableHeader><TableRow><TableHead>After X Days</TableHead><TableHead>Emoji</TableHead><TableHead>Type</TableHead><TableHead>Value</TableHead></TableRow></TableHeader><TableBody>{currentAppSettings.rewardConfig.streakBonuses.map((bonus, index) => (<TableRow key={bonus.afterDays}><TableCell><Input type="number" value={bonus.afterDays} onChange={(e) => handleStreakBonusChange(index, 'afterDays', e.target.value)} className="w-24"/></TableCell><TableCell><Input value={bonus.emoji} onChange={(e) => handleStreakBonusChange(index, 'emoji', e.target.value)} className="w-16"/></TableCell><TableCell><Select value={bonus.type} onValueChange={(value) => handleStreakBonusChange(index, 'type', value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="spin">Spins</SelectItem><SelectItem value="credit">Credits (₹)</SelectItem></SelectContent></Select></TableCell><TableCell><Input type="number" value={bonus.value} onChange={(e) => handleStreakBonusChange(index, 'value', e.target.value)} className="w-24"/></TableCell></TableRow>))}</TableBody></Table></div>
                 <div className="border-t pt-6"><h3 className="font-semibold text-lg mb-2">Settings</h3><div className="flex items-center space-x-2"><Switch id="reset-streak" checked={currentAppSettings.rewardConfig.resetIfMissed} onCheckedChange={(checked) => setCurrentAppSettings(prev => ({...prev, rewardConfig: {...prev.rewardConfig, resetIfMissed: checked}}))} /><Label htmlFor="reset-streak">Reset streak if user misses a day</Label></div></div>
             </CardContent>
         </Card>
@@ -692,7 +692,9 @@ export default function AdminPage() {
                     </div>
                 </div>
                 <h4 className="font-semibold text-lg border-b pb-2 flex justify-between items-center">Segments<CardDescription className="text-xs">Actual win chance is set in 'Winning Rules'.</CardDescription></h4>
-                <Table><TableHeader><TableRow><TableHead>#</TableHead><TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Base Amount (₹)</TableHead><TableHead>Weight</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody onDragOver={handleDragOver}>{tier.segments.map((seg, index) => (<TableRow key={seg.id} draggable onDragStart={() => handleDragStart(tier.id, index)} onDrop={() => handleDrop(tier.id, index)} onDragEnd={handleDragEnd} className={cn("cursor-move", draggedSegment?.tierId === tier.id && draggedSegment?.index === index && "opacity-50 bg-primary/20")}><TableCell className="text-center font-medium"><GripVertical className="h-5 w-5 text-muted-foreground inline" /> {index + 1}</TableCell><TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell><TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell><TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell><TableCell><Input type="number" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell><TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell><TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>))}</TableBody></Table>
+                <div className="overflow-x-auto">
+                    <Table className="min-w-[800px]"><TableHeader><TableRow><TableHead>#</TableHead><TableHead>Emoji</TableHead><TableHead>Text</TableHead><TableHead>Base Amount (₹)</TableHead><TableHead>Weight</TableHead><TableHead>Color (HSL)</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody onDragOver={handleDragOver}>{tier.segments.map((seg, index) => (<TableRow key={seg.id} draggable onDragStart={() => handleDragStart(tier.id, index)} onDrop={() => handleDrop(tier.id, index)} onDragEnd={handleDragEnd} className={cn("cursor-move", draggedSegment?.tierId === tier.id && draggedSegment?.index === index && "opacity-50 bg-primary/20")}><TableCell className="text-center font-medium"><GripVertical className="h-5 w-5 text-muted-foreground inline" /> {index + 1}</TableCell><TableCell><Input value={seg.emoji} onChange={(e) => handleSegmentChange(tier.id, index, 'emoji', e.target.value)} className="w-16" /></TableCell><TableCell><Input value={seg.text} onChange={(e) => handleSegmentChange(tier.id, index, 'text', e.target.value)} /></TableCell><TableCell><Input type="number" value={seg.amount} onChange={(e) => handleSegmentChange(tier.id, index, 'amount', e.target.value)} /></TableCell><TableCell><Input type="number" value={seg.probability} onChange={(e) => handleSegmentChange(tier.id, index, 'probability', e.target.value)} /></TableCell><TableCell><Input value={seg.color} onChange={(e) => handleSegmentChange(tier.id, index, 'color', e.target.value)} /></TableCell><TableCell><Button variant="destructive" size="icon" onClick={() => removeSegment(tier.id, index)}><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>))}</TableBody></Table>
+                </div>
                 <Button onClick={() => addSegment(tier.id)} variant="outline">Add Segment</Button>
             </AccordionContent></AccordionItem>))}</Accordion>
             </CardContent>
@@ -723,12 +725,12 @@ export default function AdminPage() {
       );
       case 'custom-ads': return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div><CardTitle>Custom Ads</CardTitle><CardDescription>Manage custom ads displayed in the app.</CardDescription></div>
               <Button onClick={handleAddNewAd}><PlusCircle className="mr-2 h-4 w-4" /> Add New Ad</Button>
             </CardHeader>
-            <CardContent>
-                <Table>
+            <CardContent className="overflow-x-auto">
+                <Table className="min-w-[600px]">
                     <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Image</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                     <TableBody>
                         {currentAppSettings.customAds.length === 0 ? (
@@ -787,7 +789,7 @@ export default function AdminPage() {
            <h1 className="flex-1 text-xl font-semibold capitalize">{activeView.replace(/-/g, ' ')}</h1>
            <div className="flex items-center gap-2">
             {isSuperAdmin && <Button onClick={handleSaveConfiguration} size="sm">Save Changes</Button>}
-            <Button onClick={fetchAdminData} variant="outline" size="sm" disabled={isLoadingData}><RefreshCcw className={cn("mr-2 h-4 w-4", isLoadingData && "animate-spin")} />Refresh Data</Button>
+            <Button onClick={fetchAdminData} variant="outline" size="sm" disabled={isLoadingData}><RefreshCcw className={cn("mr-2 h-4 w-4", isLoadingData && "animate-spin")} />Refresh</Button>
            </div>
          </header>
          <main className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -814,7 +816,7 @@ export default function AdminPage() {
                     <div className="p-6">
                         {isDetailLoading ? <div className="flex items-center justify-center h-64"><RefreshCcw className="h-8 w-8 animate-spin" /></div> : (
                         <Tabs defaultValue="overview">
-                            <TabsList className="grid w-full grid-cols-5">
+                            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 h-auto">
                                 <TabsTrigger value="overview">Overview</TabsTrigger>
                                 <TabsTrigger value="transactions">Transactions</TabsTrigger>
                                 <TabsTrigger value="deposits">Deposits</TabsTrigger>
@@ -840,10 +842,10 @@ export default function AdminPage() {
                                      <CardFooter><Button onClick={handleSaveUserChanges}>Save Changes</Button></CardFooter>
                                 </Card>
                             </TabsContent>
-                            <TabsContent value="transactions" className="mt-4"><Table><TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>{userTransactions.map(t=><TableRow key={t.id}><TableCell>{t.description}</TableCell><TableCell className={cn(t.type === 'credit' ? 'text-green-500' : 'text-red-500')}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell></TableRow>)}</TableBody></Table></TabsContent>
-                            <TabsContent value="deposits" className="mt-4"><Table><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userDeposits.map(d=><TableRow key={d.id}><TableCell>₹{d.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(d.requestDate)}</TableCell><TableCell><Badge variant={d.status === 'approved' ? 'default' : d.status === 'pending' ? 'secondary' : 'destructive'}>{d.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
-                            <TabsContent value="withdrawals" className="mt-4"><Table><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userWithdrawals.map(w=><TableRow key={w.id}><TableCell>₹{w.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(w.requestDate)}</TableCell><TableCell><Badge variant={w.status === 'processed' ? 'default' : w.status === 'pending' ? 'secondary' : 'destructive'}>{w.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
-                            <TabsContent value="support" className="mt-4"><Table><TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>{userSupportTickets.map(t=><TableRow key={t.id}><TableCell>{t.subject}</TableCell><TableCell>{formatDisplayDate(t.createdAt)}</TableCell><TableCell><Badge variant={getStatusVariant(t.status)} className="capitalize">{t.status.replace('-',' ')}</Badge></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => setViewingTicket(t)}>View</Button></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="transactions" className="mt-4 overflow-x-auto"><Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>{userTransactions.map(t=><TableRow key={t.id}><TableCell>{t.description}</TableCell><TableCell className={cn(t.type === 'credit' ? 'text-green-500' : 'text-red-500')}>₹{t.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(t.date)}</TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="deposits" className="mt-4 overflow-x-auto"><Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userDeposits.map(d=><TableRow key={d.id}><TableCell>₹{d.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(d.requestDate)}</TableCell><TableCell><Badge variant={d.status === 'approved' ? 'default' : d.status === 'pending' ? 'secondary' : 'destructive'}>{d.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="withdrawals" className="mt-4 overflow-x-auto"><Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{userWithdrawals.map(w=><TableRow key={w.id}><TableCell>₹{w.amount.toFixed(2)}</TableCell><TableCell>{formatDisplayDate(w.requestDate)}</TableCell><TableCell><Badge variant={w.status === 'processed' ? 'default' : w.status === 'pending' ? 'secondary' : 'destructive'}>{w.status}</Badge></TableCell></TableRow>)}</TableBody></Table></TabsContent>
+                            <TabsContent value="support" className="mt-4 overflow-x-auto"><Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>{userSupportTickets.map(t=><TableRow key={t.id}><TableCell>{t.subject}</TableCell><TableCell>{formatDisplayDate(t.createdAt)}</TableCell><TableCell><Badge variant={getStatusVariant(t.status)} className="capitalize">{t.status.replace('-',' ')}</Badge></TableCell><TableCell><Button variant="outline" size="sm" onClick={() => setViewingTicket(t)}>View</Button></TableCell></TableRow>)}</TableBody></Table></TabsContent>
                         </Tabs>
                         )}
                     </div>
@@ -902,12 +904,14 @@ export default function AdminPage() {
       
       <Dialog open={!!viewingTournamentParticipants} onOpenChange={() => setViewingTournamentParticipants(null)}>
         <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Tournament Participants</DialogTitle><DialogDescription>Live leaderboard for {allTournaments.find(t => t.id === currentTournamentForView)?.name}</DialogDescription></DialogHeader>
-          <Table><TableHeader><TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead>Score</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {!viewingTournamentParticipants || viewingTournamentParticipants.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center h-24">No participants yet.</TableCell></TableRow>
-              : (viewingTournamentParticipants.map((p, index) => (<TableRow key={p.userId}><TableCell className="font-bold">{index + 1}</TableCell><TableCell className="flex items-center gap-2"><Avatar className="w-8 h-8"><AvatarImage src={p.userPhotoURL}/><AvatarFallback>{p.userDisplayName[0]}</AvatarFallback></Avatar>{p.userDisplayName}</TableCell><TableCell>{p.score}</TableCell></TableRow>)))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[400px]"><TableHeader><TableRow><TableHead>Rank</TableHead><TableHead>Player</TableHead><TableHead>Score</TableHead></TableRow></TableHeader>
+                <TableBody>
+                {!viewingTournamentParticipants || viewingTournamentParticipants.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center h-24">No participants yet.</TableCell></TableRow>
+                : (viewingTournamentParticipants.map((p, index) => (<TableRow key={p.userId}><TableCell className="font-bold">{index + 1}</TableCell><TableCell className="flex items-center gap-2"><Avatar className="w-8 h-8"><AvatarImage src={p.userPhotoURL}/><AvatarFallback>{p.userDisplayName[0]}</AvatarFallback></Avatar>{p.userDisplayName}</TableCell><TableCell>{p.score}</TableCell></TableRow>)))}
+                </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 

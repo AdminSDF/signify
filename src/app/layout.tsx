@@ -39,7 +39,7 @@ export default function RootLayout({
           <SoundProvider>
             <SiteHeader />
             <NewsTicker />
-            <main className="flex-grow container mx-auto px-4 py-8">
+            <main className="flex-grow container mx-auto px-0 sm:px-4 py-8">
               {children}
             </main>
             <SiteFooter />
