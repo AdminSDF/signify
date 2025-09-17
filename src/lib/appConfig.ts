@@ -97,17 +97,6 @@ export interface ReferralMilestone {
   description: string;
 }
 
-// --- Custom Ads ---
-export interface CustomAd {
-    id: string;
-    title: string;
-    description: string;
-    imageUrl: string;
-    linkUrl: string;
-    isActive: boolean;
-}
-
-
 // General App Settings Interface
 export interface AppSettings {
   appName: string;
@@ -128,8 +117,6 @@ export interface AppSettings {
   // New Referral System Config
   tieredBonuses: TieredBonus[];
   referralMilestones: ReferralMilestone[];
-  // Custom Ads
-  customAds: CustomAd[];
 }
 
 // Initial structure / fallback for general settings if Firestore is unavailable.
@@ -177,7 +164,6 @@ export const initialSettings: AppSettings = {
     { count: 100, rewardSpins: 1000, badge: 'Gold', description: "Gold Referrer" },
     { count: 500, rewardSpins: 5000, badge: 'Platinum', description: "Platinum Referrer" },
   ],
-  customAds: [],
 };
 
 // --- Other constants ---
